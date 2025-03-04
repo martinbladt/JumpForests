@@ -1,10 +1,14 @@
 Package: JumpForests
 Type: Package
-Title: Concise Summary of What the Package Does
+Title: Adaptive Conditional Aalen-Johansen Estimation
 Version: 1.0
 Date: 2025-03-04
-Authors@R: person("Your", "Name", role = c("aut", "cre"), email = "your@email.com")
-Description: More about what it does (maybe more than one line).
+Authors@R: c(person("Martin", "Bladt", email = "martinbladt@math.ku.dk", role = c("aut", "cre")),
+              person("Rasmus", "Lemvig", email = "rfl@math.ku.dk",
+              role = "aut")
+              )
+Maintainer: Martin Bladt <martinbladt@math.ku.dk>
+Description: Provides random forest versions of the Nelson-Aalen and Aalen-Johansen estimators. The methods are based on Bladt & Lemvig (2025+), in preparation.
 License: GPL (>= 2)
 Imports: Rcpp (>= 1.0.14)
 LinkingTo: Rcpp
