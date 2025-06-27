@@ -10,5 +10,7 @@ Authors@R: c(person("Martin", "Bladt", email = "martinbladt@math.ku.dk", role = 
 Maintainer: Martin Bladt <martinbladt@math.ku.dk>
 Description: Provides random forest versions of the Nelson-Aalen and Aalen-Johansen estimators. The methods are based on Bladt & Lemvig (2025+), in preparation.
 License: GPL (>= 2)
-Imports: Rcpp (>= 1.0.14)
+Imports: 
+    Rcpp
 LinkingTo: Rcpp
+RoxygenNote: 7.3.2

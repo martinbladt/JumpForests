@@ -1,0 +1,115 @@
+// some of these include statements should probably be moved later
+#ifndef TREE_H
+#define TREE_H
+
+#include "Data.h"
+#include "helper.h"
+#include <variant>
+#include <memory>
+
+using namespace std;
+// so that we may handle predictions for different types of trees (extend continuously)
+using ValueType = variant<double, vector<double>>;
+
+class Tree {
+public:
+  // function to initialise a general Tree (later many more options should be added such as honesty, max_depth etc.)
+  void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, unsigned int seed);
+  void setRNG(mt19937 rng);
+
+  virtual ~Tree() =  default;
+
+  // predicted value depending on the type of tree (must be overriden by a derived Tree class)
+  virtual ValueType predict(vector<double> x) = 0;  // predicting on a single observation
+
+  // returns the ID of the leaf containing x
+  size_t predictionLeafID(vector<double> x);
+
+  // functions to get tree info
+  const vector<size_t> getLeftDaughters() const {
+    return left_daughters;
+  }
+
+  const vector<size_t> getFeatureIDs() const {
+    return feature_IDs;
+  }
+
+  const vector<vector<double>> getThresholds() const {
+    return thresholds;
+  }
+
+  const vector<size_t> getDepths() const {
+    return depths;
+  }
+
+  size_t getNumberOfTerminalNodes() const {
+    return num_terminal_nodes;
+  }
+
+  size_t getNumberOfNodes() const {
+    return num_nodes;
+  }
+
+  size_t getTreeDepth() const {
+    return tree_depth;
+  }
+
+  vector<size_t> getPredictionNodeIDs() const {
+    return prediction_node_IDs;
+  }
+
+  // functions to set hyperparameters
+  void setMtry (unsigned int mtry) {
+    this->mtry = mtry;
+  }
+  void setMinNodeSize(unsigned int min_node_size) {
+    this->min_node_size = min_node_size;
+  }
+  void setnNSplits(unsigned int nsplits) {
+    this->nsplits = nsplits;
+  }
+  shared_ptr<Data> getData() const {
+    return data;
+  }
+
+protected:
+  // pointer to the data
+  shared_ptr<Data> data;
+
+  // node information
+  vector<size_t> left_daughters;      // vector of the ID of the left daughter for each node
+  vector<size_t> feature_IDs;         // ID of the feature in each node
+  vector<vector<double>> thresholds;  // the threshold for each node
+  vector<size_t> depths;              // the depth of each node
+
+  // hyperparameters
+  unsigned int mtry;              // number of variables randomly selected for each split
+  unsigned int min_node_size;     // minimal number of observations in each node
+  unsigned int nsplits;           // number of split values to consider after feature is chosen
+
+  // misc. information
+  size_t num_terminal_nodes;      // number of terminal nodes in the tree
+  size_t num_nodes;               // number of nodes in the tree
+  size_t tree_depth;              // depth of the tree
+
+  // information for growing trees
+  vector<vector<size_t>> node_obs;    // vector of indices of the data currently being split on
+  vector<size_t> prediction_node_IDs; // vector of indices indicating which node, each observation belongs to (for fast prediction)
+
+  // random number generator
+  mt19937 random_number_generator;
+
+  // frees memory and computes prediction_node_IDs after fitting is complete
+  void cleanUp();
+};
+
+// general helper functions used for growing trees
+//--------------------------------------------------------------------------------------
+
+// find all unique values of a vector of size_t
+vector<double> uniqueValues(vector<double> input);
+
+// function to determine all 2-partitions of the vector feature_values
+vector<vector<double>> compute2Partitions(const vector<double>& feature_values);
+
+#endif // TREE_H
