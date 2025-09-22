@@ -1,0 +1,9 @@
+# Release / optimized build
+PKG_CFLAGS = -O3 -fopenmp -march=native -flto -pipe -ffast-math
+PKG_CXXFLAGS = -O3 -fopenmp -march=native -flto -pipe -ffast-math
+PKG_CXX11FLAGS = -O3 -fopenmp -march=native -flto -pipe -ffast-math
+PKG_CXX14FLAGS = -O3 -fopenmp -march=native -flto -pipe -ffast-math
+PKG_CXX17FLAGS = -O3 -fopenmp -march=native -flto -pipe -ffast-math
+
+# Linking flags for OpenMP
+PKG_LIBS = -fopenmp

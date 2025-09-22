@@ -10,6 +10,194 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// JFCppTree
+List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed);
+RcppExport SEXP _JumpForests_JFCppTree(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP honestSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< uint >::type tree_type(tree_typeSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type mtry(mtrySEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type min_node_size(min_node_sizeSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type nsplits(nsplitsSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type splitrule(splitruleSEXP);
+    Rcpp::traits::input_parameter< bool >::type honest(honestSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type response_indices(response_indicesSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppTree(tree_type, df, mtry, min_node_size, nsplits, splitrule, honest, response_indices, feature_indices, categorical, unique, seed));
+    return rcpp_result_gen;
+END_RCPP
+}
+// JFCppTreePredict
+NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
+RcppExport SEXP _JumpForests_JFCppTreePredict(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFTree(JFTreeSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppTreePredict(JFTree, df, feature_indices, categorical, unique));
+    return rcpp_result_gen;
+END_RCPP
+}
+// JFCppErrorSurvival
+double JFCppErrorSurvival(const NumericMatrix& predictions, NumericVector times, NumericVector ind);
+RcppExport SEXP _JumpForests_JFCppErrorSurvival(SEXP predictionsSEXP, SEXP timesSEXP, SEXP indSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type predictions(predictionsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type times(timesSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type ind(indSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppErrorSurvival(predictions, times, ind));
+    return rcpp_result_gen;
+END_RCPP
+}
+// JFCppForest
+List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers);
+RcppExport SEXP _JumpForests_JFCppForest(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< uint >::type tree_type(tree_typeSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type mtry(mtrySEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type min_node_size(min_node_sizeSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type nsplits(nsplitsSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type splitrule(splitruleSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type ntrees(ntreesSEXP);
+    Rcpp::traits::input_parameter< bool >::type honest(honestSEXP);
+    Rcpp::traits::input_parameter< bool >::type swr(swrSEXP);
+    Rcpp::traits::input_parameter< double >::type sample_rate(sample_rateSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type response_indices(response_indicesSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type nworkers(nworkersSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForest(tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, response_indices, feature_indices, categorical, unique, seed, nworkers));
+    return rcpp_result_gen;
+END_RCPP
+}
+// JFCppForestPredict
+NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
+RcppExport SEXP _JumpForests_JFCppForestPredict(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFForest(JFForestSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestPredict(JFForest, df, feature_indices, categorical, unique));
+    return rcpp_result_gen;
+END_RCPP
+}
+// JFCppForestVIMPFeature
+double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name, int feature_seed, CharacterVector method);
+RcppExport SEXP _JumpForests_JFCppForestVIMPFeature(SEXP JFForestSEXP, SEXP feature_nameSEXP, SEXP feature_seedSEXP, SEXP methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFForest(JFForestSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type feature_name(feature_nameSEXP);
+    Rcpp::traits::input_parameter< int >::type feature_seed(feature_seedSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type method(methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestVIMPFeature(JFForest, feature_name, feature_seed, method));
+    return rcpp_result_gen;
+END_RCPP
+}
+// JFCppForestVIMP
+List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method);
+RcppExport SEXP _JumpForests_JFCppForestVIMP(SEXP JFForestSEXP, SEXP seedSEXP, SEXP methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List& >::type JFForest(JFForestSEXP);
+    Rcpp::traits::input_parameter< int >::type seed(seedSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type method(methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestVIMP(JFForest, seed, method));
+    return rcpp_result_gen;
+END_RCPP
+}
+// getTreeTable
+List getTreeTable(SEXP tree_sexp);
+RcppExport SEXP _JumpForests_getTreeTable(SEXP tree_sexpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type tree_sexp(tree_sexpSEXP);
+    rcpp_result_gen = Rcpp::wrap(getTreeTable(tree_sexp));
+    return rcpp_result_gen;
+END_RCPP
+}
+// df_test
+void df_test(DataFrame data, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
+RcppExport SEXP _JumpForests_df_test(SEXP dataSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type response_indices(response_indicesSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    df_test(data, response_indices, feature_indices, categorical, unique);
+    return R_NilValue;
+END_RCPP
+}
+// testData
+void testData(const DataFrame& df, const NumericVector& response_indices, const NumericVector& feature_indices, const LogicalVector& categorical, const NumericVector& unique);
+RcppExport SEXP _JumpForests_testData(SEXP dfSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const DataFrame& >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type response_indices(response_indicesSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< const LogicalVector& >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type unique(uniqueSEXP);
+    testData(df, response_indices, feature_indices, categorical, unique);
+    return R_NilValue;
+END_RCPP
+}
+// test_omp
+void test_omp();
+RcppExport SEXP _JumpForests_test_omp() {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    test_omp();
+    return R_NilValue;
+END_RCPP
+}
+// testList
+List testList();
+RcppExport SEXP _JumpForests_testList() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(testList());
+    return rcpp_result_gen;
+END_RCPP
+}
+// extract_column
+int extract_column(DataFrame data, size_t index);
+RcppExport SEXP _JumpForests_extract_column(SEXP dataSEXP, SEXP indexSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< size_t >::type index(indexSEXP);
+    rcpp_result_gen = Rcpp::wrap(extract_column(data, index));
+    return rcpp_result_gen;
+END_RCPP
+}
 // rcpp_hello_world
 List rcpp_hello_world();
 RcppExport SEXP _JumpForests_rcpp_hello_world() {
@@ -20,9 +208,82 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// square_cpp
+double square_cpp(double x);
+RcppExport SEXP _JumpForests_square_cpp(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(square_cpp(x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// timesTwoMatrix
+NumericMatrix timesTwoMatrix(NumericMatrix mat);
+RcppExport SEXP _JumpForests_timesTwoMatrix(SEXP matSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type mat(matSEXP);
+    rcpp_result_gen = Rcpp::wrap(timesTwoMatrix(mat));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sampler
+void sampler(int n, int k);
+RcppExport SEXP _JumpForests_sampler(SEXP nSEXP, SEXP kSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    sampler(n, k);
+    return R_NilValue;
+END_RCPP
+}
+// silly_sampler
+void silly_sampler(int k);
+RcppExport SEXP _JumpForests_silly_sampler(SEXP kSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    silly_sampler(k);
+    return R_NilValue;
+END_RCPP
+}
+// sampler_wrapper
+void sampler_wrapper(int n, int k, bool wr);
+RcppExport SEXP _JumpForests_sampler_wrapper(SEXP nSEXP, SEXP kSEXP, SEXP wrSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    Rcpp::traits::input_parameter< bool >::type wr(wrSEXP);
+    sampler_wrapper(n, k, wr);
+    return R_NilValue;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_JumpForests_JFCppTree", (DL_FUNC) &_JumpForests_JFCppTree, 12},
+    {"_JumpForests_JFCppTreePredict", (DL_FUNC) &_JumpForests_JFCppTreePredict, 5},
+    {"_JumpForests_JFCppErrorSurvival", (DL_FUNC) &_JumpForests_JFCppErrorSurvival, 3},
+    {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 16},
+    {"_JumpForests_JFCppForestPredict", (DL_FUNC) &_JumpForests_JFCppForestPredict, 5},
+    {"_JumpForests_JFCppForestVIMPFeature", (DL_FUNC) &_JumpForests_JFCppForestVIMPFeature, 4},
+    {"_JumpForests_JFCppForestVIMP", (DL_FUNC) &_JumpForests_JFCppForestVIMP, 3},
+    {"_JumpForests_getTreeTable", (DL_FUNC) &_JumpForests_getTreeTable, 1},
+    {"_JumpForests_df_test", (DL_FUNC) &_JumpForests_df_test, 5},
+    {"_JumpForests_testData", (DL_FUNC) &_JumpForests_testData, 5},
+    {"_JumpForests_test_omp", (DL_FUNC) &_JumpForests_test_omp, 0},
+    {"_JumpForests_testList", (DL_FUNC) &_JumpForests_testList, 0},
+    {"_JumpForests_extract_column", (DL_FUNC) &_JumpForests_extract_column, 2},
     {"_JumpForests_rcpp_hello_world", (DL_FUNC) &_JumpForests_rcpp_hello_world, 0},
+    {"_JumpForests_square_cpp", (DL_FUNC) &_JumpForests_square_cpp, 1},
+    {"_JumpForests_timesTwoMatrix", (DL_FUNC) &_JumpForests_timesTwoMatrix, 1},
+    {"_JumpForests_sampler", (DL_FUNC) &_JumpForests_sampler, 2},
+    {"_JumpForests_silly_sampler", (DL_FUNC) &_JumpForests_silly_sampler, 1},
+    {"_JumpForests_sampler_wrapper", (DL_FUNC) &_JumpForests_sampler_wrapper, 3},
     {NULL, NULL, 0}
 };
 
