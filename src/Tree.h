@@ -105,6 +105,10 @@ protected:
   // random number generator
   mt19937 random_number_generator;
 
+  // for sampling split points in continuous splits
+  size_t sampleSplitPoints(vector<double>& split_points, const vector<size_t>& indices, size_t feature);
+  bool generateCategoricalPartitions(const vector<double>& feature_values, unordered_set<uint64_t>& partition_masks);
+
   // frees memory and computes prediction_node_IDs after fitting is complete
   virtual void cleanUpTree() = 0;
 };

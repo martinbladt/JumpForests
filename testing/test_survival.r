@@ -1,4 +1,4 @@
-setwd("/home/themathlad/MEGA/Uni/Videnskabelig assistent/Forskning/The Multi-state forest/JumpForests-main")
+setwd("/home/themathlad/Documents/GitHub/JumpForests/testing/")
 devtools::load_all()
 library(Rcpp)
 library(randomForestSRC)

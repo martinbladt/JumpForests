@@ -90,3 +90,55 @@ size_t Tree::predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt199
     }
     return current_node;
 }
+
+// samples split points for continuous splits, returns number of final split points (zero indicates no possible splits)
+size_t Tree::sampleSplitPoints(vector<double>& split_points, const vector<size_t>& indices, size_t feature) {
+  // extract candidate split points
+  vector<double> potential_split_points = data->getValues(indices, feature);
+
+  // sort and remove duplicates to obtain the final set of candidate split points
+  sort(potential_split_points.begin(), potential_split_points.end());
+  potential_split_points.erase(unique(potential_split_points.begin(), potential_split_points.end()), potential_split_points.end());
+
+  // no possible splits
+  if (potential_split_points.size() < 2) {
+      return 0;
+  }
+
+  // now sample nsplits points
+  size_t nsplits_final;
+  if (potential_split_points.size() <= nsplits) {
+      split_points = potential_split_points;
+      nsplits_final = potential_split_points.size();
+  } else {
+      sample(potential_split_points.begin(), potential_split_points.end(), back_inserter(split_points), nsplits, random_number_generator);
+      nsplits_final = nsplits;
+  }
+  sort(split_points.begin(), split_points.end());
+  return nsplits_final;
+}
+
+// samples partitions for categorical splits, returns true if no possible splits
+bool Tree::generateCategoricalPartitions(const vector<double>& feature_values, unordered_set<uint64_t>& partition_masks) {
+    size_t num_feature_values = feature_values.size();
+
+    if (num_feature_values < 2) {   // no possible split if only one unique value
+        return true;
+    }
+    if (num_feature_values > 63) {  // prevent 64 bit-integer overflow
+        num_feature_values = 63;
+    }
+
+    uint64_t total_partitions = (1ULL << (num_feature_values - 1)) - 1;
+    size_t num_splits_to_try = nsplits;
+    if (nsplits > total_partitions) {
+        num_splits_to_try = total_partitions;
+    }
+
+    // sample unique partition IDs (bitmasks)
+    uniform_int_distribution<uint64_t> dist(1, total_partitions);
+    while(partition_masks.size() < num_splits_to_try) {
+        partition_masks.insert(dist(random_number_generator));
+    }
+    return false;
+}

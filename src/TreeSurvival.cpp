@@ -195,31 +195,14 @@ void SurvivalTree::bestSplitContinuous(size_t node_index, size_t feature, double
     const vector<size_t>& current_node_obs = node_obs[node_index];
     size_t n = current_node_obs.size();
 
-    // extract candidate split points 
-    vector<double> potential_split_points = data->getValues(current_node_obs, feature);
-
-    // sort and remove duplicates to obtain the final set of candidate split points
-    sort(potential_split_points.begin(), potential_split_points.end());
-    potential_split_points.erase(unique(potential_split_points.begin(), potential_split_points.end()), potential_split_points.end());
+    // samples split points
+    vector<double> split_points;
+    size_t nsplits_final = sampleSplitPoints(split_points, current_node_obs, feature);
 
     // no possible splits
-    if (potential_split_points.size() < 2) {
+    if (nsplits_final == 0) {
         return;
     }
-
-    // now sample nsplits points
-    vector<double> split_points;
-    size_t nsplits_final;
-    if (potential_split_points.size() <= nsplits) {
-        split_points = potential_split_points;
-        nsplits_final = potential_split_points.size();
-    } else {
-        sample(potential_split_points.begin(), potential_split_points.end(), back_inserter(split_points), nsplits, random_number_generator);
-        nsplits_final = nsplits;
-    }
-    sort(split_points.begin(), split_points.end());
-    //cout << "Line 173: Final split points (feature = " << data->getFeatureNames()[feature] << "): ";
-    //printVector(split_points);
 
     // initialise node info for the right daughter as flattened 2D arrays
     vector<size_t> num_deaths_right(nsplits_final * num_unique_event_times);
@@ -244,6 +227,9 @@ void SurvivalTree::bestSplitContinuous(size_t node_index, size_t feature, double
         if (splitrule == "conserve") {
             split_val = conserve(num_deaths, num_at_risk, num_deaths_right, num_at_risk_right, i);
         }
+        if (splitrule == "approxlogrank") {
+            split_val = approxLogRank(num_deaths, num_at_risk, num_deaths_right, num_at_risk_right, i);
+        }
         //cout << "Line 193: log-rank value: " << split_val << endl;
         if (split_val > best_split_val) {
             best_split_val = split_val;
@@ -263,26 +249,13 @@ void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, doubl
     const vector<double>& feature_values = uniqueValues(data->getValues(node_obs[node_index], feature));
     size_t num_feature_values = feature_values.size();
 
-    if (num_feature_values < 2) {   // no possible split if only one unique value
+    unordered_set<uint64_t> partition_masks;
+    // generate partitions (breaks if no possible splits)
+    if (generateCategoricalPartitions(feature_values, partition_masks)) {
         return;
     }
-    if (num_feature_values > 63) {  // prevent 64 bit-integer overflow
-        num_feature_values = 63;
-    }
 
-    uint64_t total_partitions = (1ULL << (num_feature_values - 1)) - 1;
-    size_t num_splits_to_try = nsplits;
-    if (nsplits > total_partitions) {
-        num_splits_to_try = total_partitions;
-    }
-
-    // sample unique partition IDs (bitmasks)
-    unordered_set<uint64_t> partition_masks;
-    uniform_int_distribution<uint64_t> dist(1, total_partitions);
-    while(partition_masks.size() < num_splits_to_try) {
-        partition_masks.insert(dist(random_number_generator));
-    }
-
+    // consider each partition (bitmask)
     for (const auto& mask : partition_masks) {
         unordered_set<double> left_values;
         for (size_t i = 0; i < num_feature_values; ++i) {
@@ -314,6 +287,9 @@ void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, doubl
         }
         if (splitrule == "conserve") {
             split_val = conserve(num_deaths, num_at_risk, num_deaths_left, num_at_risk_left);
+        }
+        if (splitrule == "approxlogrank") {
+            split_val = approxLogRank(num_deaths, num_at_risk, num_deaths_left, num_at_risk_left);
         }
 
         if (split_val > best_split_val) {
@@ -612,26 +588,6 @@ double SurvivalTree::approxLogRank(const vector<size_t>& num_deaths, const vecto
         return -1;
     }
 }
-
-
-/*
-
-double SurvivalTree::log_rank_score() {
-
-}
-
-double SurvivalTree::approx_log_rank() {
-
-}
-
-double SurvivalTree::conserve() {
-
-}
-
-*/
-
-// functions for predicting with survival trees
-//--------------------------------------------------------------------------------------
 
 // error estimation for survival trees
 //--------------------------------------------------------------------------------------
