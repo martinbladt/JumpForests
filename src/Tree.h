@@ -19,6 +19,9 @@ public:
 
   virtual ~Tree() =  default;
 
+  // grows the tree
+  void grow();
+
   // predicted value depending on the type of tree (must be overriden by a derived Tree class)
   virtual ValueType predict(const vector<double>& x) = 0;  // predicting on a single observation
 
@@ -108,6 +111,9 @@ protected:
   // for sampling split points in continuous splits
   size_t sampleSplitPoints(vector<double>& split_points, const vector<size_t>& indices, size_t feature);
   bool generateCategoricalPartitions(const vector<double>& feature_values, unordered_set<uint64_t>& partition_masks);
+
+  // protected functions to grow trees
+  virtual bool createSplit(size_t node_index) = 0;
 
   // frees memory and computes prediction_node_IDs after fitting is complete
   virtual void cleanUpTree() = 0;

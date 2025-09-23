@@ -49,7 +49,36 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
   
   // the tree is a regression tree
   if (tree_type == 1) {
+    // check validity of splitrule argument
+    vector<string> valid_splitrules = {"mse"};
+    if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
+      throw runtime_error("Invalid splitrule, please choose between mse (ADD MORE)");
+    }
 
+    RegressionTree* tree;
+    if (!honest) {
+      tree = new RegressionTree(subset_indices_cpp);
+    } else {
+      mt19937 rng(seed + 1);
+      pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
+      tree = new RegressionTree(partition.first, partition.second);
+      tree->setRNG(rng);
+    }
+    
+    tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
+    tree->grow();
+
+    XPtr<RegressionTree> regression_tree(tree, true);   // cast the regression tree as an R pointer
+    result["tree.type"] = "Regression";
+    result["Tree"] = regression_tree;               // add the tree (as a pointer, only to be used for prediction in C++)
+    JFCppTreePredict(result);                       // compute and save predictions on the data
+    vector<double> response = as<vector<double>>(df[response_indices_cpp[0]]);
+    JFCppTreeErrorRegression(result, response);     // compute and save error estimate
+
+    // save information about the tree itself
+    result["num.nodes"] = tree->getNumberOfNodes();
+    result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
+    result["tree.depth"] = tree->getTreeDepth();
   }
 
   // the tree is a classification tree
@@ -101,9 +130,9 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
     JFCppTreeErrorSurvival(result, times, ind);     // compute and save error estimate
 
     // save information about the tree itself
-    result["num.nodes"] = (*tree).getNumberOfNodes();
-    result["num.terminal.nodes"] = (*tree).getNumberOfTerminalNodes();
-    result["tree.depth"] = (*tree).getTreeDepth();
+    result["num.nodes"] = tree->getNumberOfNodes();
+    result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
+    result["tree.depth"] = tree->getTreeDepth();
   }
 
   // the tree is a multi-state tree
@@ -124,18 +153,26 @@ are always computed and saved in the list (see the JFCppTree function above)
 void JFCppTreePredict(List& JFTree) {
   string type = as<string>(JFTree["tree.type"]);
   if (type == "Regression") {
+    RegressionTree* tree = ((XPtr<RegressionTree>) JFTree["Tree"]).get();
+    NumericVector predictions(JFTree["num.obs"]);
 
+    // we saved the corresponding terminal node ID for every observation
+    for (int i = 0; i < as<int>(JFTree["num.obs"]); ++i) {
+      double pred = tree->getMeans()[tree->getPredictionNodeIDs()[i]];
+      predictions[i] = pred;
+    }
+    JFTree["predictions"] = predictions;
   }
   if (type == "Classification") {
 
   }
   if (type == "Survival") {
     SurvivalTree* tree = ((XPtr<SurvivalTree>) JFTree["Tree"]).get();
-    NumericMatrix predictions(JFTree["num.obs"], (*tree).getEventTimes().size());
+    NumericMatrix predictions(JFTree["num.obs"], tree->getEventTimes().size());
 
     // we saved the corresponding terminal node ID for every observation
     for (int i = 0; i < as<int>(JFTree["num.obs"]); ++i) {
-      vector<double> pred = (*tree).getCHF()[(*tree).getPredictionNodeIDs()[i]];
+      vector<double> pred = tree->getCHF()[tree->getPredictionNodeIDs()[i]];
       NumericVector rpred(pred.begin(), pred.end());
       predictions.row(i) = rpred;
     }
@@ -165,7 +202,13 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
 
   string type = as<string>(JFTree["tree.type"]);
   if (type == "Regression") {
+    RegressionTree* tree = ((XPtr<RegressionTree>) JFTree["Tree"]).get();
 
+    NumericMatrix predictions(new_data.getNumberOfObs(), 1);
+    for (size_t i = 0; i < new_data.getNumberOfObs(); ++i) {
+      predictions[i, 0] = get<double>(tree->predict(new_data.get_x_row(i)));
+    }
+    return predictions;
   }
 
   if (type == "Classification") {
@@ -175,16 +218,15 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
   if (type == "Survival") {
     SurvivalTree* tree = ((XPtr<SurvivalTree>) JFTree["Tree"]).get();
 
-    NumericMatrix predictions(new_data.getNumberOfObs(), (*tree).getEventTimes().size());
-    for (int i = 0; i < new_data.getNumberOfObs(); ++i) {
-      //printVector(new_data.get_x_row(i));
-      vector<double> pred = get<vector<double>>((*tree).predict(new_data.get_x_row(i)));
+    NumericMatrix predictions(new_data.getNumberOfObs(), tree->getEventTimes().size());
+    for (size_t i = 0; i < new_data.getNumberOfObs(); ++i) {
+      vector<double> pred = get<vector<double>>(tree->predict(new_data.get_x_row(i)));
       copy(pred.begin(), pred.end(), predictions.row(i).begin());
     }
     
     // truncate the predictions to only include non-censored times
     predictions = selectColumns(predictions, tree->getTrueEventTimeIDs());
-    return(predictions);
+    return predictions;
   }
 
   if (type == "Multi-state") {
@@ -193,9 +235,10 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
 }
 
 // maybe change to specific function depending on tree type
-void JFCppTreeError(List& JFTree) {
-  string type = as<string>(JFTree["tree.type"]);
-  
+void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response) {
+  const vector<double>& predictions = as<vector<double>>(JFTree["predictions"]);
+  JFTree["mse.error"] = computeMSE(predictions, response);
+  JFTree["R2.error"] = computeR2(JFTree["mse.error"], response);
 }
 
 void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vector<double>& ind) {
@@ -248,7 +291,28 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 
   // the forest is a regression forest
   if (tree_type == 1) {
+    // check validity of splitrule argument
+    vector<string> valid_splitrules = {"mse"};
+    if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
+      throw runtime_error("Invalid splitrule, please choose between mse, (ADD MORE)");
+    }
 
+    // create and grow the regression forest
+    RegressionForest* forest = new RegressionForest();
+    forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, seed, nworkers);
+    forest->grow();
+
+    XPtr<SurvivalForest> regression_forest(forest, true);
+    result["num.trees"] = ntrees;
+    result["Forest"] = regression_forest; // add the forest as a pointer, only to be used for prediction
+
+    vector<double> response = as<vector<double>>(df[response_indices_cpp[0]]);
+    JFCppForestPredict(result);                     // compute and save predictions on the data
+    JFCppForestErrorRegression(result, response);   // compute and save error result
+
+    result["avg.num.nodes"] = forest->getAvgNumberOfNodes();
+    result["avg.num.terminal.nodes"] = forest->getAvgNumberOfTerminalNodes();
+    result["avg.tree.depth"] = forest->getAvgTreeDepth();
   }
 
   // the forest is a classification forest
@@ -304,7 +368,20 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 void JFCppForestPredict(List& JFForest) {
   string type = as<string>(JFForest["tree.type"]);
   if (type == "Regression") {
+    RegressionForest* forest = ((XPtr<RegressionForest>) JFForest["Forest"]).get();
+    const pair<vector<double>, vector<double>>& predictions_cpp = forest->computePredictions();
+    size_t num_obs = JFForest["num.obs"];
 
+    NumericVector predictions(num_obs);
+    NumericVector predictions_oob(num_obs);
+    for (size_t i = 0; i < num_obs; ++i) {
+      predictions[i] = predictions_cpp.first[i];
+      predictions_oob[i] = predictions_cpp.second[i];
+    }
+
+    // save predictions
+    JFForest["predictions"] = predictions;
+    JFForest["oob.predictions"] = predictions_oob;
   }
   if (type == "Classification") {
 
@@ -328,16 +405,12 @@ void JFCppForestPredict(List& JFForest) {
     }
 
     // now truncate the time axis to only include non-censored times
-    //cout << "Line 293: Number of true event times: " << forest->getTrueEventTimeIDs().size() << endl;
     predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
     predictions_oob = selectColumns(predictions_oob, forest->getTrueEventTimeIDs());
 
     // save predictions
     JFForest["predictions"] = predictions;
     JFForest["oob.predictions"] = predictions_oob;
-
-    // remove OOB indices from the forest to save memory
-    //forest->cleanUp();
   }
   
   if (type == "Multi-state") {
@@ -392,7 +465,8 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
 
   string type = as<string>(JFForest["tree.type"]);
   if (type == "Regression") {
-
+    
+    
   }
 
   if (type == "Classification") {
@@ -402,10 +476,14 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
   if (type == "Survival") {
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
     NumericMatrix predictions(new_data.getNumberOfObs(), forest->getEventTimes().size());
+    vector<double> feature_matrix = featureMatrixCpp(df)
+
+    /*
     for (int i = 0; i < new_data.getNumberOfObs(); ++i) {
       vector<double> pred = forest->predict(new_data.get_x_row(i));
       copy(pred.begin(), pred.end(), predictions.row(i).begin());
     }
+    */
 
     // truncate the predictions to only include non-censored times
     predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
@@ -415,6 +493,10 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
   if (type == "Multi-state") {
     
   }
+}
+
+void JFCppForestErrorRegression(List& JFForest, const vector<double>& response) {
+
 }
 
 void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const vector<double>& ind) {

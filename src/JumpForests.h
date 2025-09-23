@@ -3,6 +3,7 @@
 
 #include "Data.h"
 #include "ForestSurvival.h"
+#include "ForestRegression.h"
 
 using namespace std;
 using namespace Rcpp;
@@ -16,7 +17,7 @@ void JFCppTreePredict(List& JFTree);
 List JFCppTreePredict(const List& JFTree, DataFrame df);
 
 // error computation with trees
-void JFCppTreeError(List& JFtree);
+void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response);
 void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vector<double>& ind);
 double JFCppErrorSurvival(const NumericMatrix& predictions, NumericVector times, NumericVector ind);
 // growing a forest
@@ -31,6 +32,7 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
                                  LogicalVector categorical, NumericVector unique);
 
 // error computation with forests
+void JFCppForestErrorRegression(List& JFForest, const vector<double>& response);
 void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const vector<double>& ind);
 
 // VIMP for forests

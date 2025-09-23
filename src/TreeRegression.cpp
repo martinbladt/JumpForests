@@ -278,3 +278,27 @@ bool RegressionTree::createSplit(size_t node_index) {
 
 // error estimation for regression trees
 //--------------------------------------------------------------------------------------
+
+// computes the mean squared error based on a vector of predictions and a test vector response
+double computeMSE(const vector<double>& predictions, const vector<double>& response) {
+  size_t n = predictions.size();
+  double ssq = 0;
+  for (size_t i = 0; i < n; ++i) {
+    ssq += (predictions[i] - response[i]) * (predictions[i] - response[i]);
+  }
+  return ssq / (double) n;
+}
+
+// computes the R^2 error based on MSE
+double computeR2(double mse, const vector<double>& response) {
+  size_t n = response.size();
+
+  // compute the mse for the pure intercept model
+  double response_mean = vector_sum(response) / (double) n;
+  double null_ssq = 0;
+  for (size_t i = 0; i < n; ++i) {
+    null_ssq += (response_mean - response[i]) * (response_mean - response[i]);
+  }
+  double null_mse = null_ssq / (double) n;
+  return 1 - mse / null_mse;
+}

@@ -18,7 +18,7 @@ public:
   SurvivalTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids,
                shared_ptr<vector<size_t>> true_event_time_ids, const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices = {});
 
-  void grow();  // grows the survival tree
+  //void grow();  // grows the survival tree
 
   const vector<double> getEventTimes() const {
     return *unique_event_times;
@@ -70,7 +70,7 @@ private:
   // growing survival trees
   void computeSurvivalQuantities(const vector<size_t>& indices, vector<size_t>& deaths, vector<size_t>& at_risk);  // computes the number at risk and the number of deaths at the unique_event_times
   void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
-  bool createSplit(size_t node_index);                            // returns true if leaf, computes best split
+  bool createSplit(size_t node_index) override;                            // returns true if leaf, computes best split
   void computeChf(size_t node_index);                             // computes the cumulative hazard in a terminal node
   //void updateSurvivalStats(vector<size_t>& deaths, vector<size_t>& at_risk, const ObsInfo& obs, int sign);
   void computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,

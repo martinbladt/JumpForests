@@ -20,27 +20,6 @@ public:
   //ValueType virtual predict(vector<double> x) = 0;
 
   // functions to get forest info
-  const vector<vector<size_t>> getLeftDaughters() const {
-    return left_daughters;
-  }
-  const vector<vector<size_t>> getFeatureIDs() const {
-    return feature_IDs;
-  }
-  const vector<vector<vector<double>>> getThresholds() const {
-    return thresholds;
-  }
-  const vector<vector<size_t>> getDepths() const {
-    return depths;
-  }
-  const vector<size_t> getNumberOfTerminalNodes() const {
-    return num_terminal_nodes;
-  }
-  const vector<size_t> getNumberOfNodes() const {
-    return num_nodes;
-  }
-  const vector<size_t> getTreeDepths() const {
-    return tree_depths;
-  }
   const double getAvgNumberOfTerminalNodes() const {
     return avg_num_terminal_nodes;
   }
@@ -74,10 +53,6 @@ protected:
 
   // forest information
   int seed;                                   // global seed for the forest, can be set by user
-  vector<vector<size_t>> left_daughters;      // vector of left daughters for each tree
-  vector<vector<size_t>> feature_IDs;         // ID of the feature in each node for each tree
-  vector<vector<vector<double>>> thresholds;  // thresholds in each node for each tree
-  vector<vector<size_t>> depths;              // depths of each node for each tree
 
   // hyperparameters
   unsigned int mtry;              // number of variables randomly selected for each split
@@ -113,5 +88,6 @@ protected:
 };
 
 void OOBNonBoolIndices(vector<vector<size_t>>& oob_indices_non_bool, const vector<vector<bool>>& oob_indices);
+vector<double> featureMatrixCpp(const NumericMatrix& feature_matrix);
 
 #endif // FOREST_H

@@ -42,6 +42,7 @@ void SurvivalForest::grow() {
 
         vector<size_t> bootstrap_indices;
         vector<size_t> holdout_indices;     // only relevant for honest trees
+        
         // bootstrap
         if (!honest) {
             size_t subsample_size = floor(sample_rate * n);
@@ -173,6 +174,39 @@ pair<vector<double>, vector<double>> SurvivalForest::computePredictions() {
     }
 
     return {predictions, oob_predictions};
+}
+
+// the feature_matrix is a flattened array (observation by observation) NOOO, 
+vector<double> SurvivalForest::computePredictions(const vector<double>& feature_matrix) {
+    size_t num_features = data->getNumberOfFeatures()
+    size_t num_obs = feature_matrix.size() / num_features;
+    cout << "Line 182: Number of observations in test data: " << num_obs << endl;
+    vector<double> predictions(num_obs * num_unique_event_times);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        // first reconstruct the observation from the flattened array
+        vector<double> x(num_features);
+        for (size_t j = 0; j < num_features; ++j) {
+            x[j] = feature_matrix[i * num_features + j];
+        }
+        
+        vector<double> pred(num_unique_event_times, 0);
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+            vector<double> tree_pred = get<vector<double>>(tree->predict(x));
+            sum_vectors(pred, tree_pred);
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            pred[k] /= ntrees;
+            predictions[i * num_unique_event_times + k] = pred[k];
+        }
+    }
+    return predictions;
 }
 
 double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {

@@ -7,7 +7,7 @@ class RegressionTree : public Tree {
 public:
   RegressionTree(const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices = {});
 
-  void grow();  // grow the regression tree
+  //void grow();  // grow the regression tree
 
   const vector<double> getMeans() const {
     return means;
@@ -29,7 +29,7 @@ private:
   // growing regression trees
   double computeSum(const vector<size_t>& indices);
   void makeLeaf(size_t node_index);
-  bool createSplit(size_t node_index);
+  bool createSplit(size_t node_index) override;
   void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold, double& best_sum_left);
   void bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
                            vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices, double& best_sum_left);
@@ -42,5 +42,8 @@ private:
     vector<double>().swap(sum_node);
   }
 };
+
+double computeMSE(const vector<double>& predictions, const vector<double>& response);
+double computeR2(double mse, const vector<double>& response);
 
 #endif // TREE_REGRESSION_H

@@ -142,3 +142,40 @@ bool Tree::generateCategoricalPartitions(const vector<double>& feature_values, u
     }
     return false;
 }
+
+// function to grow a tree
+void Tree::grow() {
+  // maybe bootstrap weights should be here if we choose to implement general bootstrap schemes
+
+  size_t num_queue = 1;
+  size_t depth = 0;
+  size_t left_most_node = 0;
+
+  // while not all nodes terminal, continue growing the tree
+  size_t i = 0;
+  depths.push_back(depth);
+  while (num_queue > 0) {
+    bool is_leaf = createSplit(i);
+    if (is_leaf) {
+        num_queue--;
+        left_daughters.push_back(0);  // 0 indicates no daughters
+        num_terminal_nodes++;
+    }
+    else {
+        num_queue++;
+        left_daughters.push_back(num_nodes);
+        num_nodes += 2;
+        if (i >= left_most_node) {
+            depth++;
+            left_most_node = num_nodes - 2;
+        }
+        // only for info, technically redundant
+        depths.push_back(depth);
+        depths.push_back(depth);
+    }
+    i++;
+  }
+
+  tree_depth = depth;
+  cleanUpTree();
+}

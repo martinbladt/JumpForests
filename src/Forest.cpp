@@ -30,17 +30,8 @@ void Forest::computeForestQuantities() {
     double total_num_terminal_nodes = 0;
     double sum_tree_depth = 0;
     
+    // update tree info
     for (const auto& tree : trees) {
-        // saving all these quantities should be unnecessary
-        this->left_daughters.push_back(tree->getLeftDaughters());
-        this->feature_IDs.push_back(tree->getFeatureIDs());
-        this->thresholds.push_back(tree->getThresholds());
-        this->depths.push_back(tree->getDepths());
-        this->num_nodes.push_back(tree->getNumberOfNodes());
-        this->num_terminal_nodes.push_back(tree->getNumberOfTerminalNodes());
-        this->tree_depths.push_back(tree->getTreeDepth());
-
-        // update tree info
         total_num_nodes += tree->getNumberOfNodes();
         total_num_terminal_nodes += tree->getNumberOfTerminalNodes();
         sum_tree_depth += tree->getTreeDepth();
@@ -50,21 +41,6 @@ void Forest::computeForestQuantities() {
     this->avg_num_nodes = total_num_nodes/num_trees;
     this->avg_num_terminal_nodes = total_num_terminal_nodes/num_trees;
     this->avg_tree_depth = sum_tree_depth/num_trees;
-}
-
-// translates the matrix of booleans into a matrix of actual indices
-void OOBNonBoolIndices(vector<vector<size_t>>& oob_indices_non_bool, const vector<vector<bool>>& oob_indices) {
-    size_t ntrees = oob_indices.size();
-    size_t num_obs = oob_indices[0].size();
-    for (size_t i = 0; i < ntrees; ++i) {
-        vector<size_t> indices;
-        for (size_t j = 0; j < num_obs; ++j) {
-            if (oob_indices[i][j]) {
-                indices.push_back(j);
-            }
-        }
-        oob_indices_non_bool.push_back(indices);
-    }
 }
 
 // shuffles the value of one particular feature among all oob covariates for all trees
@@ -99,6 +75,36 @@ vector<vector<double>> Forest::shuffledFeatureValues(const vector<vector<size_t>
             result_tree[oob_indices_non_bool[i][j]] = oob_values[j];
         }
         result[i] = move(result_tree);
+    }
+    return result;
+}
+
+// translates the matrix of booleans into a matrix of actual indices
+void OOBNonBoolIndices(vector<vector<size_t>>& oob_indices_non_bool, const vector<vector<bool>>& oob_indices) {
+    size_t ntrees = oob_indices.size();
+    size_t num_obs = oob_indices[0].size();
+    for (size_t i = 0; i < ntrees; ++i) {
+        vector<size_t> indices;
+        for (size_t j = 0; j < num_obs; ++j) {
+            if (oob_indices[i][j]) {
+                indices.push_back(j);
+            }
+        }
+        oob_indices_non_bool.push_back(indices);
+    }
+}
+
+// translates a NumericMatrix into a flattened 2D vector in C++
+vector<double> featureMatrixCpp(const NumericMatrix& feature_matrix) {
+    size_t num_obs = feature_matrix.nrow();
+    size_t num_features = feature_matrix.ncol();
+    vector<double> result(num_obs * num_features);
+
+    // fill the flattened array observation by observation
+    for (size_t i = 0; i < num_obs; ++i) {
+        for (size_t j = 0; j < num_features; ++j) {
+            result[i * num_features + j] = feature_matrix[i, j];
+        }
     }
     return result;
 }

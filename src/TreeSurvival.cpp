@@ -445,6 +445,7 @@ void SurvivalTree::computeChf(size_t node_index) {
     this->chf.push_back(move(chf));
 }
 
+/*
 // function to grow a survival tree
 void SurvivalTree::grow() {
   // maybe bootstrap weights should be here if we choose to implement general bootstrap schemes
@@ -482,6 +483,7 @@ void SurvivalTree::grow() {
   tree_depth = depth;
   cleanUpTree();
 }
+*/
 
 // splitting rules for survival trees
 //--------------------------------------------------------------------------------------
