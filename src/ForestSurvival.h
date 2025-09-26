@@ -28,8 +28,8 @@ public:
   // for computing predictions after the forest is grown
   // first vector is a flattened 2D array with in-bag predictions, the other with oob predictions
   pair<vector<double>, vector<double>> computePredictions();
-  // computing predictions on a new dataset (both input and output are flattened arrays)
-  vector<double> computePredictions(const vector<double>& feature_matrix);
+  // computing predictions on a new dataset (output is a flattened array)
+  vector<double> computePredictions(const Data& new_data);
   // for computing OOB predictions for VIMP
   vector<double> computePredictionsVIMPRandom(size_t feature, int feature_seed);
   vector<double> computePredictionsVIMPPermute(size_t feature, int feature_seed);

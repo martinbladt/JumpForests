@@ -591,10 +591,25 @@ double SurvivalTree::approxLogRank(const vector<size_t>& num_deaths, const vecto
     }
 }
 
+// prediction for survival trees
+//--------------------------------------------------------------------------------------
+
+vector<double> SurvivalTree::computePredictions(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times);
+    for (size_t i = 0; i < num_obs; ++i) {
+        const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));
+        for (size_t j = 0; j < num_unique_event_times; ++j) {
+            predictions[i * num_unique_event_times + j] = pred[j];
+        }
+    }
+    return predictions;
+}
+
 // error estimation for survival trees
 //--------------------------------------------------------------------------------------
 
-// computes the outcomes used in the concordance index calculations
+// computes the outcomes used in the concordance index calculations using a NumericMatrix as input
 vector<double> computeOutcomes(const NumericMatrix& predictions) {
     size_t n = predictions.nrow();
     size_t N = predictions.ncol();
@@ -606,7 +621,21 @@ vector<double> computeOutcomes(const NumericMatrix& predictions) {
         }
         outcomes[i] = sum;
     }
-    return(outcomes);
+    return outcomes;
+}
+
+// computes the outcomes used in the concordance index calculations using a (flattened) vector as input
+vector<double> computeOutcomes(const vector<double>& predictions, size_t num_unique_event_times) {
+    size_t n = predictions.size() / num_unique_event_times;
+    vector<double> outcomes(n);
+    for (size_t i = 0; i < n; ++i) {
+        double sum = 0;
+        for (size_t j = 0; j < num_unique_event_times; ++j) {
+            sum += predictions[i * num_unique_event_times + j];
+        }
+        outcomes[i] = sum;
+    }
+    return outcomes;
 }
 
 // miscellaneous functions related to survival

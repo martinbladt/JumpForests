@@ -30,7 +30,6 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
                                          vector<double>& best_threshold, double& best_sum_left) {
   const vector<size_t>& current_node_obs = node_obs[node_index];
   double parent_sum = sum_node[node_index];
-  size_t n = current_node_obs.size();
 
   // samples split points
   vector<double> split_points;
@@ -47,7 +46,7 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
   for (size_t i : current_node_obs) {
     size_t idx = lower_bound(split_points.begin(), split_points.end(), data->get_x(i, feature)) - split_points.begin();
     
-    sums_split[idx] = data->get_y(i);
+    sums_split[idx] += data->get_y(i);
     ++number_obs_split[idx];
   }
 
@@ -55,7 +54,7 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
   size_t n_left = 0;
   double sum_left = 0;
 
-  for (size_t i = 0; i < nsplits_final - 1; ++i) {
+  for (size_t i = 0; i < nsplits_final; ++i) {
     // skip the split if identical to the previous one (or if no observations)
     if (number_obs_split[i] == 0) {
       continue;
@@ -132,7 +131,7 @@ void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, dou
 
     // here we have to compute the means in one of the daughters from scratch
     double sum_left = computeSum(current_left_indices);
-    double sum_right = sum_node[node_index] - sum_left;
+    double sum_right = parent_sum - sum_left;
 
     double decrease = sum_left * sum_left / (double) n_left + sum_right * sum_right / (double) n_right;
 
@@ -161,6 +160,10 @@ void RegressionTree::makeLeaf(size_t node_index) {
 // function to create a split for a regression tree. returns true if leaf, otherwise false
 bool RegressionTree::createSplit(size_t node_index) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
+    // if we are in the root node, the sum of the responses needs to be computed
+    if (sum_node.empty()) {
+      sum_node.push_back(computeSum(current_node_obs));
+    }
     double parent_sum = sum_node[node_index];
 
     // if no split is possible, make the node a leaf
@@ -275,6 +278,19 @@ bool RegressionTree::createSplit(size_t node_index) {
 
 // splitting rules for regression trees
 //--------------------------------------------------------------------------------------
+
+
+// prediction for regression trees
+//--------------------------------------------------------------------------------------
+
+vector<double> RegressionTree::computePredictions(const Data& new_data) {
+  size_t num_obs = new_data.getNumberOfObs();
+  vector<double> predictions(num_obs);
+  for (size_t i = 0; i < num_obs; ++i) {
+    predictions[i] = get<double>(predict(new_data.get_x_row(i)));
+  }
+  return predictions;
+}
 
 // error estimation for regression trees
 //--------------------------------------------------------------------------------------

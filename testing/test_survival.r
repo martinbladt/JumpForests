@@ -78,6 +78,7 @@ jfforest.predict(fitted_forest)
 jfforest.predict(fitted_forest, new_data)
 # error
 jfforest.error(fitted_forest)
+jfforest.error(fitted_forest, test_data) # needs fixing
 jfforest.error(fitted_forest, new_data)
 print_forest(fitted_forest)
 
@@ -157,7 +158,7 @@ colMeans(VIMP_ranger)
 # retinopathy
 #--------------------------------------------------------------------
 
-retinopathy <- retinopathy[,-1]
+retinopathy <- retinopathy[, -1]
 head(retinopathy)
 
 retinopathy_forest <- jfforest(Surv(futime, status) ~ ., data = retinopathy, splitrule = "logrank", seed = 2025)

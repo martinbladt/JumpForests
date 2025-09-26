@@ -35,6 +35,7 @@ public:
   ValueType predict(const vector<double>& x) override {
     return chf[predictionLeafID(x)];
   }
+  vector<double> computePredictions(const Data& new_data) override;
   // VIMP prediction for survival trees
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng) {
     return chf[predictionLeafIDVIMP(x, feature, rng)];
@@ -109,6 +110,7 @@ private:
 vector<size_t> computeResponseEventTimeIDs(const vector<double>& unique_event_times, const vector<double>& times);
 vector<size_t> computeTrueEventTimeIDs(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& ind);
 vector<double> computeOutcomes(const NumericMatrix& predictions); // for error computation
+vector<double> computeOutcomes(const vector<double>& predictions, size_t num_unique_event_times);
 vector<double> computeUniqueEventTimes(const vector<double>& times, const vector<size_t>& ind);
 vector<double> KaplanMeyer(const vector<double>& na);
 double computeConcordanceIndex(const vector<double>& outcomes, const vector<double>& times, const vector<double>& ind);

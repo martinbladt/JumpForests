@@ -3,6 +3,10 @@
 // functions for growing regression forests
 //--------------------------------------------------------------------------------------
 
+RegressionForest::RegressionForest() {
+    
+}
+
 // grows a regression forest using multithreading via OpenMP
 void RegressionForest::grow() {
     int n = data->getNumberOfObs();
@@ -118,3 +122,21 @@ pair<vector<double>, vector<double>> RegressionForest::computePredictions() {
     return {predictions, oob_predictions};
 }
 
+vector<double> RegressionForest::computePredictions(const Data& new_data) {
+    size_t num_features = new_data.getNumberOfFeatures();
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        double pred = 0;
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            RegressionTree* tree = dynamic_cast<RegressionTree*>(trees[j].get());
+            pred += get<double>(tree->predict(new_data.get_x_row(i)));
+        }
+        predictions[i] = pred / ntrees;
+    }
+    return predictions;
+}

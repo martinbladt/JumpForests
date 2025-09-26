@@ -21,6 +21,8 @@ public:
   // for computing predictions after the forest is grown
   // first vector is in-bag predictions, the other oob predictions
   pair<vector<double>, vector<double>> computePredictions();
+  // computing predictions on a new dataset
+  vector<double> computePredictions(const Data& new_data);
 
 private:
   vector<double> means;

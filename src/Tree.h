@@ -23,7 +23,8 @@ public:
   void grow();
 
   // predicted value depending on the type of tree (must be overriden by a derived Tree class)
-  virtual ValueType predict(const vector<double>& x) = 0;  // predicting on a single observation
+  virtual ValueType predict(const vector<double>& x) = 0;               // predicting on a single observation
+  virtual vector<double> computePredictions(const Data& new_data) = 0;  // for computing observations on an entire dataset
 
   // returns the ID of the leaf containing x
   size_t predictionLeafID(const vector<double>& x);
@@ -115,7 +116,7 @@ protected:
   // protected functions to grow trees
   virtual bool createSplit(size_t node_index) = 0;
 
-  // frees memory and computes prediction_node_IDs after fitting is complete
+  // frees memory after fitting is complete
   virtual void cleanUpTree() = 0;
 };
 

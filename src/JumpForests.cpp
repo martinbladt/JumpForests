@@ -13,6 +13,10 @@ tree_type:
 
 */
 
+
+// growing decision trees
+//--------------------------------------------------------------------------------------
+
 // [[Rcpp::export]]
 List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, bool honest,
     NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical,
@@ -30,16 +34,16 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
   // use all indices since we grow a single tree
   vector<size_t> subset_indices_cpp;
-  for (int i = 0; i < (*data).getNumberOfObs(); ++i) {
+  for (int i = 0; i < data->getNumberOfObs(); ++i) {
     subset_indices_cpp.push_back(i);
   }
 
   // we save a list with all information about the tree
   List result = List::create(
-    Named("num.obs") = (*data).getNumberOfObs(),
-    Named("num.features") = (*data).getNumberOfFeatures(),
-    Named("feature.names") = (*data).getFeatureNames(), 
-    Named("response.names") = (*data).getResponseNames(),
+    Named("num.obs") = data->getNumberOfObs(),
+    Named("num.features") = data->getNumberOfFeatures(),
+    Named("feature.names") = data->getFeatureNames(), 
+    Named("response.names") = data->getResponseNames(),
     Named("splitrule") = splitrule,
     Named("mtry") = mtry,
     Named("min.node.size") = min_node_size,
@@ -64,7 +68,6 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
       tree = new RegressionTree(partition.first, partition.second);
       tree->setRNG(rng);
     }
-    
     tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
     tree->grow();
 
@@ -150,14 +153,18 @@ are always computed and saved in the list (see the JFCppTree function above)
 
 */
 
+// predicting with decision trees
+//--------------------------------------------------------------------------------------
+
 void JFCppTreePredict(List& JFTree) {
   string type = as<string>(JFTree["tree.type"]);
+  size_t num_obs = as<size_t>(JFTree["num.obs"]);
   if (type == "Regression") {
     RegressionTree* tree = ((XPtr<RegressionTree>) JFTree["Tree"]).get();
-    NumericVector predictions(JFTree["num.obs"]);
+    NumericVector predictions(num_obs);
 
     // we saved the corresponding terminal node ID for every observation
-    for (int i = 0; i < as<int>(JFTree["num.obs"]); ++i) {
+    for (int i = 0; i < num_obs; ++i) {
       double pred = tree->getMeans()[tree->getPredictionNodeIDs()[i]];
       predictions[i] = pred;
     }
@@ -168,10 +175,10 @@ void JFCppTreePredict(List& JFTree) {
   }
   if (type == "Survival") {
     SurvivalTree* tree = ((XPtr<SurvivalTree>) JFTree["Tree"]).get();
-    NumericMatrix predictions(JFTree["num.obs"], tree->getEventTimes().size());
+    NumericMatrix predictions(num_obs, tree->getEventTimes().size());
 
     // we saved the corresponding terminal node ID for every observation
-    for (int i = 0; i < as<int>(JFTree["num.obs"]); ++i) {
+    for (int i = 0; i < num_obs; ++i) {
       vector<double> pred = tree->getCHF()[tree->getPredictionNodeIDs()[i]];
       NumericVector rpred(pred.begin(), pred.end());
       predictions.row(i) = rpred;
@@ -206,7 +213,7 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
 
     NumericMatrix predictions(new_data.getNumberOfObs(), 1);
     for (size_t i = 0; i < new_data.getNumberOfObs(); ++i) {
-      predictions[i, 0] = get<double>(tree->predict(new_data.get_x_row(i)));
+      predictions(i, 0) = get<double>(tree->predict(new_data.get_x_row(i)));
     }
     return predictions;
   }
@@ -234,12 +241,20 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
   }
 }
 
-// maybe change to specific function depending on tree type
+// error computation for decision trees
+//--------------------------------------------------------------------------------------
+
+// Regression
+
 void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response) {
   const vector<double>& predictions = as<vector<double>>(JFTree["predictions"]);
   JFTree["mse.error"] = computeMSE(predictions, response);
   JFTree["R2.error"] = computeR2(JFTree["mse.error"], response);
 }
+
+// Classification
+
+// Survival
 
 void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vector<double>& ind) {
   vector<double> outcomes = computeOutcomes(JFTree["predictions"]);
@@ -247,15 +262,80 @@ void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vec
   JFTree["error"] = 1 - computeConcordanceIndex(outcomes, times, ind);
 }
 
-// [[Rcpp::export]]
-double JFCppErrorSurvival(const NumericMatrix& predictions, NumericVector times, NumericVector ind) {
-  vector<double> times_cpp = as<vector<double>>(times);
-  vector<double> ind_cpp = as<vector<double>>(ind);
+double JFCppErrorSurvival(const NumericMatrix& predictions, const vector<double>& times, const vector<double>& ind) {
   vector<double> outcomes = computeOutcomes(predictions);
-  return(1 - computeConcordanceIndex(outcomes, times_cpp, ind_cpp));
+  return 1 - computeConcordanceIndex(outcomes, times, ind);
 }
 
-// add more options later
+// Multi-state
+
+// General function for a new dataset
+
+// computes the error based on a a new dataset, here we don't need to specify the type of forest beforehand
+// [[Rcpp::export]]
+List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indices,
+                                 LogicalVector categorical, NumericVector unique, NumericVector response_indices) {
+  // convert the input to C++ vectors
+  vector<size_t> response_indices_cpp = as<vector<size_t>>(response_indices);
+  cout << "Line 280:" << response_indices_cpp[0] << endl;
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+
+  // convert the new data to a suitable C++ Data object
+  Data new_data = Data(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
+  size_t num_obs = new_data.getNumberOfObs();
+
+  string type = as<string>(JFTree["tree.type"]);
+  if (type == "Regression") {
+    RegressionTree* tree = ((XPtr<RegressionTree>) JFTree["Tree"]).get();
+    vector<double> predictions(num_obs);
+    for (size_t i = 0; i < new_data.getNumberOfObs(); ++i) {
+      predictions[i] = get<double>(tree->predict(new_data.get_x_row(i)));
+    }
+    const vector<double>& response = new_data.get_y();
+    List result;
+    double mse = computeMSE(predictions, response);
+    result["mse.error"] = mse;
+    result["R2.error"] = computeR2(mse, response);
+    return result;
+  }
+  if (type == "Classification") {
+
+  }
+  if (type == "Survival") {
+    SurvivalTree* tree = ((XPtr<SurvivalTree>) JFTree["Tree"]).get();
+    size_t num_unique_event_times = tree->getEventTimes().size();
+    vector<double> predictions = tree->computePredictions(new_data);
+
+    // truncate the predictions to only include non-censored times
+    const vector<double>& predictions_final = selectColumns(predictions, tree->getTrueEventTimeIDs(), num_unique_event_times);
+    const vector<double>& outcomes = computeOutcomes(predictions_final, num_unique_event_times);
+    const vector<double>& times = new_data.get_y_col(0);
+    const vector<double>& ind = new_data.get_y_col(1);
+    return List::create(Named("error") = 1 - computeConcordanceIndex(outcomes, times, ind));
+
+    /*
+    size_t num_unique_event_times = tree->getEventTimes().size();
+    NumericMatrix predictions(num_obs, num_unique_event_times);
+    for (size_t i = 0; i < num_obs; ++i) {
+      copy(predictions_cpp.begin() + i * num_unique_event_times, predictions_cpp.begin() + (i + 1) * num_unique_event_times, predictions.row(i).begin());
+    }
+
+    // truncate the predictions to only include non-censored times
+    predictions = selectColumns(predictions, tree->getTrueEventTimeIDs());
+    */    
+  }
+  if (type == "Multi-state") {
+
+  }
+  else {
+    throw runtime_error("Type of forest not recognised");
+  }
+}
+
+// growing random forests
+//--------------------------------------------------------------------------------------
 
 // [[Rcpp::export]]
 List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule,
@@ -302,7 +382,8 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
     forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, seed, nworkers);
     forest->grow();
 
-    XPtr<SurvivalForest> regression_forest(forest, true);
+    XPtr<RegressionForest> regression_forest(forest, true);
+    result["tree.type"] = "Regression";
     result["num.trees"] = ntrees;
     result["Forest"] = regression_forest; // add the forest as a pointer, only to be used for prediction
 
@@ -361,8 +442,11 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
   if (tree_type == 4) {
 
   }
-  return(result);
+  return result;
 }
+
+// predicting with random forests
+//--------------------------------------------------------------------------------------
 
 // for computing all predictions (in-bag and OOB) of the dataset
 void JFCppForestPredict(List& JFForest) {
@@ -418,39 +502,6 @@ void JFCppForestPredict(List& JFForest) {
   }
 }
 
-// the following function is for computing a single prediction (not used)
-
-/*
-
-// [[Rcpp::export]]
-NumericVector JFCppForestPredictSingle(const List& JFForest, const NumericVector& x) {
-  string type = as<string>(JFForest["tree.type"]);
-  vector<double> x_cpp = as<vector<double>>(x);
-
-  if (type == "Regression") {
-
-  }
-  if (type == "Classification") {
-
-  }
-  if (type == "Survival") {
-    SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
-    NumericVector prediction(forest->getEventTimes().size());
-    const vector<double>& pred = forest->predict(x_cpp);
-    copy(pred.begin(), pred.end(), prediction.begin());
-    return prediction;
-    
-  }
-  if (type == "Multi-state") {
-
-  }
-}
-
-*/
-
-// the following function computes predictions of a whole dataset (should probably be rewritten in
-// pure C++ to allow for multi-threading)
-
 // [[Rcpp::export]]
 NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique) {
@@ -462,11 +513,17 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
 
   // convert the new data to a suitable C++ Data object
   Data new_data = Data(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
+  size_t num_obs = new_data.getNumberOfObs();
 
   string type = as<string>(JFForest["tree.type"]);
   if (type == "Regression") {
-    
-    
+    RegressionForest* forest = ((XPtr<RegressionForest>) JFForest["Forest"]).get();
+    NumericMatrix predictions(num_obs, 1);
+    const vector<double>& predictions_cpp = forest->computePredictions(new_data);
+    for (size_t i = 0; i < num_obs; ++i) {
+      predictions(i, 0) = predictions_cpp[i];
+    }
+    return predictions;
   }
 
   if (type == "Classification") {
@@ -475,15 +532,12 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
 
   if (type == "Survival") {
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
-    NumericMatrix predictions(new_data.getNumberOfObs(), forest->getEventTimes().size());
-    vector<double> feature_matrix = featureMatrixCpp(df)
-
-    /*
-    for (int i = 0; i < new_data.getNumberOfObs(); ++i) {
-      vector<double> pred = forest->predict(new_data.get_x_row(i));
-      copy(pred.begin(), pred.end(), predictions.row(i).begin());
+    size_t num_unique_event_times = forest->getEventTimes().size();
+    NumericMatrix predictions(num_obs, num_unique_event_times);
+    const vector<double>& predictions_cpp = forest->computePredictions(new_data);
+    for (size_t i = 0; i < num_obs; ++i) {
+      copy(predictions_cpp.begin() + i * num_unique_event_times, predictions_cpp.begin() + (i + 1) * num_unique_event_times, predictions.row(i).begin());
     }
-    */
 
     // truncate the predictions to only include non-censored times
     predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
@@ -495,14 +549,92 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
   }
 }
 
-void JFCppForestErrorRegression(List& JFForest, const vector<double>& response) {
+// error computation for random forests
+//--------------------------------------------------------------------------------------
 
+// Regression
+
+// computes the error based on the OOB predictions of the forest
+void JFCppForestErrorRegression(List& JFForest, const vector<double>& response) {
+  size_t num_obs = as<size_t>(JFForest["num.obs"]);
+  vector<double> predictions(num_obs);
+  const NumericVector& predictions_R = JFForest["oob.predictions"];
+  for (size_t i = 0; i < num_obs; ++i) {
+    predictions[i] = predictions_R[i];
+  }
+  JFForest["mse.error"] = computeMSE(predictions, response);
+  JFForest["R2.error"] = computeR2(JFForest["mse.error"], response);
 }
 
+// computes the error for a regression forest based on new predictions
+List JFCppForestErrorRegression(const vector<double>& predictions, const vector<double>& response) {
+  List result;
+  double mse = computeMSE(predictions, response);
+  result["error.mse"] = mse;
+  result["R2.error"] = computeR2(mse, response);
+  return result;
+}
+
+// Classification
+
+// Survival
+
 void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const vector<double>& ind) {
-  vector<double> outcomes = computeOutcomes(JFForest["oob.predictions"]);
+  const vector<double>& outcomes = computeOutcomes(JFForest["oob.predictions"]);
   JFForest["outcomes.oob"] = outcomes;
   JFForest["oob.error"] = 1 - computeConcordanceIndex(outcomes, times, ind);
+}
+
+// Multi-state
+
+// General function for a new dataset
+
+// computes the error based on a a new dataset, here we don't need to specify the type of forest beforehand
+// [[Rcpp::export]]
+List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_indices,
+                                 LogicalVector categorical, NumericVector unique, NumericVector response_indices) {
+  // convert the input to C++ vectors
+  vector<size_t> response_indices_cpp = as<vector<size_t>>(response_indices);
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+
+  // convert the new data to a suitable C++ Data object
+  Data new_data = Data(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
+  size_t num_obs = new_data.getNumberOfObs();
+
+  string type = as<string>(JFForest["tree.type"]);
+  if (type == "Regression") {
+    RegressionForest* forest = ((XPtr<RegressionForest>) JFForest["Forest"]).get();
+    const vector<double>& predictions = forest->computePredictions(new_data);
+    const vector<double>& response = new_data.get_y_col(0);
+    return JFCppForestErrorRegression(predictions, response);
+  }
+  if (type == "Classification") {
+
+  }
+  if (type == "Survival") {
+    SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
+    size_t num_unique_event_times = forest->getEventTimes().size();
+    NumericMatrix predictions(num_obs, num_unique_event_times);
+    const vector<double>& predictions_cpp = forest->computePredictions(new_data);
+    for (size_t i = 0; i < num_obs; ++i) {
+      copy(predictions_cpp.begin() + i * num_unique_event_times, predictions_cpp.begin() + (i + 1) * num_unique_event_times, predictions.row(i).begin());
+    }
+
+    // truncate the predictions to only include non-censored times
+    predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
+    const vector<double>& times = new_data.get_y_col(0);
+    const vector<double>& ind = new_data.get_y_col(1);
+    return List::create(Named("error") = JFCppErrorSurvival(predictions, times, ind));
+    
+  }
+  if (type == "Multi-state") {
+
+  }
+  else {
+    throw runtime_error("Type of forest not recognised");
+  }
 }
 
 // computes VIMP for a specific feature after the forest is grown

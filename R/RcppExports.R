@@ -9,8 +9,8 @@ JFCppTreePredict <- function(JFTree, df, feature_indices, categorical, unique) {
     .Call(`_JumpForests_JFCppTreePredict`, JFTree, df, feature_indices, categorical, unique)
 }
 
-JFCppErrorSurvival <- function(predictions, times, ind) {
-    .Call(`_JumpForests_JFCppErrorSurvival`, predictions, times, ind)
+JFCppTreeError <- function(JFTree, df, feature_indices, categorical, unique, response_indices) {
+    .Call(`_JumpForests_JFCppTreeError`, JFTree, df, feature_indices, categorical, unique, response_indices)
 }
 
 JFCppForest <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, response_indices, feature_indices, categorical, unique, seed, nworkers) {
@@ -19,6 +19,10 @@ JFCppForest <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, 
 
 JFCppForestPredict <- function(JFForest, df, feature_indices, categorical, unique) {
     .Call(`_JumpForests_JFCppForestPredict`, JFForest, df, feature_indices, categorical, unique)
+}
+
+JFCppForestError <- function(JFForest, df, feature_indices, categorical, unique, response_indices) {
+    .Call(`_JumpForests_JFCppForestError`, JFForest, df, feature_indices, categorical, unique, response_indices)
 }
 
 JFCppForestVIMPFeature <- function(JFForest, feature_name, feature_seed, method) {

@@ -29,5 +29,6 @@ pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indi
 
 // helper functions for Rcpp
 NumericMatrix selectColumns(const NumericMatrix& matrix, const vector<size_t>& cols);
+vector<double> selectColumns(const vector<double>& matrix, const vector<size_t>& cols, size_t row_length);
 
 #endif // HELPER_H

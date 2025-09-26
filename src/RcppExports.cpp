@@ -47,16 +47,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// JFCppErrorSurvival
-double JFCppErrorSurvival(const NumericMatrix& predictions, NumericVector times, NumericVector ind);
-RcppExport SEXP _JumpForests_JFCppErrorSurvival(SEXP predictionsSEXP, SEXP timesSEXP, SEXP indSEXP) {
+// JFCppTreeError
+List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, NumericVector response_indices);
+RcppExport SEXP _JumpForests_JFCppTreeError(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP response_indicesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const NumericMatrix& >::type predictions(predictionsSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type times(timesSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type ind(indSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppErrorSurvival(predictions, times, ind));
+    Rcpp::traits::input_parameter< const List& >::type JFTree(JFTreeSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type response_indices(response_indicesSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppTreeError(JFTree, df, feature_indices, categorical, unique, response_indices));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -98,6 +101,22 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
     rcpp_result_gen = Rcpp::wrap(JFCppForestPredict(JFForest, df, feature_indices, categorical, unique));
+    return rcpp_result_gen;
+END_RCPP
+}
+// JFCppForestError
+List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, NumericVector response_indices);
+RcppExport SEXP _JumpForests_JFCppForestError(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP response_indicesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFForest(JFForestSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type response_indices(response_indicesSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestError(JFForest, df, feature_indices, categorical, unique, response_indices));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -267,9 +286,10 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppTree", (DL_FUNC) &_JumpForests_JFCppTree, 12},
     {"_JumpForests_JFCppTreePredict", (DL_FUNC) &_JumpForests_JFCppTreePredict, 5},
-    {"_JumpForests_JFCppErrorSurvival", (DL_FUNC) &_JumpForests_JFCppErrorSurvival, 3},
+    {"_JumpForests_JFCppTreeError", (DL_FUNC) &_JumpForests_JFCppTreeError, 6},
     {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 16},
     {"_JumpForests_JFCppForestPredict", (DL_FUNC) &_JumpForests_JFCppForestPredict, 5},
+    {"_JumpForests_JFCppForestError", (DL_FUNC) &_JumpForests_JFCppForestError, 6},
     {"_JumpForests_JFCppForestVIMPFeature", (DL_FUNC) &_JumpForests_JFCppForestVIMPFeature, 4},
     {"_JumpForests_JFCppForestVIMP", (DL_FUNC) &_JumpForests_JFCppForestVIMP, 3},
     {"_JumpForests_getTreeTable", (DL_FUNC) &_JumpForests_getTreeTable, 1},

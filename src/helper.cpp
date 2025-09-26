@@ -151,7 +151,7 @@ pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indi
     return {grow, holdout};
 }
 
-// for selecting specific rows from a NumericMatrix (used to filter )
+// for selecting specific columns from a NumericMatrix (used to filter)
 NumericMatrix selectColumns(const NumericMatrix& matrix, const vector<size_t>& cols) {
     size_t n_rows = matrix.nrow();
     size_t n_cols = cols.size();
@@ -159,6 +159,20 @@ NumericMatrix selectColumns(const NumericMatrix& matrix, const vector<size_t>& c
     NumericMatrix res(n_rows, n_cols);
     for (size_t i = 0; i < n_cols; ++i) {
         res(_, i) = matrix(_, cols[i]);
+    }
+    return res;
+}
+
+// for selecting specific columns from a matrix in flattened vector form (with row_length entries per row)
+vector<double> selectColumns(const vector<double>& matrix, const vector<size_t>& cols, size_t row_length) {
+    size_t n_rows = matrix.size() / row_length;
+    size_t n_cols = cols.size();
+
+    vector<double> res(n_rows * n_cols);
+    for (size_t i = 0; i < n_rows; ++i) {
+        for (size_t j = 0; j < n_cols; ++j) {
+            res[i * n_cols + j] = matrix[i * row_length + cols[j]];
+        }
     }
     return res;
 }

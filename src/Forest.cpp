@@ -94,8 +94,8 @@ void OOBNonBoolIndices(vector<vector<size_t>>& oob_indices_non_bool, const vecto
     }
 }
 
-// translates a NumericMatrix into a flattened 2D vector in C++
-vector<double> featureMatrixCpp(const NumericMatrix& feature_matrix) {
+// translates a NumericMatrix into a flattened 2D vector in C++ (not used)
+vector<double> matrixRtoCpp(const NumericMatrix& feature_matrix) {
     size_t num_obs = feature_matrix.nrow();
     size_t num_features = feature_matrix.ncol();
     vector<double> result(num_obs * num_features);

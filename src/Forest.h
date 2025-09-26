@@ -88,6 +88,6 @@ protected:
 };
 
 void OOBNonBoolIndices(vector<vector<size_t>>& oob_indices_non_bool, const vector<vector<bool>>& oob_indices);
-vector<double> featureMatrixCpp(const NumericMatrix& feature_matrix);
+vector<double> matrixRtoCpp(const NumericMatrix& feature_matrix);
 
 #endif // FOREST_H

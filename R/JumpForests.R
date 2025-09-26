@@ -11,8 +11,49 @@ jftree <- function(formula, data, splitrule = NULL, mtry = NULL, min_node_size =
 
   # if left hand side is of length 1, classification or regression
   if (length(lhs) == 1) {
-    response_indices <- which(names(data) %in% as.character(formula[[2]])[1]) - 1
-    # TODO
+    response_index <- which(names(data) %in% as.character(formula[[2]])[1]) - 1
+    if (formula[[3]] == ".") {
+      covariates <- names(data)[-(response_index + 1)]
+    } else {
+      covariates <- attr(terms(formula), "term.labels")
+    }
+    feature_indices <- which(names(data) %in% covariates) - 1
+
+    # by default, the number of variables tried at each split is the
+    # square root of the number of covariates
+    if (is.null(mtry)) {
+      mtry <- ceiling(sqrt(length(covariates)))
+    }
+
+    # if the response is categorical, classification, otherwise regression
+    if (processed_data$categorical[response_index]) {
+      # for classification, the default minimal node size is 1
+      if (is.null(min_node_size)) {
+        min_node_size <- 1
+      }
+      # set default splitting rule (TODO)
+      if (is.null(splitrule)) {
+        # TODO
+      }
+      cat("Just before JFCppTree")
+      JFCppTree(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
+                response_index, feature_indices, processed_data$categorical,
+                processed_data$unique_values, seed)
+    } else {
+      # for regression, the default minimal node size is 5
+      if (is.null(min_node_size)) {
+        min_node_size <- 5
+      }
+      # set default splitting rule (mean squared error for regression)
+      if (is.null(splitrule)) {
+        splitrule <- "mse"
+      }
+
+      JFCppTree(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
+                response_index, feature_indices, processed_data$categorical,
+                processed_data$unique_values, seed)
+    }
+    
   }
   # if left hand side is "Surv(time, status)", survival
   else if (lhs[1] == "Surv") {
@@ -78,15 +119,34 @@ jftree.predict <- function(tree_list, new_data = NULL) {
 jftree.error <- function(tree_list, new_data = NULL) {
   # if data is not supplied, return the error based on training data
   if (is.null(new_data)) {
-    return(tree_list$error)
+    if (tree_list$tree.type == "Regression") {
+      return(list("mse.error" = tree_list$mse.error, "R2.error" = tree_list$R2.error))
+    }
+    if (tree_list$tree.type == "Classification") {
+
+    }
+    if (tree_list$tree.type == "Survival") {
+      return(list("C.error" = tree_list$error))
+    }
+    if (tree_list$tree.type == "Multi-state") {
+
+    }
   }
-  # if new data is supplied, compute predictions from scratch
-  predictions <- jftree.predict(tree_list, new_data)
-  response_indices <- which(names(new_data) %in% tree_list$response.names)
-  times <- new_data[, response_indices[1]]
-  ind <- new_data[, response_indices[2]]
-  # fix this to not just be survival!
-  return(JFCppErrorSurvival(predictions, times, ind))
+
+  # if new_data is supplied, compute predictions and error from scratch
+  covariates <- tree_list$feature.names
+  response <- tree_list$response.names
+  response_indices <- which(names(new_data) %in% response) - 1
+
+  # ensures the columns have the same order as the original dataset
+  current <- names(new_data)
+  current[match(covariates, current)] <- covariates
+  new_data <- new_data[current]
+
+  feature_indices <- which(names(new_data) %in% covariates) - 1
+  processed_data <- preprocess_data(new_data)
+  return(JFCppTreeError(tree_list, processed_data$data, feature_indices,
+                          processed_data$categorical, processed_data$unique_values, response_indices))
 }
 
 # the main function for fitting forests
@@ -124,7 +184,36 @@ jfforest <- function(formula, data, splitrule = NULL, mtry = NULL, min_node_size
   # if left hand side is of length 1, classification or regression
   if (length(lhs) == 1) {
     response_indices <- which(names(data) %in% as.character(formula[[2]])[1]) - 1
-    # TODO
+    # formula determines the type of tree, the features and the response. if the
+    # user supplies ~ ., all covariates are used
+    if (formula[[3]] == ".") {
+      covariates <- names(data)[-(response_indices + 1)]
+    } else {
+      covariates <- attr(terms(formula), "term.labels")
+    }
+    feature_indices <- which(names(data) %in% covariates) - 1
+
+    # by default, the number of variables tried at each split is the
+    # square root of the number of covariates
+    if (is.null(mtry)) {
+      mtry <- ceiling(sqrt(length(covariates)))
+    }
+    # for regression, the default minimal node size is 5
+    if (is.null(min_node_size)) {
+      min_node_size <- 5
+    }
+    # for regression, the default number of trees is 1000
+    if (is.null(ntrees)) {
+      ntrees <- 1000
+    }
+    # for regression, the default splitting rule is mean squared error
+    if (is.null(splitrule)) {
+      splitrule <- "mse"
+    }
+
+    JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
+              sample_rate, response_indices, feature_indices, processed_data$categorical,
+              processed_data$unique_values, seed, nworkers)
   }
   # if left hand side is "Surv(time, status)", survival
   else if (lhs[1] == "Surv") {
@@ -200,15 +289,34 @@ jfforest.predict <- function(forest_list, new_data = NULL) {
 jfforest.error <- function(forest_list, new_data = NULL) {
   # if data is not supplied, return the error based on training data
   if (is.null(new_data)) {
-    return(forest_list$oob.error)
+    if (forest_list$tree.type == "Regression") {
+      return(list("mse.error" = forest_list$mse.error, "R2.error" = forest_list$R2.error))
+    }
+    if (forest_list$tree.type == "Classification") {
+
+    }
+    if (forest_list$tree.type == "Survival") {
+      return(list("C.error" = forest_list$oob.error))
+    }
+    if (forest_list$tree.type == "Multi-state") {
+
+    }
   }
-  # if new data is supplied, compute predictions from scratch
-  predictions <- jfforest.predict(forest_list, new_data)
-  response_indices <- which(names(new_data) %in% forest_list$response.names)
-  times <- new_data[, response_indices[1]]
-  ind <- new_data[, response_indices[2]]
-  # change this to not just be survival!
-  return(JFCppErrorSurvival(predictions, times, ind))
+
+  # if new_data is supplied, compute predictions and error from scratch
+  covariates <- forest_list$feature.names
+  response <- forest_list$response.names
+  response_indices <- which(names(new_data) %in% response) - 1
+
+  # ensures the columns have the same order as the original dataset
+  current <- names(new_data)
+  current[match(covariates, current)] <- covariates
+  new_data <- new_data[current]
+
+  feature_indices <- which(names(new_data) %in% covariates) - 1
+  processed_data <- preprocess_data(new_data)
+  return(JFCppForestError(forest_list, processed_data$data, feature_indices,
+                          processed_data$categorical, processed_data$unique_values, response_indices))
 }
 
 jfforest.vimp <- function(forest_list, feature = NULL, seed = NULL, method = "permute") {
@@ -229,16 +337,16 @@ jfforest.vimp <- function(forest_list, feature = NULL, seed = NULL, method = "pe
 print_tree <- function(tree_list, full = FALSE) {
   # print type of tree
   if (tree_list$tree.type == "Regression") {
-    # TODO
+    cat("Type of tree: Regression\n")
   }
   if (tree_list$tree.type == "Classification") {
-    # TODO
+    cat("Type of tree: Classification\n")
   }
   if (tree_list$tree.type == "Survival") {
     cat("Type of tree: Survival\n")
   }
   if (tree_list$tree.type == "Multi-state") {
-    # TODO
+    cat("Type of tree: Multi-state\n")
   }
 
   # print basic data info
@@ -246,7 +354,8 @@ print_tree <- function(tree_list, full = FALSE) {
   cat("Number of features:", tree_list$num.features, "\n")
 
   if (tree_list$tree.type == "Regression") {
-    # TODO
+    cat("Training error (MSE):",tree_list$mse.error, "\n")
+    cat("Training error (R^2):",tree_list$R2.error, "\n")
   }
   if (tree_list$tree.type == "Classification") {
     # TODO
@@ -256,6 +365,7 @@ print_tree <- function(tree_list, full = FALSE) {
     if (length(tree_list$unique.event.times) <= 20) {
       cat("Unique event times:", tree_list$unique.event.times, "\n")
     }
+    cat("Training error:",tree_list$error, "\n")
   }
   if (tree_list$tree.type == "Multi-state") {
     # TODO
@@ -264,7 +374,7 @@ print_tree <- function(tree_list, full = FALSE) {
   # print hyperparameters
   cat("Minimal node size:", tree_list$min.node.size, "\n")
   cat("Number of selected features in each split:", tree_list$mtry, "\n")
-  cat("Number of possible splits considered in each node:", tree_list$nsplits, "\n")
+  cat("Number of possible splits considered for each feature:", tree_list$nsplits, "\n")
   cat("Splitting rule:", tree_list$splitrule, "\n")
   if (tree_list$honest) {
     cat("Honest: Yes \n")
@@ -273,7 +383,6 @@ print_tree <- function(tree_list, full = FALSE) {
   }
 
   # print info about the tree itself
-  cat("Training error:",tree_list$error, "\n")
   cat("Number of nodes:", tree_list$num.nodes, "\n")
   cat("Number of terminal nodes:", tree_list$num.terminal.nodes, "\n")
   cat("Tree depth:", tree_list$tree.depth, "\n")
@@ -300,16 +409,16 @@ print_tree <- function(tree_list, full = FALSE) {
 print_forest <- function(forest_list) {
   # print type of forest
   if (forest_list$tree.type == "Regression") {
-    # TODO
+    cat("Type of tree: Regression\n")
   }
   if (forest_list$tree.type == "Classification") {
-    # TODO
+    cat("Type of tree: Classification\n")
   }
   if (forest_list$tree.type == "Survival") {
     cat("Type of tree: Survival\n")
   }
   if (forest_list$tree.type == "Multi-state") {
-    # TODO
+    cat("Type of tree: Multi-state\n")
   }
 
   # print basic data info
@@ -327,6 +436,7 @@ print_forest <- function(forest_list) {
     if (length(forest_list$unique.event.times) <= 20) {
       cat("Unique event times:", forest_list$unique.event.times, "\n")
     }
+    cat("OOB error:", forest_list$oob.error, "\n")
   }
   if (forest_list$tree.type == "Multi-state") {
     # TODO
@@ -341,7 +451,7 @@ print_forest <- function(forest_list) {
   cat("Resample size used to grow trees:", forest_list$subsample.size, "\n")
   cat("Minimal node size:", forest_list$min.node.size, "\n")
   cat("Number of selected features in each split:", forest_list$mtry, "\n")
-  cat("Number of possible splits considered in each node:", forest_list$nsplits, "\n")
+  cat("Number of possible splits considered for each feature:", forest_list$nsplits, "\n")
   cat("Splitting rule:", forest_list$splitrule, "\n")
   if (forest_list$honest) {
     cat("Honest: Yes \n")
@@ -350,7 +460,6 @@ print_forest <- function(forest_list) {
   }
 
   # print info about the forest itself
-  cat("OOB error:", forest_list$oob.error, "\n")
   cat("Number of trees:", forest_list$num.trees,"\n")
   cat("Average number of nodes:", forest_list$avg.num.nodes, "\n")
   cat("Average number of terminal nodes:", forest_list$avg.num.terminal.nodes, "\n")

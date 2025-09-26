@@ -49,3 +49,17 @@ square <- function(x) {
 my_times_two <- function(mat) {
   timesTwoMatrix(mat)
 }
+
+jftree.error <- function(tree_list, new_data = NULL) {
+  # if data is not supplied, return the error based on training data
+  if (is.null(new_data)) {
+    return(tree_list$error)
+  }
+  # if new data is supplied, compute predictions from scratch
+  predictions <- jftree.predict(tree_list, new_data)
+  response_indices <- which(names(new_data) %in% tree_list$response.names)
+  times <- new_data[, response_indices[1]]
+  ind <- new_data[, response_indices[2]]
+  # fix this to not just be survival!
+  return(JFCppErrorSurvival(predictions, times, ind))
+}

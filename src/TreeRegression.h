@@ -17,6 +17,7 @@ public:
   ValueType predict(const vector<double>& x) override {
     return means[predictionLeafID(x)];
   }
+  vector<double> computePredictions(const Data& new_data) override;
 
 private:
   vector<double> means;     // the means in each terminal node

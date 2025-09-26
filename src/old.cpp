@@ -786,3 +786,33 @@ double SurvivalTree::logRankCategorical(const vector<size_t>& num_deaths, const 
     }
 }
 */
+
+// the following function is for computing a single prediction (not used)
+
+/*
+
+// [[Rcpp::export]]
+NumericVector JFCppForestPredictSingle(const List& JFForest, const NumericVector& x) {
+  string type = as<string>(JFForest["tree.type"]);
+  vector<double> x_cpp = as<vector<double>>(x);
+
+  if (type == "Regression") {
+
+  }
+  if (type == "Classification") {
+
+  }
+  if (type == "Survival") {
+    SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
+    NumericVector prediction(forest->getEventTimes().size());
+    const vector<double>& pred = forest->predict(x_cpp);
+    copy(pred.begin(), pred.end(), prediction.begin());
+    return prediction;
+    
+  }
+  if (type == "Multi-state") {
+
+  }
+}
+
+*/
