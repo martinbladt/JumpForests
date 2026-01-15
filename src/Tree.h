@@ -9,7 +9,7 @@
 
 using namespace std;
 // so that we may handle predictions for different types of trees (extend continuously)
-using ValueType = variant<double, vector<double>>;
+using ValueType = variant<double, vector<double>, vector<vector<double>>>;
 
 class Tree {
 public:
@@ -17,7 +17,7 @@ public:
   void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, string splitrule, bool honest, unsigned int seed);
   void setRNG(mt19937 rng);
 
-  virtual ~Tree() =  default;
+  virtual ~Tree() = default;
 
   // grows the tree
   void grow();

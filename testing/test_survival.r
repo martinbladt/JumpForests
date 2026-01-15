@@ -1,4 +1,4 @@
-setwd("/home/themathlad/Documents/GitHub/JumpForests/testing/")
+#setwd("/home/themathlad/Documents/GitHub/JumpForests/testing/")
 devtools::load_all()
 library(Rcpp)
 library(randomForestSRC)

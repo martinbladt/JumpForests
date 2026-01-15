@@ -1,0 +1,71 @@
+#ifndef TREE_MULTISTATE_H
+#define TREE_MULTISTATE_H
+
+#include "Tree.h"
+
+class MultistateTree : public Tree {
+public:
+  MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids,
+            const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices = {});
+
+  const vector<double> getEventTimes() const {
+    return *unique_event_times;
+  }
+  
+  const vector<vector<vector<double>>> getNA() const {
+    return na;
+  }
+
+  // prediction for multi-state trees
+  ValueType predict(const vector<double>& x) override {
+    return na[predictionLeafID(x)];
+  }
+  vector<double> computePredictions(const MMData& new_data) override;
+  // VIMP prediction for multi-state trees (to be investigated)
+  ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng);
+
+private:
+  shared_ptr<vector<double>> unique_event_times;        // vector of ordered unique event times across (pooled across all jumps)
+  size_t num_unique_event_times;                        // number of unique event times
+  shared_ptr<vector<size_t>> response_time_event_ids;   // the indices of unique_event_times corresponding to the response times (flattened array)
+  vector<vector<vector<double>>> na;                    // the Nelson--Aalen estimator in each terminal node with jumps at the unique_event_times
+
+  // temporary quantities used in growing multi-state trees
+  /*
+    possible changes: 
+        1) add the C_j and use Martin's transpose trick
+        2) change the inner vector<size_t> of num_jumps to an actual matrix
+  */
+  vector<vector<size_t>> num_jumps;                     // number of jumps at each unique event time (flattened matrix)
+  vector<vector<size_t>> num_at_risk;                   // number of individuals residing in each state at each unique event time
+
+  // growing multi-state trees
+  void computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& deaths, vector<size_t>& jumps); // computes the number at risk and the number of jumps at the unique_event_times
+  void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
+  bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
+  void computeNA(size_t node_index);                              // computes the Nelson--Aalen estimator in a terminal node
+  // might need to change num_jumps_right to a vector of matrices, otherwise maybe okay with a flattened array of flattened matrices
+  void computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
+                                         vector<size_t>& delta_num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final);
+  void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold);
+  void bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
+                           vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices); // computes the best split for a chosen categorical feature
+  
+  // splitting rules
+  // see notes, many different possibilities once the template functions
+
+  // frees memory from temporary quantities used in growing the tree
+  void cleanUpTree() override {
+    vector<vector<size_t>>().swap(node_obs);
+    vector<size_t>().swap(num_jumps);
+    vector<size_t>().swap(num_at_risk);
+    // if more temporary quantities are added, they should go here
+  }
+};
+
+// in contrast to survival, times is a flattened array with possibly varying length for each observation
+vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times);
+// 
+vector<double> computeUniqueEventTimes(const vector<double>& times);
+
+#endif // TREE_MULTISTATE_H

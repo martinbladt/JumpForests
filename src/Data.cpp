@@ -1,5 +1,8 @@
 #include "Data.h"
 
+// data struct for Regression, Classification and Survival
+//--------------------------------------------------------------------------------------
+
 // it is assumed that the data has been encoded to be numeric
 // response_indices are the indices for the response column(s), while categorical
 // is a vector of bools indicating whether a variable (response or feature) is categorical
@@ -86,6 +89,15 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
     this->feature_names = feature_names;
 }
 
+vector<double> Data::getValues(const vector<size_t>& subset_indices, size_t feature) {
+    vector<double> unfiltered_values = get_x_col(feature);
+    vector<double> result(subset_indices.size());
+    for (size_t i = 0; i < subset_indices.size(); ++i) {
+        result[i] = unfiltered_values[subset_indices[i]];
+    }
+    return(result);
+}
+
 size_t Data::getFeatureID(const string& variable_name) const {
     for (size_t i = 0; i < feature_names.size(); ++i) {
         if (feature_names[i] == variable_name) {
@@ -95,11 +107,78 @@ size_t Data::getFeatureID(const string& variable_name) const {
     throw runtime_error("No feature with name " + variable_name);
 }
 
-vector<double> Data::getValues(const vector<size_t>& subset_indices, size_t feature) {
+// data struct for Multi-state models (MM)
+//--------------------------------------------------------------------------------------
+
+MMData::MMData(List jump_data, uint8_t max_response_length, DataFrame feature_data,
+    const vector<bool>& categorical, const vector<size_t>& unique) {
+    this->num_obs = feature_data.nrows();
+    this->num_features = feature_data.ncol();
+    
+    // fill the response vectors if response variables are supplied
+    if (jump_data.isNULL() || jump_data.size() != 0) {
+        times.assign(num_obs * max_response_length, 0);
+        states.assign(num_obs * max_response_length, 0);
+        for (int i = 0; i < num_obs; ++i) {
+            List obs = jump_data[i];
+            size_t response_length = LENGTH(obs[0]);
+            //NumericVector obs_times = obs[0];
+            //IntegerVector obs_states = obs[1];
+            for (int j = 0; j < response_length; ++j) {
+                times[i * max_response_length + j] = REAL(obs[0])[j];
+                states[i * max_response_length + j] = static_cast<uint8_t>(INTEGER(obs[1])[j]);
+            }
+        }
+        // do we need response names?
+    }
+    
+    // prepare features
+    x.assign(num_features * num_obs, 0);
+    vector<bool> categorical_features(num_features);
+    vector<size_t> unique_values_features(num_features);
+    vector<string> feature_names(num_features);
+
+    for (size_t i = 0; i < num_features; ++i) {
+        // update the feature type (categorical or continuous)
+        if (categorical[i] == true) {
+            categorical_features[i] = true;
+        } else {
+            categorical_features[i] = false;
+        }
+        
+        // update names of features and response(s) (already in order)
+        //feature_names[i] = as<vector<string>>(feature_data.names())[feature_indices[i]];
+
+        // update the number of unique values
+        unique_values_features[i] = unique[i];
+    }
+
+    // fill the feature "matrix"
+    for (size_t j = 0; j < num_features; ++j) {
+        NumericVector col = feature_data[j];
+        for (size_t i = 0; i < num_obs; ++i) {
+            x[i * num_features + j] = col[i];
+        }
+    }
+    this->categorical = categorical_features;
+    this->unique_values = unique_values_features;
+    this->feature_names = feature_names;
+}
+
+vector<double> MMData::getValues(const vector<size_t>& subset_indices, size_t feature) {
     vector<double> unfiltered_values = get_x_col(feature);
     vector<double> result(subset_indices.size());
     for (size_t i = 0; i < subset_indices.size(); ++i) {
         result[i] = unfiltered_values[subset_indices[i]];
     }
     return(result);
+}
+
+size_t MMData::getFeatureID(const string& variable_name) const {
+    for (size_t i = 0; i < feature_names.size(); ++i) {
+        if (feature_names[i] == variable_name) {
+            return i;
+        }
+    }
+    throw runtime_error("No feature with name " + variable_name);
 }

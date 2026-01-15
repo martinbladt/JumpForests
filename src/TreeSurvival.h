@@ -71,7 +71,7 @@ private:
   // growing survival trees
   void computeSurvivalQuantities(const vector<size_t>& indices, vector<size_t>& deaths, vector<size_t>& at_risk);  // computes the number at risk and the number of deaths at the unique_event_times
   void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
-  bool createSplit(size_t node_index) override;                            // returns true if leaf, computes best split
+  bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
   void computeChf(size_t node_index);                             // computes the cumulative hazard in a terminal node
   //void updateSurvivalStats(vector<size_t>& deaths, vector<size_t>& at_risk, const ObsInfo& obs, int sign);
   void computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
