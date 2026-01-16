@@ -14,29 +14,27 @@
 using namespace Rcpp;
 using namespace std;
 
-// the following struct handles Regression, Classification and Survival
+// the following struct handles data for all types of trees and forests
 
 struct Data {
+  // constructor for creating data objects for regression, classification and survival data
   Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t> feature_indices,
+       const vector<bool>& categorical, const vector<size_t>& unique);
+  // constructor for creating data objects for multi-states
+  Data(List jump_data, uint8_t max_response_length, DataFrame feature_data,
        const vector<bool>& categorical, const vector<size_t>& unique);
 
   // delete the copy constructor and the assignment operator 
   //Data(const Data&) = delete;
   //Data& operator=(const Data&) = delete;
-
-  // extract data
+  
+  // fetching feature values
   double get_x(size_t row, size_t col) const {
     return x[row * num_features + col];
   }
-  // extract y for classification and regression
-  double get_y(size_t row) {
-    return y[row];
+  vector<double> get_x() const {
+    return x;
   }
-  // extract y for survival
-  double get_y(size_t row, size_t col) {
-    return y[col * num_obs + row];
-  }
-
   vector<double> get_x_row(size_t row) const {
     vector<double> res(num_features);
     for (size_t i = 0; i < num_features; ++i) {
@@ -44,11 +42,6 @@ struct Data {
     }
     return res;
   }
-  /*  // maybe this function will never be used anyway
-  vector<double> get_y_row(size_t row) const {
-    
-  }
-  */
   vector<double> get_x_col(size_t col) const {
     vector<double> res(num_obs);
     for (size_t i = 0; i < num_obs; ++i) {
@@ -57,11 +50,18 @@ struct Data {
     return res;
   }
 
-  // return y
+  // extract y for classification and regression
+  double get_y(size_t row) {
+    return y[row];
+  }
+  // return y (regression, classification and survival)
   vector<double> get_y() const {
     return y;
   }
-
+  // extract y for survival
+  double get_y(size_t row, size_t col) {
+    return y[col * num_obs + row];
+  }
   // return a specific y column for survival data (0: times, 1: indicators)
   vector<double> get_y_col(size_t col) const {
     vector<double> res(num_obs);
@@ -69,6 +69,13 @@ struct Data {
       res[i] = y[col * num_obs + i];
     }
     return res;
+  }
+  // extract times and states for multi-state data
+  vector<double> getTimes() const {
+    return times;
+  }
+  vector<uint8_t> getStates() const {
+    return states;
   }
 
   // for extracting possible split values
@@ -103,9 +110,11 @@ struct Data {
   size_t getFeatureID(const string& variable_name) const;
 
 private:
-  // data (new)
+  // data
   vector<double> x;                 // the features are saved as a flattened 2D-array (counted by observation number)
-  vector<double> y;                 // ditto for responses
+  vector<double> y;                 // ditto for responses (regression, classification and survival)
+  vector<double> times;             // save jump times for each trajectory as flattened 2D-array (only for multi-state data)
+  vector<uint8_t> states;           // save state info for each trajectory as flattened 2D-array (only for multi-state data)
 
   // data attributes
   size_t num_obs;                   // number of observations
@@ -117,10 +126,12 @@ private:
   vector<string> response_names;    // variable name for each response
   vector<size_t> response_indices;  // the indices of the responses
   vector<size_t> feature_indices;   // the indices of the features
+  uint8_t max_response_length;      // maximum number of jumps observed in the data (only for multi-state data)
 };
 
 // the following struct handles Multi-state models
 
+/*
 struct MMData {
   // jump_data is the response and feature_data is the DataFrame of features,
   // hence no need to have feature_indices
@@ -155,16 +166,16 @@ struct MMData {
   size_t getNumberOfObs() const {
     return num_obs;
   }
-  size_t getNumberOfFeatures () const {
+  size_t getNumberOfFeatures() const {
     return num_features;
   }
-  vector<bool> getCategorical () const {
+  vector<bool> getCategorical() const {
     return categorical;
   }
-  vector<size_t> getUniqueValues () const {
+  vector<size_t> getUniqueValues() const {
     return unique_values;
   }
-  /*
+  
   vector<size_t> getResponseIndices () const {
     return response_indices;
   }
@@ -174,7 +185,14 @@ struct MMData {
   vector<string> getResponseNames () const {
     return response_names;
   }
-  */
+  
+  vector<double> getTimes() const {
+    return times;
+  }
+  vector<uint8_t> getStates() const {
+    return states;
+  }
+
   vector<string> getFeatureNames () const {
     return feature_names;
   }
@@ -182,14 +200,10 @@ struct MMData {
   size_t getFeatureID(const string& variable_name) const;
 
 private:
-  // data (old)
-  //NumericMatrix x;
-  //NumericMatrix y;
-
   // data (new)
   vector<double> x;       // the features are saved as a flattened 2D-array (counted by observation number)
   vector<double> times;   // save jump times for each trajectory as flattened 2D-array
-  vector<uint8_t>states;  // save state info for each trajectory as flattened 2D-array
+  vector<uint8_t> states;  // save state info for each trajectory as flattened 2D-array
 
   // data attributes
   size_t num_obs;                   // number of observations
@@ -197,13 +211,9 @@ private:
   vector<bool> categorical;         // for each feature, 1 if categorical, 0 otherwise
   vector<size_t> unique_values;     // number of unique values for each feature
   vector<string> feature_names;     // variable name for each feature
-  /*
-  size_t num_responses;             // number of responses
-  vector<string> response_names;    // variable name for each response
-  vector<size_t> feature_indices;   // the indices of the features
-  vector<size_t> response_indices;  // the indices of the responses
-  */
 };
+
+*/
 
 
 #endif // DATA_H

@@ -2,8 +2,9 @@
 #define JUMP_FORESTS_H
 
 #include "Data.h"
-#include "ForestSurvival.h"
 #include "ForestRegression.h"
+#include "ForestSurvival.h"
+#include "ForestMultistate.h"
 
 using namespace std;
 using namespace Rcpp;
@@ -11,6 +12,8 @@ using namespace Rcpp;
 // growing a tree
 List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, bool honest,
     NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
+List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
+  unsigned int nsplits, CharacterVector splitrule, bool honest, LogicalVector categorical, NumericVector unique, unsigned int seed);
 
 // prediction with trees
 void JFCppTreePredict(List& JFTree);

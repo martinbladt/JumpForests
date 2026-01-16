@@ -2,6 +2,7 @@
 #define TREE_MULTISTATE_H
 
 #include "Tree.h"
+//#include <RcppArmadillo.h>
 
 class MultistateTree : public Tree {
 public:
@@ -20,7 +21,7 @@ public:
   ValueType predict(const vector<double>& x) override {
     return na[predictionLeafID(x)];
   }
-  //vector<double> computePredictions(const MMData& new_data) override;
+  vector<double> computePredictions(const Data& new_data) override;
   // VIMP prediction for multi-state trees (to be investigated)
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng);
 

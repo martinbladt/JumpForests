@@ -72,6 +72,7 @@ void SurvivalTree::computeSurvivalQuantities(const vector<size_t>& indices, vect
     }
     */
     
+    // sort the indices by their times
     vector<size_t> sorted_indices(n);
     iota(sorted_indices.begin(), sorted_indices.end(), 0);
     sort(sorted_indices.begin(), sorted_indices.end(),

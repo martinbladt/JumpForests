@@ -137,16 +137,79 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
     result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
     result["tree.depth"] = tree->getTreeDepth();
   }
-
-  // the tree is a multi-state tree
-  if (tree_type == 4) {
-    
-  }
-
   return(result);
 }
 
+List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
+  unsigned int nsplits, CharacterVector splitrule, bool honest, LogicalVector categorical, NumericVector unique, unsigned int seed) {
 
+  // convert the input to C++ vectors
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+  string splitrule_cpp = as<string>(splitrule);
+
+  // make the data into a C++ format and save it via a shared pointer
+  shared_ptr<Data> data = make_shared<Data>(jump_data, max_response_length, df_features, categorical_cpp, unique_cpp);
+
+  // use all indices since we grow a single tree
+  vector<size_t> subset_indices_cpp;
+  for (int i = 0; i < data->getNumberOfObs(); ++i) {
+    subset_indices_cpp.push_back(i);
+  }
+
+  // we save a list with all information about the tree
+  List result = List::create(
+    Named("num.obs") = data->getNumberOfObs(),
+    Named("num.features") = data->getNumberOfFeatures(),
+    Named("feature.names") = data->getFeatureNames(), 
+    Named("splitrule") = splitrule,
+    Named("mtry") = mtry,
+    Named("min.node.size") = min_node_size,
+    Named("nsplits") = nsplits,
+    Named("honest") = honest
+  );
+
+  // determine the (sorted) unique event times
+  vector<double> unique_event_times = uniqueValues(data->getTimes());
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes());
+
+  // create and grow the multi-state tree
+  shared_ptr<vector<double>> unique_event_times_ptr = make_shared<vector<double>>(unique_event_times);
+  shared_ptr<vector<size_t>> response_event_time_ids_ptr = make_shared<vector<size_t>>(response_event_time_ids);
+
+  // check validity of splitrule argument
+  vector<string> valid_splitrules = {"logrank", "conserve", "approxlogrank"};
+  if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
+    throw runtime_error("Invalid splitrule, please choose between logrank, conserve or approxlogrank");
+  }
+
+  MultistateTree* tree;
+  if (!honest) {
+    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, num_states, subset_indices_cpp);
+  } else {
+    mt19937 rng(seed + 1);
+    pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
+    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, num_states, partition.first, partition.second);
+    tree->setRNG(rng);
+  }
+
+  tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
+  //tree->grow();
+
+  // specific to multi-states
+  NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
+  XPtr<MultistateTree> multistate_tree(tree, true);   // cast the multi-state tree as an R pointer
+  result["tree.type"] = "Multi-state";
+  result["unique.event.times"] = unique_event_times_R;
+  result["Tree"] = multistate_tree;               // add the tree (as a pointer, only to be used for prediction in C++)
+  //JFCppTreePredict(result);                       // compute and save predictions on the data
+  //     // compute and save error estimate
+
+  // save information about the tree itself
+  result["num.nodes"] = tree->getNumberOfNodes();
+  result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
+  result["tree.depth"] = tree->getTreeDepth();
+}
 
 /*
 

@@ -1,12 +1,14 @@
 #include "Data.h"
 
-// data struct for Regression, Classification and Survival
+// Data constructor for Regression, Classification and Survival
 //--------------------------------------------------------------------------------------
 
-// it is assumed that the data has been encoded to be numeric
-// response_indices are the indices for the response column(s), while categorical
-// is a vector of bools indicating whether a variable (response or feature) is categorical
-// unique is a vector of the number of unique values for each column
+/*
+  it is assumed that the data has been encoded to be numeric
+  response_indices are the indices for the response column(s), while categorical
+  is a vector of bools indicating whether a variable (response or feature) is categorical
+  unique is a vector of the number of unique values for each column
+*/
 Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t> feature_indices,
            const vector<bool>& categorical, const vector<size_t>& unique) {
     this->num_obs = data.nrows();
@@ -107,13 +109,20 @@ size_t Data::getFeatureID(const string& variable_name) const {
     throw runtime_error("No feature with name " + variable_name);
 }
 
-// data struct for Multi-state models (MM)
+// Data constructor for Multi-state models (MM)
 //--------------------------------------------------------------------------------------
 
-MMData::MMData(List jump_data, uint8_t max_response_length, DataFrame feature_data,
+/*
+  jump_data contains the actual jump process data as a list of lists of times and states
+  it is assumed that the data for the features has been encoded to be numeric
+  categorical is a vector of bools indicating whether a variable (response or feature)
+  is categorical, unique is a vector of the number of unique values for each column
+*/
+Data::Data(List jump_data, uint8_t max_response_length, DataFrame feature_data,
     const vector<bool>& categorical, const vector<size_t>& unique) {
     this->num_obs = feature_data.nrows();
     this->num_features = feature_data.ncol();
+    this->max_response_length = max_response_length;
     
     // fill the response vectors if response variables are supplied
     if (jump_data.isNULL() || jump_data.size() != 0) {
@@ -129,7 +138,7 @@ MMData::MMData(List jump_data, uint8_t max_response_length, DataFrame feature_da
                 states[i * max_response_length + j] = static_cast<uint8_t>(INTEGER(obs[1])[j]);
             }
         }
-        // do we need response names?
+        // we should not need response names
     }
     
     // prepare features
@@ -147,7 +156,7 @@ MMData::MMData(List jump_data, uint8_t max_response_length, DataFrame feature_da
         }
         
         // update names of features and response(s) (already in order)
-        //feature_names[i] = as<vector<string>>(feature_data.names())[feature_indices[i]];
+        feature_names[i] = as<vector<string>>(feature_data.names())[i];
 
         // update the number of unique values
         unique_values_features[i] = unique[i];
@@ -163,22 +172,4 @@ MMData::MMData(List jump_data, uint8_t max_response_length, DataFrame feature_da
     this->categorical = categorical_features;
     this->unique_values = unique_values_features;
     this->feature_names = feature_names;
-}
-
-vector<double> MMData::getValues(const vector<size_t>& subset_indices, size_t feature) {
-    vector<double> unfiltered_values = get_x_col(feature);
-    vector<double> result(subset_indices.size());
-    for (size_t i = 0; i < subset_indices.size(); ++i) {
-        result[i] = unfiltered_values[subset_indices[i]];
-    }
-    return(result);
-}
-
-size_t MMData::getFeatureID(const string& variable_name) const {
-    for (size_t i = 0; i < feature_names.size(); ++i) {
-        if (feature_names[i] == variable_name) {
-            return i;
-        }
-    }
-    throw runtime_error("No feature with name " + variable_name);
 }
