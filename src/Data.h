@@ -21,7 +21,7 @@ struct Data {
   Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t> feature_indices,
        const vector<bool>& categorical, const vector<size_t>& unique);
   // constructor for creating data objects for multi-states
-  Data(List jump_data, uint8_t max_response_length, DataFrame feature_data,
+  Data(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame feature_data,
        const vector<bool>& categorical, const vector<size_t>& unique);
 
   // delete the copy constructor and the assignment operator 
@@ -74,7 +74,7 @@ struct Data {
   vector<double> getTimes() const {
     return times;
   }
-  vector<uint8_t> getStates() const {
+  vector<size_t> getStates() const {
     return states;
   }
 
@@ -106,6 +106,12 @@ struct Data {
   vector<string> getResponseNames () const {
     return response_names;
   }
+  uint8_t getMaxResponseLength () const {
+    return max_response_length;
+  }
+  uint8_t getNumberOfStates () const {
+    return num_states;
+  }
   // get the ID based on a feature name
   size_t getFeatureID(const string& variable_name) const;
 
@@ -114,7 +120,8 @@ private:
   vector<double> x;                 // the features are saved as a flattened 2D-array (counted by observation number)
   vector<double> y;                 // ditto for responses (regression, classification and survival)
   vector<double> times;             // save jump times for each trajectory as flattened 2D-array (only for multi-state data)
-  vector<uint8_t> states;           // save state info for each trajectory as flattened 2D-array (only for multi-state data)
+  vector<size_t> states;           // save state info for each trajectory as flattened 2D-array (only for multi-state data)
+  vector<double> censoring_times;   // save the censoring times (0: no censoring, only for multi-state data)
 
   // data attributes
   size_t num_obs;                   // number of observations
@@ -127,6 +134,7 @@ private:
   vector<size_t> response_indices;  // the indices of the responses
   vector<size_t> feature_indices;   // the indices of the features
   uint8_t max_response_length;      // maximum number of jumps observed in the data (only for multi-state data)
+  uint8_t num_states;               // number of states in the multi-state model (only for multi-state data)
 };
 
 // the following struct handles Multi-state models

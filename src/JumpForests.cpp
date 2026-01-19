@@ -149,7 +149,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   string splitrule_cpp = as<string>(splitrule);
 
   // make the data into a C++ format and save it via a shared pointer
-  shared_ptr<Data> data = make_shared<Data>(jump_data, max_response_length, df_features, categorical_cpp, unique_cpp);
+  shared_ptr<Data> data = make_shared<Data>(jump_data, max_response_length, num_states, df_features, categorical_cpp, unique_cpp);
 
   // use all indices since we grow a single tree
   vector<size_t> subset_indices_cpp;
@@ -171,7 +171,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   // determine the (sorted) unique event times
   vector<double> unique_event_times = uniqueValues(data->getTimes());
-  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes());
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
 
   // create and grow the multi-state tree
   shared_ptr<vector<double>> unique_event_times_ptr = make_shared<vector<double>>(unique_event_times);
@@ -185,11 +185,11 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   MultistateTree* tree;
   if (!honest) {
-    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, num_states, subset_indices_cpp);
+    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp);
   } else {
     mt19937 rng(seed + 1);
     pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
-    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, num_states, partition.first, partition.second);
+    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, partition.first, partition.second);
     tree->setRNG(rng);
   }
 

@@ -118,16 +118,18 @@ size_t Data::getFeatureID(const string& variable_name) const {
   categorical is a vector of bools indicating whether a variable (response or feature)
   is categorical, unique is a vector of the number of unique values for each column
 */
-Data::Data(List jump_data, uint8_t max_response_length, DataFrame feature_data,
+Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame feature_data,
     const vector<bool>& categorical, const vector<size_t>& unique) {
     this->num_obs = feature_data.nrows();
     this->num_features = feature_data.ncol();
     this->max_response_length = max_response_length;
+    this->num_states = num_states;
     
     // fill the response vectors if response variables are supplied
     if (jump_data.isNULL() || jump_data.size() != 0) {
         times.assign(num_obs * max_response_length, 0);
         states.assign(num_obs * max_response_length, 0);
+        censoring_times.assign(num_obs, 0);
         for (int i = 0; i < num_obs; ++i) {
             List obs = jump_data[i];
             size_t response_length = LENGTH(obs[0]);
@@ -135,10 +137,14 @@ Data::Data(List jump_data, uint8_t max_response_length, DataFrame feature_data,
             //IntegerVector obs_states = obs[1];
             for (int j = 0; j < response_length; ++j) {
                 times[i * max_response_length + j] = REAL(obs[0])[j];
-                states[i * max_response_length + j] = static_cast<uint8_t>(INTEGER(obs[1])[j]);
+                states[i * max_response_length + j] = static_cast<size_t>(INTEGER(obs[1])[j]);
+            }
+            // save censoring times
+            if (static_cast<size_t>(INTEGER(obs[1])[response_length - 1]) == static_cast<size_t>(INTEGER(obs[1])[response_length - 2])) {
+                censoring_times[i] = REAL(obs[0])[response_length - 1];
             }
         }
-        // we should not need response names
+        // we should not need response names for multi-states
     }
     
     // prepare features

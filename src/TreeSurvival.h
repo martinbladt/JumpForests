@@ -75,7 +75,7 @@ private:
   void computeChf(size_t node_index);                             // computes the cumulative hazard in a terminal node
   //void updateSurvivalStats(vector<size_t>& deaths, vector<size_t>& at_risk, const ObsInfo& obs, int sign);
   void computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
-                                         vector<size_t>& delta_num_at_risk_right, vector<size_t>& num_deaths_right, size_t nsplits_final);
+                                         vector<size_t>& num_at_risk_right, vector<size_t>& num_deaths_right, size_t nsplits_final);
   void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold);
   /*
   void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold,

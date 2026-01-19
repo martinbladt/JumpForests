@@ -194,7 +194,6 @@ void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t f
 
 void SurvivalTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
-    size_t n = current_node_obs.size();
 
     // samples split points
     vector<double> split_points;
@@ -699,7 +698,7 @@ vector<double> computeUniqueEventTimes(const vector<double>& times, const vector
 }
 
 // computes the Kaplan-Meyer estimator given a Nelson-Aalen estimator
-vector<double> KaplanMeyer(const vector<double>& na) {
+vector<double> KaplanMeier(const vector<double>& na) {
     vector<double> KM = vector<double>(na.size() + 1, 1);
     KM[0] = 1;
 
