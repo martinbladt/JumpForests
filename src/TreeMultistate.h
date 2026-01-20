@@ -72,6 +72,6 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
 
 // need functions for error computation
 
-vector<vector<double>> AalenJohansen(const vector<vector<double>>& na);
+vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states);
 
 #endif // TREE_MULTISTATE_H

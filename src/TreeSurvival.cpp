@@ -150,7 +150,38 @@ void SurvivalTree::computeSurvivalQuantities(const vector<size_t>& indices, vect
     */
 }
 
-// function for computing survival quantities (number at risk and number of deaths) for all splits in a node
+/*
+void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
+                                                     vector<size_t>& num_at_risk_right, vector<size_t>& num_deaths_right, size_t nsplits_final) {
+    const vector<size_t>& current_node_obs = node_obs[node_index];
+    for (size_t i : current_node_obs) {
+        double feature_val = data->get_x(i, feature);
+        size_t time_id = (*response_event_time_ids)[i];
+
+        for (size_t j = 0; j < nsplits_final; ++j) {
+            if (feature_val > split_points[j]) {
+                ++num_obs_right[j];
+                ++num_at_risk_right[j * num_unique_event_times + time_id];
+
+                if (data->get_y(i, 1) == 1) {
+                    ++num_deaths_right[j * num_unique_event_times + time_id];
+                }
+            } else {
+                break;
+            }
+        }
+    }
+    // compute number at risk in the right node (Gemini's approach, doesn't work)
+    for (size_t i = 0; i < nsplits_final; ++i) {
+        size_t index = i * num_unique_event_times;
+        for (size_t j = num_unique_event_times - 2; j >= 0; --j) {
+            num_at_risk_right[index + j] += num_at_risk_right[index + j + 1];
+        }
+    }
+}
+*/
+
+// for computing survival quantities (number at risk and number of deaths) for all splits in a node (for splits on continuous features)
 void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                                      vector<size_t>& num_at_risk_right, vector<size_t>& num_deaths_right, size_t nsplits_final) {
     
@@ -170,7 +201,7 @@ void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t f
                     ++num_deaths_right[j * num_unique_event_times + time_id];
                 }
             } else {
-                break;
+                break;  // since the split_points are sorted
             }
         }
     }
@@ -182,20 +213,12 @@ void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t f
             total_events += delta_num_at_risk_right[i * num_unique_event_times + j];
         }
     }
-    /*
-    cout << "Line 168: num_obs_right: ";
-    printVector(num_obs_right);
-    cout << "Line 169: num_at_risk_right: ";
-    printVector(num_at_risk_right);
-    cout << "Line 171: num_deaths_right: ";
-    printVector(num_deaths_right);
-    */
 }
 
 void SurvivalTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
 
-    // samples split points
+    // samples and sorts split points
     vector<double> split_points;
     size_t nsplits_final = sampleSplitPoints(split_points, current_node_obs, feature);
 
@@ -706,7 +729,7 @@ vector<double> KaplanMeier(const vector<double>& na) {
     for (size_t i = 1; i < na.size() + 1; ++i) {
         KM[i] = KM[i - 1] * (1 - (na[i] - na[i - 1]));
     }
-    return(KM);
+    return KM;
 }
 
 // computes Harrell's C-index for a list of outcomes and survival data

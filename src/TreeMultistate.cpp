@@ -35,21 +35,22 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     const vector<size_t>& states = data->getStates();
     uint8_t max_response_length = data->getMaxResponseLength();
     uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
     
-    num_jumps.assign(num_unique_event_times * num_states * num_states, 0);
+    num_jumps.assign(num_unique_event_times * dim, 0);
     num_at_risk.assign(num_unique_event_times * num_states, 0);
 
     for (size_t i : indices) {
         size_t j = 0;
         size_t index = i * max_response_length;
-        // a state is 0 if it is not valid e.g. a dead entry in the flattened array of observations
+        // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
         while (j < max_response_length && states[index] != 0) {
             size_t id = (*response_time_event_ids)[index];
-            size_t current_state_index = states[index] - 1;          // states are always indexed by 1, 2, ... with 0
-            size_t next_state_index = states[index + 1] - 1;         // reserved for 'dead' entries in the flattened array
+            size_t current_state_index = states[index] - 1;     // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
+            size_t next_state_index = states[index + 1] - 1;
             // find jumps (we assume that max_response_length > 1 i.e. at least one jump occurs in the dataset)
             if (j == 0 && next_state_index != -1 || (j < max_response_length - 1 && next_state_index != -1 && current_state_index != next_state_index)) {
-                ++num_jumps[id * num_states * num_states + current_state_index * num_states + next_state_index];
+                ++num_jumps[id * dim + current_state_index * num_states + next_state_index];
             }
             // find numbers at risk
             // j == 0 means that we are at the first state of an observation/path
@@ -62,9 +63,46 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     }
 }
 
+// for computing multi-state quantities (number at risk and number of jumps) for all splits in a node (for splits on continuous features)
 void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final) {
+    const vector<size_t>& states = data->getStates();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    uint8_t max_response_length = data->getMaxResponseLength();
+    vector<size_t> delta_num_at_risk_right(nsplits_final * num_unique_event_times * num_states);
 
+    const vector<size_t>& current_node_obs = node_obs[node_index];
+    for (size_t i : current_node_obs) {
+        double feature_val = data->get_x(i, feature);
+        for (size_t s = 0; s < nsplits_final; ++s) {
+            if (feature_val > split_points[s]) {
+                ++num_obs_right[s];
+                // now compute the differences in numbers at risk and count number of jumps
+                size_t j = 0;
+                size_t index = i * max_response_length;
+                while (j < max_response_length && states[index] != 0) {
+                    size_t id = (*response_time_event_ids)[index];
+                    size_t current_state_index = states[index] - 1;     // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
+                    size_t next_state_index = states[index + 1] - 1;
+                    // find jumps (we assume that max_response_length > 1 i.e. at least one jump occurs in the dataset)
+                    if (j == 0 && next_state_index != -1 || (j < max_response_length - 1 && next_state_index != -1 && current_state_index != next_state_index)) {
+                        ++num_jumps_right[s * num_unique_event_times * dim + id * dim + current_state_index * num_states + next_state_index];
+                    }
+                    // find numbers at risk (j == 0 means we are at the first state of an observation/path)
+                    if (j == 0 || current_state_index != states[index - 1] - 1) {
+                        ++delta_num_at_risk_right[s * num_unique_event_times * num_states + id * num_states + current_state_index];
+                    }
+                    ++j;
+                    index = i * max_response_length + j;
+                }
+            } else {
+                break;  // since the split_points are sorted
+            }
+        }
+    }
+    // compute numbers at risk in the right node
+    // idea: use that we already have the parent info in num_at_risk and num_jumps
 }
 
 void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold) {
@@ -315,23 +353,19 @@ void MultistateTree::computeNA(size_t node_index) {
     // for each unique event time i, loop over all entries (j, k) in the matrix
     for (size_t i = 1; i < num_unique_event_times; ++i) {
         for (size_t j = 0; j < num_states; ++j) {
+            double diag = 0;
             for (size_t k = 0; k < num_states; ++k) {
                 if (num_at_risk[i * num_states + j] != 0) {
                     na[i * num_states * num_states + j * num_states + k] = na[(i - 1) * num_states * num_states + j * num_states + k] + double(num_jumps[i * num_states * num_states + j * num_states + k]) / double(num_at_risk[i * num_states + j]);
                 } else {
                     na[i * num_states * num_states + j * num_states + k] = na[(i - 1) * num_states * num_states + j * num_states + k];
                 }
+                // the diagonal is minus the sum of all other row entries
+                diag -= na[i * num_states * num_states + j * num_states + k];
             }
+            na[i * num_states * num_states + j * num_states + j] = diag;
         }
     }
-
-    // compute the diagonal
-    for (size_t i = 0; i < num_unique_event_times; ++i) {
-        for (size_t j = 0; j < num_states; ++j) {
-            
-        }
-    }
-
     this->na.push_back(move(na));
 }
 
@@ -344,11 +378,26 @@ void MultistateTree::computeNA(size_t node_index) {
 //--------------------------------------------------------------------------------------
 
 vector<double> MultistateTree::computePredictions(const Data& new_data) {
-    
+    uint8_t num_states = data->getNumberOfStates();
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
+    for (size_t i = 0; i < num_obs; ++i) {
+        const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            for (size_t j = 0; j < num_states; ++j) {
+                for (size_t k = 0; k < num_states; ++k) {
+                    predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                }
+            }
+        }
+    }
+    return predictions;
 }
 
 // error estimation for multi-state trees
 //--------------------------------------------------------------------------------------
+
+
 
 // miscellaneous functions related to multi-states
 //--------------------------------------------------------------------------------------
@@ -373,6 +422,29 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
     return(response_event_time_ids);
 }
 
-vector<vector<double>> AalenJohansen(const vector<vector<double>>& na) {
-    
+vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states) {
+    vector<double> aj = vector<double>(na.size(), 0);
+    size_t dim = num_states * num_states;                       // number of entries in each matrix
+    size_t num_jumps = na.size() / dim;   // num_unique_event_times
+    // initial value is the identity matrix
+    for (size_t j = 0; j < num_states; ++j) {
+        aj[j * num_states + j] = 1;
+    }
+
+    // compute the Aalen--Johansen estimator at each jump time using an optimised matrix multiplication scheme
+    for (size_t i = 1; i < num_jumps; ++i) {
+        for (size_t j = 0; j < num_states; ++j) {           // row of the aj matrix
+            for (size_t k = 0; k < num_states; ++k) {       // column of the aj matrix
+                double prev = aj[(i - 1) * dim + j * num_states + k];
+                for (size_t l = 0; l < num_states; ++l) {   // column of matrix in increment
+                    double contribution = na[i * dim + k * num_states + l] - na[(i - 1) * dim + k * num_states + l];
+                    if (k == l) {
+                        ++contribution;    // add 1 to diagonal elements
+                    }
+                    aj[i * dim + j * num_states + l] += prev * contribution;
+                }
+            }
+        }
+    }
+    return aj;
 }

@@ -13,16 +13,22 @@
 using namespace std;
 using namespace Rcpp;
 
-// helper functions for pure C++
+// helper functions for growing trees
 vector<double> uniqueValues(vector<double> input);
 vector<vector<double>> compute2Partitions(const vector<double>& feature_values);
 vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, bool with_replacement, mt19937 rng);
+
+// vector and matrix operations
 double vector_sum(const vector<double>& vec);
 size_t vector_sum(const vector<size_t>& vec);
 void sum_vectors(vector<double>& result, const vector<double>& add);
+
+// printing functions
 void printVector(const vector<double>& vec);
 void printVector(const vector<size_t>& vec);
 void printVector(const vector<bool>& vec);
+
+// helper functions for forests
 vector<bool> computeOOBIndices(const vector<size_t>& indices, unsigned int n);
 vector<bool> computeOOBIndicesDouble(const vector<size_t>& grow, const vector<size_t>& holdout, unsigned int n);
 pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indices, mt19937 rng);
