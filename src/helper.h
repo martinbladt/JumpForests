@@ -18,10 +18,16 @@ vector<double> uniqueValues(vector<double> input);
 vector<vector<double>> compute2Partitions(const vector<double>& feature_values);
 vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, bool with_replacement, mt19937 rng);
 
-// vector and matrix operations
+// vector operations
 double vector_sum(const vector<double>& vec);
 size_t vector_sum(const vector<size_t>& vec);
 void sum_vectors(vector<double>& result, const vector<double>& add);
+
+// flattened matrix operations
+vector<size_t> columnSums(const vector<size_t>& matrix, size_t d);
+vector<size_t> transpose(const vector<size_t>& matrix, size_t d);
+vector<size_t> addMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d);
+vector<int> subtractMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d);
 
 // printing functions
 void printVector(const vector<double>& vec);

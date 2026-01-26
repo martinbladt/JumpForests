@@ -87,6 +87,50 @@ void sum_vectors(vector<double>& result, const vector<double>& add) {
     }
 }
 
+// computes the vector of column sums of a flattened d x d matrix (by row)
+vector<size_t> columnSums(const vector<size_t>& matrix, size_t d) {
+    vector<size_t> result(d);
+    for (size_t i = 0; i < d; ++i) {
+        for (size_t j = 0; j < d; ++j) {
+            result[i] += matrix[i + d * j];
+        }
+    }
+    return result;
+}
+
+// computes the transpose of a flattened d x d matrix (by row)
+vector<size_t> transpose(const vector<size_t>& matrix, size_t d) {
+    vector<size_t> result(d * d);
+    for (size_t i = 0; i < d; ++i) {
+        for (size_t j = 0; j < d; ++j) {
+            result[j * d + i] = matrix[i * d + j];
+        }
+    }
+    return result;
+}
+
+// adds two flattened d x d matrices
+vector<size_t> addMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d) {
+    vector<size_t> result(d * d);
+    for (size_t i = 0; i < d; ++i) {
+        for (size_t j = 0; j < d; ++j) {
+            result[i * d + j] = matrix1[i * d + j] + matrix2[i * d + j];
+        }
+    }
+    return result;
+}
+
+// subtracts two flattened d x d matrices
+vector<int> subtractMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d) {
+    vector<int> result(d * d);
+    for (size_t i = 0; i < d; ++i) {
+        for (size_t j = 0; j < d; ++j) {
+            result[i * d + j] = matrix1[i * d + j] - matrix2[i * d + j];
+        }
+    }
+    return result;
+}
+
 void printVector(const vector<double>& vec) {
     for (int i = 0; i < vec.size() - 1; ++i) {
         cout << vec[i] << ", ";

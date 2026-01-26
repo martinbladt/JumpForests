@@ -130,6 +130,7 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
         times.assign(num_obs * max_response_length, 0);
         states.assign(num_obs * max_response_length, 0);
         censoring_times.assign(num_obs, 0);
+        censoring_states.assign(num_obs, 0);
         for (int i = 0; i < num_obs; ++i) {
             List obs = jump_data[i];
             size_t response_length = LENGTH(obs[0]);
@@ -137,11 +138,12 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
             //IntegerVector obs_states = obs[1];
             for (int j = 0; j < response_length; ++j) {
                 times[i * max_response_length + j] = REAL(obs[0])[j];
-                states[i * max_response_length + j] = static_cast<size_t>(INTEGER(obs[1])[j]);
+                states[i * max_response_length + j] = static_cast<uint8_t>(INTEGER(obs[1])[j]);
             }
-            // save censoring times
-            if (static_cast<size_t>(INTEGER(obs[1])[response_length - 1]) == static_cast<size_t>(INTEGER(obs[1])[response_length - 2])) {
+            // save censoring times and the corresponding state separately (eases calculations)
+            if (static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]) == static_cast<uint8_t>(INTEGER(obs[1])[response_length - 2])) {
                 censoring_times[i] = REAL(obs[0])[response_length - 1];
+                censoring_states[i] = static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]);
             }
         }
         // we should not need response names for multi-states

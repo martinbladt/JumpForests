@@ -66,7 +66,7 @@ private:
 };
 
 // in contrast to survival, times is a flattened array with possibly varying length for each observation
-vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times, const vector<size_t>& states);
+vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times, const vector<uint8_t>& states);
 // maybe the function below will never be used (the corresponding function for survival is deprecated)
 //vector<double> computeUniqueEventTimes(const vector<double>& times);
 
