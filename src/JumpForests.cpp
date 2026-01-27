@@ -170,7 +170,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   );
 
   // determine the (sorted) unique event times
-  vector<double> unique_event_times = uniqueValues(data->getTimes());
+  vector<double> unique_event_times = uniqueEventTimesMultistate(data->getTimes(), data->getStates());
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
 
   // create and grow the multi-state tree

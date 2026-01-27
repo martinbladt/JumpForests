@@ -40,11 +40,13 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     uint8_t num_states = data->getNumberOfStates();
     uint8_t dim = num_states * num_states;
     
+    // initialise vectors of number of jumps and at risk
     num_jumps.assign(num_unique_event_times * dim, 0);
     num_at_risk.assign(num_unique_event_times * num_states, 0);
+    // the censoring contribution C used to compute I via the key decomposition
     vector<size_t> censoring_contribution(num_unique_event_times * num_states, 0);
 
-    // compute number at risk at initiation I0 and the censoring contribution C
+    // compute number at risk at initiation I0, the censoring contribution C and the number of jumps
     for (size_t i : indices) {
         ++num_at_risk[states[i * max_response_length] - 1];
 
@@ -53,7 +55,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         if (censoring_state != 0) {
             double R = censoring_times[i];
             for (size_t j = 0; j < num_unique_event_times; ++j) {
-                if (unique_event_times[j] > R) { 
+                if ((*unique_event_times)[j] > R) { 
                     // all following event times also satisfy > R
                     for (size_t k = j; k < num_unique_event_times; ++k) {
                         ++censoring_contribution[k * num_unique_event_times + censoring_state - 1];
@@ -62,10 +64,24 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
                 }
             }
         }
+        // compute number of jumps
+        size_t j = 0;
+        size_t index = i * max_response_length;
+        // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
+        while (j < max_response_length - 1 && states[index] != 0) {
+            size_t id = (*response_time_event_ids)[index];
+            int current_state_index = states[index] - 1;     // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
+            int next_state_index = states[index + 1] - 1;
+            if (next_state_index != -1 && current_state_index != next_state_index) {
+                ++num_jumps[id * dim + current_state_index * num_states + next_state_index];
+            }
+            ++j;
+            ++index;
+        }
     }
 
-    // compute number of jumps
-    
+    // now compute number at risk via the key decomposition
+    // for every observation i : indices, extract the flattened matrix of jumps, the C vector and the I0 vector
 }
 
 // old implementation which doesn't handle at risk calculations correctly (may also be problems with computing the jumps)
@@ -519,7 +535,27 @@ vector<double> MultistateTree::computePredictions(const Data& new_data) {
 // miscellaneous functions related to multi-states
 //--------------------------------------------------------------------------------------
 
-// for computing the ids in the observed times corresponding to the unique event times (including censored times)
+// computes the vector of unique event times for multi-state data, excluding censoring times
+vector<double> uniqueEventTimesMultistate(const vector<double>& times, const vector<uint8_t>& states) {
+    vector<double> result;
+    result.push_back(0);
+
+    // start by picking out the times that are not only censoring times
+    // since 0 is the first time of every observation, we can also skip 0
+    for (size_t i = 1; i < times.size(); ++i) {
+        if (times[i] != 0 && states[i] != states[i - 1]) {
+            result.push_back(times[i]);
+        }
+    }
+
+    // now sort the values and remove duplicates
+    sort(result.begin(), result.end());
+    auto last = unique(result.begin(), result.end());
+    result.erase(last, result.end());   // save memory
+    return result;
+}
+
+// for computing the ids in the observed times corresponding to the unique event times (not counting censored times)
 vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times, const vector<uint8_t>& states) {
     vector<size_t> response_event_time_ids;
     size_t n = times.size();

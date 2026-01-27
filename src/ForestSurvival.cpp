@@ -13,7 +13,7 @@ SurvivalForest::SurvivalForest(const vector<double>& unique_event_times, const v
 
 // grows a survival forest using multithreading via OpenMP
 void SurvivalForest::grow() {
-    int n = data->getNumberOfObs();
+    size_t n = data->getNumberOfObs();
     
     // create vector of indices from 1 to n
     vector<size_t> global_indices(n);
@@ -29,13 +29,13 @@ void SurvivalForest::grow() {
     shared_ptr<vector<size_t>> response_event_time_ids = make_shared<vector<size_t>>(this->response_event_time_ids);
     shared_ptr<vector<size_t>> true_event_time_ids = make_shared<vector<size_t>>(this->true_event_time_ids);
 
-    int n_threads = this->nworkers;
+    size_t n_threads = this->nworkers;
     omp_set_num_threads(n_threads);
     cout << "Growing forest using " << n_threads << " threads" << endl;
 
     // use OpenMP for parallel tree growing
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
-    for (int i = 0; i < static_cast<int>(ntrees); ++i) {
+    for (size_t i = 0; i < static_cast<int>(ntrees); ++i) {
         // give each thread its own random number generator to prevent races
         mt19937 local_rng(seed + i);
         unique_ptr<SurvivalTree> tree;
