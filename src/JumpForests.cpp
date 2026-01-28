@@ -762,7 +762,7 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     */
   }
   if (type == "Multi-state") {
-
+    
   }
 }
 

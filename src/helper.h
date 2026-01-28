@@ -24,10 +24,15 @@ size_t vector_sum(const vector<size_t>& vec);
 void sum_vectors(vector<double>& result, const vector<double>& add);
 
 // flattened matrix operations
-vector<size_t> columnSums(const vector<size_t>& matrix, size_t d);
+vector<int> columnSums(const vector<int>& matrix, size_t d);
 vector<size_t> transpose(const vector<size_t>& matrix, size_t d);
 vector<size_t> addMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d);
 vector<int> subtractMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d);
+
+// flattened matrix operations for flattened vectors
+vector<size_t> columnSums(const vector<size_t>& matrix, size_t begin, size_t end);
+vector<size_t> transpose(const vector<size_t>& matrix, size_t begin, size_t end);
+vector<int> subtractMatrices(const vector<size_t>& matrix1, size_t begin, size_t end, const vector<size_t>& matrix2);
 
 // printing functions
 void printVector(const vector<double>& vec);

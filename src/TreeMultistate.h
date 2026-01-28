@@ -46,7 +46,6 @@ private:
   void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
   bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
   void computeNA(size_t node_index);                              // computes the Nelson--Aalen estimator in a terminal node
-  // might need to change num_jumps_right to a vector of matrices, otherwise maybe okay with a flattened array of flattened matrices
   void computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final);
   void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold);

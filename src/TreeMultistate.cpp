@@ -30,7 +30,6 @@ MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, sh
 //--------------------------------------------------------------------------------------
 
 void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& at_risk, vector<size_t>& jumps) {
-    size_t n = indices.size();
     // fetch states and other relevant data quantities
     const vector<uint8_t>& states = data->getStates();
     const vector<double>& censoring_times = data->getCensoringTimes();
@@ -43,16 +42,18 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     // initialise vectors of number of jumps and at risk
     num_jumps.assign(num_unique_event_times * dim, 0);
     num_at_risk.assign(num_unique_event_times * num_states, 0);
-    // the censoring contribution C used to compute I via the key decomposition
+    // all temporary quantities used for the key decomposition
     vector<size_t> censoring_contribution(num_unique_event_times * num_states, 0);
+    vector<size_t> num_jumps_acc(num_unique_event_times * dim, 0);
 
-    // compute number at risk at initiation I0, the censoring contribution C and the number of jumps
+    // compute the initial rates, the censoring contribution C and the number of jumps across all event times and observations
     for (size_t i : indices) {
+        // initial rates I0
         ++num_at_risk[states[i * max_response_length] - 1];
 
         // compute the censoring contribution C
         uint8_t censoring_state = censoring_states[i];
-        if (censoring_state != 0) {
+        if (censoring_state != 0) {     // censoring actually occurs
             double R = censoring_times[i];
             for (size_t j = 0; j < num_unique_event_times; ++j) {
                 if ((*unique_event_times)[j] > R) { 
@@ -64,16 +65,19 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
                 }
             }
         }
-        // compute number of jumps
-        size_t j = 0;
-        size_t index = i * max_response_length;
+        // compute number of jumps (we assume that at least one event of some kind occurs so that max_response_length > 1)
+        size_t j = 1;
+        size_t index = i * max_response_length + 1;
         // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
-        while (j < max_response_length - 1 && states[index] != 0) {
+        while (j < max_response_length && states[index] != 0) {
             size_t id = (*response_time_event_ids)[index];
             int current_state_index = states[index] - 1;     // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
-            int next_state_index = states[index + 1] - 1;
-            if (next_state_index != -1 && current_state_index != next_state_index) {
-                ++num_jumps[id * dim + current_state_index * num_states + next_state_index];
+            int prev_state_index = states[index - 1] - 1;
+            if (current_state_index != prev_state_index) {
+                ++num_jumps[id * dim + prev_state_index * num_states + current_state_index];
+                num_jumps_acc[id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc[(id - 1) * dim + prev_state_index * num_states + current_state_index] + 1;
+            } else {
+                num_jumps_acc[id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc[(id - 1) * dim + prev_state_index * num_states + current_state_index];
             }
             ++j;
             ++index;
@@ -81,7 +85,14 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     }
 
     // now compute number at risk via the key decomposition
-    // for every observation i : indices, extract the flattened matrix of jumps, the C vector and the I0 vector
+    for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above
+        vector<int> subtraction = subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1));
+        vector<int> jump_contributions = columnSums(subtraction, static_cast<size_t>(num_states));
+        for (size_t k = 0; k < num_states; ++k) {
+            // key decomposition
+            num_at_risk[j * num_unique_event_times + k] = num_at_risk[k] - censoring_contribution[j * num_unique_event_times + k] + jump_contributions[k];
+        }
+    }
 }
 
 // old implementation which doesn't handle at risk calculations correctly (may also be problems with computing the jumps)
@@ -191,6 +202,55 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
 // version of jan26
 // for computing multi-state quantities (number at risk and number of jumps) for all splits in a node (for splits on continuous features)
 void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
+                                         vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final) {
+    // fetch states and other relevant data quantities
+    const vector<uint8_t>& states = data->getStates();
+    const vector<double>& censoring_times = data->getCensoringTimes();
+    const vector<uint8_t>& censoring_states = data->getCensoringStates();
+
+    uint8_t max_response_length = data->getMaxResponseLength();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+
+    // all temporary quantities used for the key decomposition (for the right node)
+    vector<size_t> censoring_contribution(nsplits_final * num_unique_event_times * num_states, 0);
+    vector<size_t> num_jumps_acc(nsplits_final * num_unique_event_times * dim, 0);
+
+    // compute initial rates, the censoring contribution C and the number of jumps across all event times and
+    // observations in the right node
+    for (size_t i : node_obs[node_index]) {
+        double feature_val = data->get_x(i, feature);
+        for (size_t s = 0; s < nsplits_final; ++s) {
+            if (feature_val > split_points[s]) {
+                // add one to the number of observations in right node for split s
+                ++num_obs_right[s];
+                // update I0
+                ++num_at_risk_right[s * num_unique_event_times * num_states + states[i * max_response_length] - 1];
+
+                // censoring contribution
+                uint8_t censoring_state = censoring_states[i];
+                if (censoring_state != 0) {     // censoring actually occurs
+                    double R  = censoring_times[i];
+                    for (size_t j = 0; j < num_unique_event_times; ++j) {
+                        if ((*unique_event_times)[j] > R) {
+                            // all following event times also satisfy > R
+                            for (size_t k = j; k < num_unique_event_times; ++k) {
+                                // fix indexing!
+                                ++censoring_contribution[s * num_unique_event_times * num_states];
+                            }
+                        }
+                    }
+                }
+            } else {
+                break;  // since the split points are sorted
+            }
+        }
+    }
+}
+
+/*
+
+void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_left, vector<size_t>& num_jumps_left, size_t nsplits_final) {
     const vector<uint8_t>& states = data->getStates();
     uint8_t num_states = data->getNumberOfStates();
@@ -198,7 +258,7 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
     uint8_t max_response_length = data->getMaxResponseLength();
     //vector<size_t> delta_num_at_risk_right(nsplits_final * num_unique_event_times * num_states);
     
-    // initialise the number of jumps and at risk to be ones for the parent
+    // initialise the number of jumps and at risk to be the ones for the parent
     for (size_t s = 0; s < nsplits_final; ++s) {
         copy(num_at_risk.begin(), num_at_risk.end(), num_at_risk_left.begin() + s * num_unique_event_times * num_states);
         copy(num_jumps.begin(), num_jumps.end(), num_jumps_left.begin() + s * num_unique_event_times * dim);
@@ -234,6 +294,8 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
     }
 }
 
+*/
+
 void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
     size_t num_states = data->getNumberOfStates();
@@ -252,10 +314,10 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
     vector<size_t> num_obs_right(nsplits_final);
     //vector<size_t> num_at_risk_right(nsplits_final * num_unique_event_times * num_states);
 
-    vector<size_t> num_jumps_left(nsplits_final * num_unique_event_times * num_states * num_states);
-    vector<size_t> num_at_risk_left(nsplits_final * num_unique_event_times * num_states);
+    vector<size_t> num_jumps_right(nsplits_final * num_unique_event_times * num_states * num_states);
+    vector<size_t> num_at_risk_right(nsplits_final * num_unique_event_times * num_states);
 
-    computeMultistateQuantitiesDaughter(node_index, feature, split_points, num_obs_right, num_at_risk_left, num_jumps_left, nsplits_final);
+    computeMultistateQuantitiesDaughter(node_index, feature, split_points, num_obs_right, num_at_risk_right, num_jumps_right, nsplits_final);
 
     // now determine the best split
     for (size_t i = 0; i < nsplits_final; ++i) {
