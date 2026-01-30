@@ -1,16 +1,17 @@
-# the main function for fitting trees
-jftree <- function(formula, data, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10, honest = FALSE, seed = NULL) {
-  # preprocess the entire dataset
-  processed_data <- preprocess_data(data)
-  lhs <- as.character(formula[[2]])
+#nolint start: line_length_linter
 
+# the main function for fitting trees (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
+jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10, honest = FALSE, seed = NULL) {
+  lhs <- as.character(formula[[2]])
   # if seed is not set, generate a random one
   if (is.null(seed)) {
     seed <- runif(n = 1, min = 1, max = 10^6)
   }
 
   # if left hand side is of length 1, classification or regression
-  if (length(lhs) == 1) {
+  if (length(lhs) == 1 && lhs[1] != "MM") {
+    # preprocess the entire dataset
+    processed_data <- preprocess_data(data)
     response_index <- which(names(data) %in% as.character(formula[[2]])[1]) - 1
     if (formula[[3]] == ".") {
       covariates <- names(data)[-(response_index + 1)]
@@ -57,6 +58,8 @@ jftree <- function(formula, data, splitrule = NULL, mtry = NULL, min_node_size =
   }
   # if left hand side is "Surv(time, status)", survival
   else if (lhs[1] == "Surv") {
+    # preprocess the entire dataset
+    processed_data <- preprocess_data(data)
     # ensure that time is the first argument
     response_indices <- which(names(data) %in% as.character(formula[[2]])[2:3])
     if (length(unique(data[, response_indices[1]])) == 2) {
@@ -94,7 +97,44 @@ jftree <- function(formula, data, splitrule = NULL, mtry = NULL, min_node_size =
   }
   # if the left hand side is "MM(...)", multi-state
   else if (lhs[1] == "MM") {
-    # TODO
+    if (formula[[3]] == ".") {
+      covariates <- names(data)[-(response_indices + 1)]
+    } else {
+      covariates <- attr(terms(formula), "term.labels")
+    }
+    feature_indices <- which(names(data) %in% covariates) - 1
+
+    # by default, the number of variables tried at each split is the
+    # square root of the number of covariates
+    if (is.null(mtry)) {
+      mtry <- ceiling(sqrt(length(covariates)))
+    }
+    # for multi-states, the default minimal node size is 20
+    if (is.null(min_node_size)) {
+      min_node_size <- 20
+    }
+    # set default splitting rule (log-rank for multi-states so far)
+    if (is.null(splitrule)) {
+      splitrule <- "logrank"
+    }
+
+    # for multi-state trees, we need to process the feature data
+    if (is.null(feature_data)) {
+      stop("For multi-state trees, features have to be provided in feature_data")
+    } else {
+      cat(ncol(feature_data))
+      processed_data <- preprocess_data(feature_data)
+    }
+
+    # determine number of states and max_response_length
+    max_response_length <- max(sapply(data, function(e) length(e$states)))
+    num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
+
+    # data here is jump data, a list of lists, each containing a vector 'times' and a vector 'states'
+    JFCppTreeMM(data, max_response_length, num_states, processed_data$data,
+                mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
+                processed_data$categorical, processed_data$unique_values, seed)
+
   } else {
     stop("Type of tree not recognised from the formula.")
   }

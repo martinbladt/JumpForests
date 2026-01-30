@@ -5,6 +5,10 @@ JFCppTree <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, ho
     .Call(`_JumpForests_JFCppTree`, tree_type, df, mtry, min_node_size, nsplits, splitrule, honest, response_indices, feature_indices, categorical, unique, seed)
 }
 
+JFCppTreeMM <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, honest, feature_indices, categorical, unique, seed) {
+    .Call(`_JumpForests_JFCppTreeMM`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, honest, feature_indices, categorical, unique, seed)
+}
+
 JFCppTreePredict <- function(JFTree, df, feature_indices, categorical, unique) {
     .Call(`_JumpForests_JFCppTreePredict`, JFTree, df, feature_indices, categorical, unique)
 }

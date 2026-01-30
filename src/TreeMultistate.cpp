@@ -605,9 +605,9 @@ void MultistateTree::computeNA(size_t node_index) {
 double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
     // fetch relevant data quantities
     const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
-    uint8_t num_states = data->getStates();
+    uint8_t num_states = data->getNumberOfStates();
     uint8_t dim = num_states * num_states;
-    size_t num_jumps = valid_jumps.size();
+    size_t num_valid_jumps = valid_jumps.size();
 
     double LR = 0;
     for (auto jump : valid_jumps) {

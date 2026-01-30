@@ -13,7 +13,7 @@ using namespace Rcpp;
 List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, bool honest,
     NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
 List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
-  unsigned int nsplits, CharacterVector splitrule, bool honest, LogicalVector categorical, NumericVector unique, unsigned int seed);
+  unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed);
 
 // prediction with trees
 void JFCppTreePredict(List& JFTree);

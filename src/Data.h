@@ -22,7 +22,7 @@ struct Data {
        const vector<bool>& categorical, const vector<size_t>& unique);
   // constructor for creating data objects for multi-states
   Data(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame feature_data,
-       const vector<bool>& categorical, const vector<size_t>& unique);
+       vector<size_t> feature_indices, const vector<bool>& categorical, const vector<size_t>& unique);
 
   // delete the copy constructor and the assignment operator 
   //Data(const Data&) = delete;

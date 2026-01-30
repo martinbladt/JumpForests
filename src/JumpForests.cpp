@@ -140,16 +140,18 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
   return(result);
 }
 
+// [[Rcpp::export]]
 List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
-  unsigned int nsplits, CharacterVector splitrule, bool honest, LogicalVector categorical, NumericVector unique, unsigned int seed) {
+  unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed) {
 
   // convert the input to C++ vectors
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
   vector<bool> categorical_cpp = as<vector<bool>>(categorical);
   vector<size_t> unique_cpp = as<vector<size_t>>(unique);
   string splitrule_cpp = as<string>(splitrule);
 
   // make the data into a C++ format and save it via a shared pointer
-  shared_ptr<Data> data = make_shared<Data>(jump_data, max_response_length, num_states, df_features, categorical_cpp, unique_cpp);
+  shared_ptr<Data> data = make_shared<Data>(jump_data, max_response_length, num_states, df_features, feature_indices_cpp, categorical_cpp, unique_cpp);
 
   // use all indices since we grow a single tree
   vector<size_t> subset_indices_cpp;

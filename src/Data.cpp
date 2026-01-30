@@ -121,11 +121,12 @@ size_t Data::getFeatureID(const string& variable_name) const {
   is categorical, unique is a vector of the number of unique values for each column
 */
 Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame feature_data,
-    const vector<bool>& categorical, const vector<size_t>& unique) {
+    vector<size_t> feature_indices, const vector<bool>& categorical, const vector<size_t>& unique) {
     this->num_obs = feature_data.nrows();
-    this->num_features = feature_data.ncol();
+    this->num_features = feature_indices.size();
     this->max_response_length = max_response_length;
     this->num_states = num_states;
+    this->feature_indices = feature_indices;
     
     // fill the response vectors if response variables are supplied
     if (jump_data.isNULL() || jump_data.size() != 0) {
@@ -173,22 +174,22 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
 
     for (size_t i = 0; i < num_features; ++i) {
         // update the feature type (categorical or continuous)
-        if (categorical[i] == true) {
+        if (categorical[feature_indices[i]] == true) {
             categorical_features[i] = true;
         } else {
             categorical_features[i] = false;
         }
         
         // update names of features and response(s) (already in order)
-        feature_names[i] = as<vector<string>>(feature_data.names())[i];
+        feature_names[i] = as<vector<string>>(feature_data.names())[feature_indices[i]];
 
         // update the number of unique values
-        unique_values_features[i] = unique[i];
+        unique_values_features[i] = unique[feature_indices[i]];
     }
 
     // fill the feature "matrix"
     for (size_t j = 0; j < num_features; ++j) {
-        NumericVector col = feature_data[j];
+        NumericVector col = feature_data[feature_indices[j]];
         for (size_t i = 0; i < num_obs; ++i) {
             x[i * num_features + j] = col[i];
         }
