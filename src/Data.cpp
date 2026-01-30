@@ -1,3 +1,5 @@
+#include <set>
+
 #include "Data.h"
 
 // Data constructor for Regression, Classification and Survival
@@ -148,7 +150,21 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
         }
         // we should not need response names for multi-states
     }
-    
+    // determine possible jumps
+    set<pair<uint8_t, uint8_t>> possible_jumps;
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t index = i * max_response_length;
+        for (size_t j = 0; j < max_response_length - 1; ++j) {
+            uint8_t state = states[index + i];
+            uint8_t next_state = states[index + i + 1];
+            if (state != next_state) {
+                possible_jumps.emplace(state, next_state);
+            }
+        }
+    }
+    valid_jumps.reserve(possible_jumps.size());
+    copy(possible_jumps.begin(), possible_jumps.end(), back_inserter(valid_jumps));
+
     // prepare features
     x.assign(num_features * num_obs, 0);
     vector<bool> categorical_features(num_features);

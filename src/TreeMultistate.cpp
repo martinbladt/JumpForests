@@ -30,6 +30,8 @@ MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, sh
 //--------------------------------------------------------------------------------------
 
 void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& at_risk, vector<size_t>& jumps) {
+
+
     // fetch states and other relevant data quantities
     const vector<uint8_t>& states = data->getStates();
     const vector<double>& censoring_times = data->getCensoringTimes();
@@ -86,8 +88,8 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
 
     // now compute number at risk via the key decomposition
     for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above
-        vector<int> subtraction = subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1));
-        vector<int> jump_contributions = columnSums(subtraction, static_cast<size_t>(num_states));
+        //vector<int> subtraction = subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1));
+        vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1)), static_cast<size_t>(num_states));
         for (size_t k = 0; k < num_states; ++k) {
             // key decomposition
             num_at_risk[j * num_unique_event_times + k] = num_at_risk[k] - censoring_contribution[j * num_unique_event_times + k] + jump_contributions[k];
@@ -199,7 +201,7 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
 
 */
 
-// version of jan26
+// version of jan29
 // for computing multi-state quantities (number at risk and number of jumps) for all splits in a node (for splits on continuous features)
 void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final) {
@@ -213,8 +215,8 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
     uint8_t dim = num_states * num_states;
 
     // all temporary quantities used for the key decomposition (for the right node)
-    vector<size_t> censoring_contribution(nsplits_final * num_unique_event_times * num_states, 0);
-    vector<size_t> num_jumps_acc(nsplits_final * num_unique_event_times * dim, 0);
+    vector<size_t> censoring_contribution_right(nsplits_final * num_unique_event_times * num_states, 0);
+    vector<size_t> num_jumps_acc_right(nsplits_final * num_unique_event_times * dim, 0);
 
     // compute initial rates, the censoring contribution C and the number of jumps across all event times and
     // observations in the right node
@@ -235,14 +237,46 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
                         if ((*unique_event_times)[j] > R) {
                             // all following event times also satisfy > R
                             for (size_t k = j; k < num_unique_event_times; ++k) {
-                                // fix indexing!
-                                ++censoring_contribution[s * num_unique_event_times * num_states];
+                                ++censoring_contribution_right[s * num_unique_event_times * num_states + censoring_state - 1];
                             }
+                            break;
                         }
                     }
                 }
+                // compute the number of jumps
+                size_t j = 1;
+                size_t index = i * max_response_length + 1;
+                while(j < max_response_length && states[index] != 0) {
+                    size_t id = (*response_time_event_ids)[index];
+                    int current_state_index = states[index] - 1;
+                    int prev_state_index = states[index - 1] - 1;
+                    if (current_state_index != prev_state_index) {
+                        ++num_jumps_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index];
+                        num_jumps_acc_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc_right[s * num_unique_event_times * dim + (id - 1) * dim + prev_state_index * num_states + current_state_index] + 1;
+                    } else {
+                        num_jumps_acc_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc_right[s * num_unique_event_times * dim + (id - 1) * dim + prev_state_index * num_states + current_state_index];
+                    }
+                    ++j;
+                    ++index;
+                }
+
             } else {
                 break;  // since the split points are sorted
+            }
+        }
+    }
+    // now compute number at risk for each possible split via the key decomposition
+    for (size_t s = 0; s < nsplits_final; ++s) {
+        size_t begin = s * num_unique_event_times * dim + dim;
+        size_t end = s * num_unique_event_times * dim + 2 * dim - 1;
+        for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above for each split
+            vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc_right, begin, end, transpose(num_jumps_acc_right, begin, end)), static_cast<size_t>(num_states));
+            begin += dim;
+            end += dim;
+            for (size_t k = 0; k < num_states; ++k) {
+                // key decomposition
+                size_t split_stride = s * num_unique_event_times * num_states;
+                num_at_risk_right[split_stride + j * num_unique_event_times + k] = num_at_risk_right[split_stride + k] - censoring_contribution_right[split_stride + j * num_unique_event_times + k] + jump_contributions[k];
             }
         }
     }
@@ -329,6 +363,7 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
         }
 
         double split_val;
+        split_val = logRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);     // temporary until more splitting rules are implemented
         // CHOOSE SPLITRULE
         /*
         if (splitrule == "NAME") {
@@ -567,7 +602,49 @@ void MultistateTree::computeNA(size_t node_index) {
 // splitting rules for multi-state trees
 //--------------------------------------------------------------------------------------
 
+double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
+    // fetch relevant data quantities
+    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
+    uint8_t num_states = data->getStates();
+    uint8_t dim = num_states * num_states;
+    size_t num_jumps = valid_jumps.size();
 
+    double LR = 0;
+    for (auto jump : valid_jumps) {
+        uint8_t j = jump.first - 1;
+        uint8_t k = jump.second - 1;
+        double sum_num = 0;
+        double sum_den = 0;
+        size_t jump_index = split_id * num_unique_event_times * dim;
+        size_t at_risk_index = split_id * num_unique_event_times * num_states;
+        for (size_t i = 0; i < num_unique_event_times; ++i) {
+            const double d = (double) num_jumps[i * dim + j * num_states + k];
+            const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
+            const double Y = (double) num_at_risk[i * num_states + j];
+            const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
+
+            // prevent division by zero in the log-rank test
+            if (Y < 2 || Y1 < 1) {
+                break;  // since the event times are ordered, all subsequent numbers at risk will also be too small 
+            }
+            if (d > 0) {
+                double at_risk_frac = Y1 / Y;
+                sum_num += d1 - d * at_risk_frac;
+                sum_den += d * at_risk_frac * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
+            }
+        }
+
+        // update the final log-rank statistic
+        if (sum_den != 0) {
+            LR += sum_num * sum_num / sum_den;
+        }
+    }
+    if (LR > 0) {
+        return LR;
+    } else {
+        return -1;  // if a non-sensical value has been computed, treat as no valid split
+    }
+}
 
 // prediction for multi-state trees
 //--------------------------------------------------------------------------------------

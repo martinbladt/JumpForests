@@ -118,6 +118,9 @@ struct Data {
   uint8_t getNumberOfStates () const {
     return num_states;
   }
+  vector<pair<uint8_t, uint8_t>> getValidJumps() const {
+    return valid_jumps;
+  }
   // get the ID based on a feature name
   size_t getFeatureID(const string& variable_name) const;
 
@@ -128,20 +131,21 @@ private:
   vector<double> times;             // save jump times for each trajectory as flattened 2D-array (only for multi-state data)
   vector<uint8_t> states;           // save state info for each trajectory as flattened 2D-array (only for multi-state data)
   vector<double> censoring_times;   // save the censoring times (0: no censoring, only for multi-state data)
-  vector<uint8_t> censoring_states; // save the state of the censoring time (0: no censoring, only for multi-state data) 
+  vector<uint8_t> censoring_states; // save the state of the censoring time (0: no censoring, only for multi-state data)
 
   // data attributes
-  size_t num_obs;                   // number of observations
-  size_t num_features;              // number of features
-  size_t num_responses;             // number of responses
-  vector<bool> categorical;         // for each feature, 1 if categorical, 0 otherwise
-  vector<size_t> unique_values;     // number of unique values for each feature
-  vector<string> feature_names;     // variable name for each feature
-  vector<string> response_names;    // variable name for each response
-  vector<size_t> response_indices;  // the indices of the responses
-  vector<size_t> feature_indices;   // the indices of the features
-  uint8_t max_response_length;      // maximum number of jumps observed in the data (only for multi-state data)
-  uint8_t num_states;               // number of states in the multi-state model (only for multi-state data)
+  size_t num_obs;                               // number of observations
+  size_t num_features;                          // number of features
+  size_t num_responses;                         // number of responses
+  vector<bool> categorical;                     // for each feature, 1 if categorical, 0 otherwise
+  vector<size_t> unique_values;                 // number of unique values for each feature
+  vector<string> feature_names;                 // variable name for each feature
+  vector<string> response_names;                // variable name for each response
+  vector<size_t> response_indices;              // the indices of the responses
+  vector<size_t> feature_indices;               // the indices of the features
+  uint8_t max_response_length;                  // maximum number of jumps observed in the data (only for multi-state data)
+  uint8_t num_states;                           // number of states in the multi-state model (only for multi-state data)
+  vector<pair<uint8_t, uint8_t>> valid_jumps;   // pairs of the valid jumps
 };
 
 // the following struct handles Multi-state models

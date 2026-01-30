@@ -53,7 +53,8 @@ private:
                            vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices); // computes the best split for a chosen categorical feature
   
   // splitting rules
-  // see notes, many different possibilities once the template functions
+  // see notes, many different possibilities once the template functions are up and running
+  double logRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id);
 
   // frees memory from temporary quantities used in growing the tree
   void cleanUpTree() override {
