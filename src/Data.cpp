@@ -136,17 +136,24 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
         censoring_states.assign(num_obs, 0);
         for (int i = 0; i < num_obs; ++i) {
             List obs = jump_data[i];
-            size_t response_length = LENGTH(obs[0]);
-            //NumericVector obs_times = obs[0];
-            //IntegerVector obs_states = obs[1];
+            //size_t response_length = LENGTH(obs[0]);
+            NumericVector obs_times = obs[0];
+            IntegerVector obs_states = obs[1];
+            size_t response_length = obs_times.size();
             for (int j = 0; j < response_length; ++j) {
-                times[i * max_response_length + j] = REAL(obs[0])[j];
-                states[i * max_response_length + j] = static_cast<uint8_t>(INTEGER(obs[1])[j]);
+                times[i * max_response_length + j] = obs_times[j];
+                states[i * max_response_length + j] = static_cast<uint8_t>(obs_states[j]);
+                //times[i * max_response_length + j] = REAL(obs[0])[j];
+                //states[i * max_response_length + j] = static_cast<uint8_t>(INTEGER(obs[1])[j]);
             }
             // save censoring times and the corresponding state separately (eases calculations)
-            if (static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]) == static_cast<uint8_t>(INTEGER(obs[1])[response_length - 2])) {
-                censoring_times[i] = REAL(obs[0])[response_length - 1];
-                censoring_states[i] = static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]);
+            if (response_length >= 2) {
+                if (static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]) == static_cast<uint8_t>(INTEGER(obs[1])[response_length - 2])) {
+                    censoring_times[i] = obs_times[response_length - 1];
+                    censoring_states[i] = static_cast<uint8_t>(obs_states[response_length - 1]);
+                    //censoring_times[i] = REAL(obs[0])[response_length - 1];
+                    //censoring_states[i] = static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]);
+                }
             }
         }
         // we should not need response names for multi-states
@@ -156,9 +163,9 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
     for (size_t i = 0; i < num_obs; ++i) {
         size_t index = i * max_response_length;
         for (size_t j = 0; j < max_response_length - 1; ++j) {
-            uint8_t state = states[index + i];
-            uint8_t next_state = states[index + i + 1];
-            if (state != next_state) {
+            uint8_t state = states[index + j];
+            uint8_t next_state = states[index + j + 1];
+            if (state != 0 && next_state != 0 && state != next_state) {
                 possible_jumps.emplace(state, next_state);
             }
         }
@@ -172,6 +179,7 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
     vector<size_t> unique_values_features(num_features);
     vector<string> feature_names(num_features);
 
+    cout << "num_features = " << num_features << endl;
     for (size_t i = 0; i < num_features; ++i) {
         // update the feature type (categorical or continuous)
         if (categorical[feature_indices[i]] == true) {
@@ -180,8 +188,9 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
             categorical_features[i] = false;
         }
         
-        // update names of features and response(s) (already in order)
+        // update names of features
         feature_names[i] = as<vector<string>>(feature_data.names())[feature_indices[i]];
+        cout << "Feature name: " << feature_names[i] << endl;
 
         // update the number of unique values
         unique_values_features[i] = unique[feature_indices[i]];

@@ -10,28 +10,28 @@ Functions for multi-state trees
 // constructor for MultistateTree
 //--------------------------------------------------------------------------------------
 
-// NB: we need to know the number of states to initialise the at risk and jumps vectors properly
-
 // the final argument is only used for honest trees
 MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices) : 
     unique_event_times {unique_event_times}, response_time_event_ids {response_time_event_ids} {
-        this->node_obs.push_back(subset_indices);
-        this->holdout_node_obs.push_back(estimation_indices);
-        this->num_unique_event_times = unique_event_times->size();
-        this->node_sizes.push_back(subset_indices.size());
+    cout << "About to save basic quantities" << endl;
+    this->node_obs.push_back(subset_indices);
+    this->holdout_node_obs.push_back(estimation_indices);
+    this->num_unique_event_times = unique_event_times->size();
+    this->node_sizes.push_back(subset_indices.size());
+    cout << "Finished saving basic quantities" << endl;
 
-        // initialise vector of jumps and individuals at risk
-        uint8_t num_states = data->getNumberOfStates();
-        this->num_jumps.resize(num_unique_event_times * num_states * num_states);
-        this->num_at_risk.resize(num_unique_event_times * num_states);
+    // initialise vector of jumps and individuals at risk
+    uint8_t num_states = data->getNumberOfStates();
+    cout << "Fetched number of states, " << num_states << endl;
+    this->num_jumps.resize(num_unique_event_times * num_states * num_states);
+    this->num_at_risk.resize(num_unique_event_times * num_states);
+    cout << "Finished resizing vectors" << endl;
 }
 
 // functions for growing multi-state trees
 //--------------------------------------------------------------------------------------
 
 void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& at_risk, vector<size_t>& jumps) {
-
-
     // fetch states and other relevant data quantities
     const vector<uint8_t>& states = data->getStates();
     const vector<double>& censoring_times = data->getCensoringTimes();
@@ -61,7 +61,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
                 if ((*unique_event_times)[j] > R) { 
                     // all following event times also satisfy > R
                     for (size_t k = j; k < num_unique_event_times; ++k) {
-                        ++censoring_contribution[k * num_unique_event_times + censoring_state - 1];
+                        ++censoring_contribution[k * num_states + censoring_state - 1];
                     }
                     break;
                 }
@@ -92,7 +92,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1)), static_cast<size_t>(num_states));
         for (size_t k = 0; k < num_states; ++k) {
             // key decomposition
-            num_at_risk[j * num_unique_event_times + k] = num_at_risk[k] - censoring_contribution[j * num_unique_event_times + k] + jump_contributions[k];
+            num_at_risk[j * num_states + k] = num_at_risk[k] - censoring_contribution[j * num_states + k] + jump_contributions[k];
         }
     }
 }

@@ -137,7 +137,7 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
     result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
     result["tree.depth"] = tree->getTreeDepth();
   }
-  return(result);
+  return result;
 }
 
 // [[Rcpp::export]]
@@ -152,7 +152,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   // make the data into a C++ format and save it via a shared pointer
   shared_ptr<Data> data = make_shared<Data>(jump_data, max_response_length, num_states, df_features, feature_indices_cpp, categorical_cpp, unique_cpp);
-
+  cout << "Finished creating multi-state data" << endl;
   // use all indices since we grow a single tree
   vector<size_t> subset_indices_cpp;
   for (int i = 0; i < data->getNumberOfObs(); ++i) {
@@ -175,11 +175,20 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   vector<double> unique_event_times = uniqueEventTimesMultistate(data->getTimes(), data->getStates());
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
 
+  cout << "Finished creating unique_event_times and response_event_time_ids" << endl;
+
   // create and grow the multi-state tree
   shared_ptr<vector<double>> unique_event_times_ptr = make_shared<vector<double>>(unique_event_times);
   shared_ptr<vector<size_t>> response_event_time_ids_ptr = make_shared<vector<size_t>>(response_event_time_ids);
 
-  // check validity of splitrule argument
+  // for debugging purposes
+  cout << "Number of unique event times:" << unique_event_times.size() << endl;
+  cout << "Length of response_event_time_ids: " << response_event_time_ids.size() << ", number of obs: " << data->getStates().size() << endl;
+  cout << "Printing unique_event_times and response_event_time_ids:" << endl;
+  printVector(*unique_event_times_ptr);
+  printVector(*response_event_time_ids_ptr);
+
+  // check validity of splitrule argument (just logrank for now)
   vector<string> valid_splitrules = {"logrank", "conserve", "approxlogrank"};
   if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
     throw runtime_error("Invalid splitrule, please choose between logrank, conserve or approxlogrank");
@@ -187,7 +196,8 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   MultistateTree* tree;
   if (!honest) {
-    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp);
+    cout << "About to create multi-state tree" << endl;
+    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp); // this creates a memory error, I think
   } else {
     mt19937 rng(seed + 1);
     pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
@@ -195,22 +205,28 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
     tree->setRNG(rng);
   }
 
+  cout << "Finished creating the multi-state tree" << endl;
+
   tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
+  cout << "Finished initialising multi-state tree" << endl;
   //tree->grow();
+  //cout << "Finished growing multi-state tree" << endl;
 
   // specific to multi-states
-  NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
+  //NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
   XPtr<MultistateTree> multistate_tree(tree, true);   // cast the multi-state tree as an R pointer
   result["tree.type"] = "Multi-state";
-  result["unique.event.times"] = unique_event_times_R;
+  //result["unique.event.times"] = unique_event_times_R;
+  cout << "Saving multistate_tree pointer" << endl;
   result["Tree"] = multistate_tree;               // add the tree (as a pointer, only to be used for prediction in C++)
   //JFCppTreePredict(result);                       // compute and save predictions on the data
   //     // compute and save error estimate
 
   // save information about the tree itself
-  result["num.nodes"] = tree->getNumberOfNodes();
-  result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
-  result["tree.depth"] = tree->getTreeDepth();
+  //result["num.nodes"] = tree->getNumberOfNodes();
+  //result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
+  //result["tree.depth"] = tree->getTreeDepth();
+  return result;
 }
 
 /*

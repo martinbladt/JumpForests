@@ -36,7 +36,7 @@ lambda <- function(t, x){
 
 set.seed(2026)
 
-n <- 100
+n <- 1000
 X <- runif(n)   # signal
 Y <- rnorm(n)   # noise
 c <- runif(n, 0, 5)
@@ -48,18 +48,20 @@ for(i in 1:n){
                        tn = c[i], bs = c(2*c[i], 3*c[i], 0))
 }
 
-sum(c == unlist(lapply(sim, FUN = function(z){tail(z$times, 1)}))) / n  #0.36
+sum(c == unlist(lapply(sim, FUN = function(z){tail(z$times, 1)}))) / n  #0.28
 sim[1]
 
 # now test the package
 test_data <- data.frame(X1 = X, X2 = Y)
-formula <- MM ~ X1
+formula <- MM ~ X1 + X2
 formula[[3]]
+attr(terms(formula), "term.labels")
 
-# memory error somewhere
-fitted_tree <- jftree(MM ~ X1, data = sim, feature_data = test_data)
+# memory error somewhere in the creation of unique_event_times I think
+sim
+fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data)
 
-fitted_tree <- jftree(Surv(Time, Death) ~ Categorical1 + Numerical + Categorical2,
-                      data = test_data, splitrule = "conserve", min_node_size = 2, nsplits = 2, seed = 2025)
+#fitted_tree <- jftree(Surv(Time, Death) ~ Categorical1 + Numerical + Categorical2,
+#                      data = test_data, splitrule = "conserve", min_node_size = 2, nsplits = 2, seed = 2025)
 
 #nolint_end

@@ -12,7 +12,7 @@ void Tree::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min
     // initialise tree info
     num_nodes = 1;
     num_terminal_nodes = 0;
-    prediction_node_IDs = vector<size_t>((*data).getNumberOfObs(), 0);  // should this be a choice from the user?
+    prediction_node_IDs = vector<size_t>(data->getNumberOfObs(), 0);
 
     // set seed
     random_number_generator.seed(seed);

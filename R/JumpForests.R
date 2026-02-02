@@ -102,7 +102,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     } else {
       covariates <- attr(terms(formula), "term.labels")
     }
-    feature_indices <- which(names(data) %in% covariates) - 1
+    feature_indices <- which(names(feature_data) %in% covariates) - 1
 
     # by default, the number of variables tried at each split is the
     # square root of the number of covariates
@@ -130,6 +130,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     max_response_length <- max(sapply(data, function(e) length(e$states)))
     num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
 
+    cat("About to call JFCppTreeMM from R", "\n")
     # data here is jump data, a list of lists, each containing a vector 'times' and a vector 'states'
     JFCppTreeMM(data, max_response_length, num_states, processed_data$data,
                 mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
