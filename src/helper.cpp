@@ -184,6 +184,13 @@ void printVector(const vector<size_t>& vec) {
     cout << vec[vec.size() - 1] << endl;
 }
 
+void printVector(const vector<uint8_t>& vec) {
+    for (int i = 0; i < vec.size() - 1; ++i) {
+        cout << static_cast<size_t>(vec[i]) << ", ";
+    }
+    cout << static_cast<size_t>(vec[vec.size() - 1]) << endl;
+}
+
 void printVector(const vector<bool>& vec) {
     for (int i = 0; i < vec.size() - 1; ++i) {
         cout << vec[i] << ", ";

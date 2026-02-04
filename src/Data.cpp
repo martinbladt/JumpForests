@@ -135,24 +135,19 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
         censoring_times.assign(num_obs, 0);
         censoring_states.assign(num_obs, 0);
         for (int i = 0; i < num_obs; ++i) {
-            List obs = jump_data[i];
-            //size_t response_length = LENGTH(obs[0]);
-            NumericVector obs_times = obs[0];
-            IntegerVector obs_states = obs[1];
+            List obs = as<List>(jump_data[i]);
+            vector<double> obs_times = as<vector<double>>(obs[0]);
+            vector<uint8_t> obs_states = as<vector<uint8_t>>(obs[1]);
             size_t response_length = obs_times.size();
             for (int j = 0; j < response_length; ++j) {
                 times[i * max_response_length + j] = obs_times[j];
-                states[i * max_response_length + j] = static_cast<uint8_t>(obs_states[j]);
-                //times[i * max_response_length + j] = REAL(obs[0])[j];
-                //states[i * max_response_length + j] = static_cast<uint8_t>(INTEGER(obs[1])[j]);
+                states[i * max_response_length + j] = obs_states[j];
             }
             // save censoring times and the corresponding state separately (eases calculations)
             if (response_length >= 2) {
                 if (static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]) == static_cast<uint8_t>(INTEGER(obs[1])[response_length - 2])) {
                     censoring_times[i] = obs_times[response_length - 1];
-                    censoring_states[i] = static_cast<uint8_t>(obs_states[response_length - 1]);
-                    //censoring_times[i] = REAL(obs[0])[response_length - 1];
-                    //censoring_states[i] = static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]);
+                    censoring_states[i] = static_cast<uint8_t>(obs_states[response_length - 1]); // static_cast<uint8_t>(obs_states[response_length - 1]);
                 }
             }
         }

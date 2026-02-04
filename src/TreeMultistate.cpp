@@ -11,21 +11,24 @@ Functions for multi-state trees
 //--------------------------------------------------------------------------------------
 
 // the final argument is only used for honest trees
-MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices) : 
-    unique_event_times {unique_event_times}, response_time_event_ids {response_time_event_ids} {
-    cout << "About to save basic quantities" << endl;
+MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, const vector<size_t>& subset_indices, uint8_t num_states, const vector<size_t>& estimation_indices) : 
+    unique_event_times {unique_event_times}, response_event_time_ids {response_event_time_ids} {
+    cout << "Number of elements in response_time_event_ids: " << response_event_time_ids->size() << endl;
+    cout << "Number of unique event times: " << unique_event_times->size() << endl;
+    //cout << "About to save basic quantities" << endl;
     this->node_obs.push_back(subset_indices);
     this->holdout_node_obs.push_back(estimation_indices);
     this->num_unique_event_times = unique_event_times->size();
     this->node_sizes.push_back(subset_indices.size());
-    cout << "Finished saving basic quantities" << endl;
+    //cout << "Finished saving basic quantities" << endl;
 
     // initialise vector of jumps and individuals at risk
-    uint8_t num_states = data->getNumberOfStates();
-    cout << "Fetched number of states, " << num_states << endl;
+    //cout << "Fetched number of states, " << num_states << endl;
     this->num_jumps.resize(num_unique_event_times * num_states * num_states);
     this->num_at_risk.resize(num_unique_event_times * num_states);
-    cout << "Finished resizing vectors" << endl;
+    //cout << "Finished resizing vectors" << endl;
+    cout << "Number of elements in response_time_event_ids: " << response_event_time_ids->size() << endl;
+    cout << "Number of unique event times: " << unique_event_times->size() << endl;
 }
 
 // functions for growing multi-state trees
@@ -48,17 +51,21 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     vector<size_t> censoring_contribution(num_unique_event_times * num_states, 0);
     vector<size_t> num_jumps_acc(num_unique_event_times * dim, 0);
 
+    cout << "Finished initialising before computing quantities" << endl;
+
     // compute the initial rates, the censoring contribution C and the number of jumps across all event times and observations
     for (size_t i : indices) {
+        cout << "Index " << i << endl;
         // initial rates I0
         ++num_at_risk[states[i * max_response_length] - 1];
+        cout << "Updated I0" << endl;
 
         // compute the censoring contribution C
         uint8_t censoring_state = censoring_states[i];
         if (censoring_state != 0) {     // censoring actually occurs
             double R = censoring_times[i];
             for (size_t j = 0; j < num_unique_event_times; ++j) {
-                if ((*unique_event_times)[j] > R) { 
+                if ((*unique_event_times)[j] > R) {
                     // all following event times also satisfy > R
                     for (size_t k = j; k < num_unique_event_times; ++k) {
                         ++censoring_contribution[k * num_states + censoring_state - 1];
@@ -67,15 +74,23 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
                 }
             }
         }
+        cout << "Computed censoring contribution:" << endl;
+        printVector(censoring_contribution);
         // compute number of jumps (we assume that at least one event of some kind occurs so that max_response_length > 1)
         size_t j = 1;
         size_t index = i * max_response_length + 1;
+        cout << "j = " << j << ", index = " << index << endl;
+        cout << "states[index] = " << static_cast<size_t>(states[index]) << endl;
+        cout << "Number of elements in response_event_time_ids: " << response_event_time_ids->size() << endl;   // why is this vector broken specifically?
+        cout << "Number of unique event times: " << unique_event_times->size() << endl;                         // why does this work fine??
         // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
         while (j < max_response_length && states[index] != 0) {
-            size_t id = (*response_time_event_ids)[index];
+            cout << "Entered while loop" << endl;
+            size_t id = (*response_event_time_ids)[index];
+            cout << "id = " << id << endl;
             int current_state_index = states[index] - 1;     // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
             int prev_state_index = states[index - 1] - 1;
-            if (current_state_index != prev_state_index) {
+            if (current_state_index != prev_state_index && id > 0) {  // I wouldn't think that the id > 0 is necessary, maybe rethink?
                 ++num_jumps[id * dim + prev_state_index * num_states + current_state_index];
                 num_jumps_acc[id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc[(id - 1) * dim + prev_state_index * num_states + current_state_index] + 1;
             } else {
@@ -84,6 +99,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
             ++j;
             ++index;
         }
+        cout << "Finished computing jumps for index " << i << endl;
     }
 
     // now compute number at risk via the key decomposition
@@ -95,6 +111,10 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
             num_at_risk[j * num_states + k] = num_at_risk[k] - censoring_contribution[j * num_states + k] + jump_contributions[k];
         }
     }
+    cout << "Finished computing number at risk" << endl << "Accumulated jumps: " << endl;
+    printVector(num_jumps_acc);
+    cout << "Numbers at risk: " << endl;
+    printVector(num_at_risk);
 }
 
 // old implementation which doesn't handle at risk calculations correctly (may also be problems with computing the jumps)
@@ -247,7 +267,7 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
                 size_t j = 1;
                 size_t index = i * max_response_length + 1;
                 while(j < max_response_length && states[index] != 0) {
-                    size_t id = (*response_time_event_ids)[index];
+                    size_t id = (*response_event_time_ids)[index];
                     int current_state_index = states[index] - 1;
                     int prev_state_index = states[index - 1] - 1;
                     if (current_state_index != prev_state_index) {
@@ -276,7 +296,7 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
             for (size_t k = 0; k < num_states; ++k) {
                 // key decomposition
                 size_t split_stride = s * num_unique_event_times * num_states;
-                num_at_risk_right[split_stride + j * num_unique_event_times + k] = num_at_risk_right[split_stride + k] - censoring_contribution_right[split_stride + j * num_unique_event_times + k] + jump_contributions[k];
+                num_at_risk_right[split_stride + j * num_states + k] = num_at_risk_right[split_stride + k] - censoring_contribution_right[split_stride + j * num_states + k] + jump_contributions[k];
             }
         }
     }
@@ -455,11 +475,13 @@ void MultistateTree::makeLeaf(size_t node_index) {
 
 // function to create a split for a multi-state tree. returns true if leaf, otherwise false
 bool MultistateTree::createSplit(size_t node_index) {
+    cout << "Creating split on node " << node_index << endl;
     const vector<size_t>& current_node_obs = node_obs[node_index];
 
     // if no split is possible, make the node a leaf
     if (current_node_obs.size() < 2 * min_node_size) {
         if (!honest) {
+            cout << "Computing multi-state quantities in node (leaf)" << endl;
             computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);               // for dishonest trees, use the growing indices
         } else {
             computeMultistateQuantities(holdout_node_obs[node_index], num_jumps, num_at_risk);   // for honest trees, use the holdout set for computing the CHF
@@ -468,6 +490,7 @@ bool MultistateTree::createSplit(size_t node_index) {
         return true;
     }
 
+    cout << "Computing multi-state quantities in node (not leaf)" << endl;
     computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);   // update parent multi-state info
 
     double best_split_val = -1.0;
@@ -487,6 +510,8 @@ bool MultistateTree::createSplit(size_t node_index) {
         feature_indices[i] = i;
     }
     vector<size_t> sampled_features = sampleIndices(feature_indices, mtry, false, random_number_generator);
+    cout << "Sampled features: ";
+    printVector(sampled_features);
 
     // now consider each of the sampled features
     for (size_t i : sampled_features) {
@@ -711,7 +736,7 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
         auto it = lower_bound(unique_event_times.begin(), unique_event_times.end(), times[i]);
         response_event_time_ids.push_back(static_cast<size_t>(distance(unique_event_times.begin(), it)));
     }
-    return(response_event_time_ids);
+    return response_event_time_ids;
 }
 
 vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states) {

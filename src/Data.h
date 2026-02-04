@@ -11,6 +11,7 @@
 #include <unordered_set>
 #include <Rcpp.h>
 #include <utility>
+#include <cstdint>
 using namespace Rcpp;
 using namespace std;
 

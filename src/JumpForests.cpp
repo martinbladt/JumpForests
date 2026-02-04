@@ -183,7 +183,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   // for debugging purposes
   cout << "Number of unique event times:" << unique_event_times.size() << endl;
-  cout << "Length of response_event_time_ids: " << response_event_time_ids.size() << ", number of obs: " << data->getStates().size() << endl;
+  cout << "Length of response_event_time_ids: " << response_event_time_ids.size() << ", number of obs in flattened vector: " << data->getStates().size() << endl;
   cout << "Printing unique_event_times and response_event_time_ids:" << endl;
   printVector(*unique_event_times_ptr);
   printVector(*response_event_time_ids_ptr);
@@ -194,29 +194,32 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
     throw runtime_error("Invalid splitrule, please choose between logrank, conserve or approxlogrank");
   }
 
+  // for debugging purposes (some strange memory error occurs)
+  cout << "Subset indices: ";
+  printVector(subset_indices_cpp);  // ok
+
   MultistateTree* tree;
   if (!honest) {
     cout << "About to create multi-state tree" << endl;
-    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp); // this creates a memory error, I think
+    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp, num_states); // this creates a memory error, I think
   } else {
     mt19937 rng(seed + 1);
     pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
-    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, partition.first, partition.second);
+    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, partition.first, num_states, partition.second);
     tree->setRNG(rng);
   }
-
   cout << "Finished creating the multi-state tree" << endl;
 
   tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
   cout << "Finished initialising multi-state tree" << endl;
-  //tree->grow();
-  //cout << "Finished growing multi-state tree" << endl;
+  tree->grow();
+  cout << "Finished growing multi-state tree" << endl;
 
   // specific to multi-states
-  //NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
+  NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
   XPtr<MultistateTree> multistate_tree(tree, true);   // cast the multi-state tree as an R pointer
   result["tree.type"] = "Multi-state";
-  //result["unique.event.times"] = unique_event_times_R;
+  result["unique.event.times"] = unique_event_times_R;
   cout << "Saving multistate_tree pointer" << endl;
   result["Tree"] = multistate_tree;               // add the tree (as a pointer, only to be used for prediction in C++)
   //JFCppTreePredict(result);                       // compute and save predictions on the data
@@ -988,6 +991,67 @@ void testData(const DataFrame& df, const NumericVector& response_indices, const 
   
 }
 
+// for testing that all data functionalities related to multi-states work
+// [[Rcpp::export]]
+void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame& feature_df, 
+                const NumericVector& feature_indices, const LogicalVector& categorical, const NumericVector& unique) {
+  // convert the input to C++ vectors
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+
+  // create Data object
+  Data data = Data(jump_data, max_response_length, num_states, feature_df, feature_indices_cpp, categorical_cpp, unique_cpp);
+  
+  cout << "Number of features: " << data.getNumberOfFeatures() << endl;
+  cout << "Feature names: ";
+  for (string s : data.getFeatureNames()) {
+    cout << s << ", ";
+  }
+  cout << endl << "Features categorical? ";
+  printVector(data.getCategorical());
+  cout << "Unique values of features: ";
+  printVector(data.getUniqueValues());
+  // print feature values
+  for (size_t i = 0; i < data.getNumberOfFeatures(); ++i) {
+    cout << data.getFeatureNames()[i] << ":";
+    for (size_t j = 0; j < data.getNumberOfObs(); ++j) {
+      cout << data.get_x(j, i) << ", ";
+    }
+    cout << endl;
+  }
+
+  // compare feature names
+  for (size_t i = 0; i < data.getNumberOfFeatures(); ++i) {
+    cout << "Internal feature ID: " << i << endl;
+    cout << "Feature name is: " << data.getFeatureNames()[i] << endl;
+    cout << "getFeatureID: " << data.getFeatureID(data.getFeatureNames()[i]) << endl;
+  }
+
+  // print jump data
+  cout << "Times: ";
+  printVector(data.getTimes());
+  cout << "States: ";
+  printVector(data.getStates());
+  cout << "Censoring times: ";
+  printVector(data.getCensoringTimes());
+  cout << "Censoring states: ";
+  printVector(data.getCensoringStates());
+  cout << "Valid jumps: ";
+  for (auto jump : data.getValidJumps()) {
+    cout << "(" << static_cast<size_t>(jump.first) << ", " << static_cast<size_t>(jump.second) << ")";
+  }
+  cout << endl << "The unique event times are: ";
+  vector<double> unique_event_times = uniqueEventTimesMultistate(data.getTimes(), data.getStates());
+  printVector(unique_event_times);
+  cout << "The response event time ids are: ";
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data.getTimes(), data.getStates());
+  printVector(response_event_time_ids);
+
+  // some metadata
+  cout << "Number of observations: " << data.getNumberOfObs() << endl;
+  cout << "Number of states: " << static_cast<size_t>(data.getNumberOfStates()) << endl;
+}
 
 // for testing OpenMP
 // [[Rcpp::export]]

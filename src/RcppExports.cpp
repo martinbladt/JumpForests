@@ -209,6 +209,22 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// testDataMM
+void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame& feature_df, const NumericVector& feature_indices, const LogicalVector& categorical, const NumericVector& unique);
+RcppExport SEXP _JumpForests_testDataMM(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP feature_dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type jump_data(jump_dataSEXP);
+    Rcpp::traits::input_parameter< uint8_t >::type max_response_length(max_response_lengthSEXP);
+    Rcpp::traits::input_parameter< uint8_t >::type num_states(num_statesSEXP);
+    Rcpp::traits::input_parameter< DataFrame& >::type feature_df(feature_dfSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< const LogicalVector& >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type unique(uniqueSEXP);
+    testDataMM(jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique);
+    return R_NilValue;
+END_RCPP
+}
 // test_omp
 void test_omp();
 RcppExport SEXP _JumpForests_test_omp() {
@@ -319,6 +335,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_getTreeTable", (DL_FUNC) &_JumpForests_getTreeTable, 1},
     {"_JumpForests_df_test", (DL_FUNC) &_JumpForests_df_test, 5},
     {"_JumpForests_testData", (DL_FUNC) &_JumpForests_testData, 5},
+    {"_JumpForests_testDataMM", (DL_FUNC) &_JumpForests_testDataMM, 7},
     {"_JumpForests_test_omp", (DL_FUNC) &_JumpForests_test_omp, 0},
     {"_JumpForests_testList", (DL_FUNC) &_JumpForests_testList, 0},
     {"_JumpForests_extract_column", (DL_FUNC) &_JumpForests_extract_column, 2},

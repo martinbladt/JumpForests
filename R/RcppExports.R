@@ -49,6 +49,10 @@ testData <- function(df, response_indices, feature_indices, categorical, unique)
     invisible(.Call(`_JumpForests_testData`, df, response_indices, feature_indices, categorical, unique))
 }
 
+testDataMM <- function(jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique) {
+    invisible(.Call(`_JumpForests_testDataMM`, jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique))
+}
+
 test_omp <- function() {
     invisible(.Call(`_JumpForests_test_omp`))
 }

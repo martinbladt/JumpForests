@@ -7,7 +7,7 @@
 class MultistateTree : public Tree {
 public:
   MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids,
-            const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices = {});
+            const vector<size_t>& subset_indices, uint8_t num_states, const vector<size_t>& estimation_indices = {});
 
   const vector<double> getEventTimes() const {
     return *unique_event_times;
@@ -28,7 +28,7 @@ public:
 private:
   shared_ptr<vector<double>> unique_event_times;        // vector of ordered unique event times across (pooled across all jumps)
   size_t num_unique_event_times;                        // number of unique event times
-  shared_ptr<vector<size_t>> response_time_event_ids;   // the indices of unique_event_times corresponding to the response times (flattened array)
+  shared_ptr<vector<size_t>> response_event_time_ids;   // the indices of unique_event_times corresponding to the response times (flattened array)
   vector<vector<double>> na;                            // the Nelson--Aalen estimator in each terminal node with jumps at the unique_event_times,
                                                         // each vector being a flattened array of length num_states^2
 

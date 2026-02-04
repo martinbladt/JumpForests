@@ -6,7 +6,7 @@
 
 class MultistateForest : public Forest {
 public:
-  MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids);
+  MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, uint8_t num_states);
 
   // grows a multi-state forest with multi-threading
   void grow();

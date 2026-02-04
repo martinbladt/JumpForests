@@ -36,7 +36,7 @@ lambda <- function(t, x){
 
 set.seed(2026)
 
-n <- 1000
+n <- 3
 X <- runif(n)   # signal
 Y <- rnorm(n)   # noise
 c <- runif(n, 0, 5)
@@ -56,12 +56,22 @@ test_data <- data.frame(X1 = X, X2 = Y)
 formula <- MM ~ X1 + X2
 formula[[3]]
 attr(terms(formula), "term.labels")
+which(names(test_data) %in% attr(terms(formula), "term.labels")) - 1
 
-# memory error somewhere in the creation of unique_event_times I think
-sim
+# test data
+#sim
+test_data_functions_mm(sim, test_data, c(1, 2))
+# conclusion: Data works precisely as intended, also for multi-states
+
+# interesting, it always succeeds the first time (and sometimes more than once) but then another memory error occurs
+# it always finishes initialising the tree, so the error must lie in the multistate_tree pointer
+# OR: we actually have to grow the tree to ensure proper garbage collection. that would explain why it always runs the first time
 fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data)
 
 #fitted_tree <- jftree(Surv(Time, Death) ~ Categorical1 + Numerical + Categorical2,
 #                      data = test_data, splitrule = "conserve", min_node_size = 2, nsplits = 2, seed = 2025)
 
 #nolint_end
+
+
+

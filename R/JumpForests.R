@@ -8,7 +8,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     seed <- runif(n = 1, min = 1, max = 10^6)
   }
 
-  # if left hand side is of length 1, classification or regression
+  # if left hand side is of length 1, classification, regression or multi-state
   if (length(lhs) == 1 && lhs[1] != "MM") {
     # preprocess the entire dataset
     processed_data <- preprocess_data(data)
@@ -36,7 +36,6 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
       if (is.null(splitrule)) {
         # TODO
       }
-      cat("Just before JFCppTree")
       JFCppTree(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
                 response_index, feature_indices, processed_data$categorical,
                 processed_data$unique_values, seed)
@@ -95,10 +94,10 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
               response_indices, feature_indices, processed_data$categorical,
               processed_data$unique_values, seed)
   }
-  # if the left hand side is "MM(...)", multi-state
+  # if the left hand side is "MM", multi-state
   else if (lhs[1] == "MM") {
     if (formula[[3]] == ".") {
-      covariates <- names(data)[-(response_indices + 1)]
+      covariates <- names(feature_data)
     } else {
       covariates <- attr(terms(formula), "term.labels")
     }
@@ -122,7 +121,6 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     if (is.null(feature_data)) {
       stop("For multi-state trees, features have to be provided in feature_data")
     } else {
-      cat(ncol(feature_data))
       processed_data <- preprocess_data(feature_data)
     }
 
@@ -530,13 +528,21 @@ preprocess_data <- function(data) {
 }
 
 # function for testing the methods in Data.cpp
-test_data_functions <- function(data, response_indices,
-                                feature_indices) {
+test_data_functions <- function(data, response_indices, feature_indices) {
   processed_data <- preprocess_data(data)
   response_indices <- response_indices - 1
   feature_indices <- feature_indices - 1
   testData(processed_data$data, response_indices, feature_indices,
            processed_data$categorical, processed_data$unique)
+}
+
+test_data_functions_mm <- function(jump_data, feature_data, feature_indices) {
+  processed_data <- preprocess_data(feature_data)
+  feature_indices <- feature_indices - 1
+  max_response_length <- max(sapply(jump_data, function(e) length(e$states)))
+  num_states <- length(unique(unlist(lapply(jump_data, '[[', "states"))))
+  testDataMM(jump_data, max_response_length, num_states, processed_data$data, 
+             feature_indices, processed_data$categorical, processed_data$unique)
 }
 
 # rough function to fit a survival tree on the data
