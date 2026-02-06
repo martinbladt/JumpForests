@@ -182,21 +182,19 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   shared_ptr<vector<size_t>> response_event_time_ids_ptr = make_shared<vector<size_t>>(response_event_time_ids);
 
   // for debugging purposes
+  /*
   cout << "Number of unique event times:" << unique_event_times.size() << endl;
   cout << "Length of response_event_time_ids: " << response_event_time_ids.size() << ", number of obs in flattened vector: " << data->getStates().size() << endl;
   cout << "Printing unique_event_times and response_event_time_ids:" << endl;
   printVector(*unique_event_times_ptr);
   printVector(*response_event_time_ids_ptr);
+  */
 
   // check validity of splitrule argument (just logrank for now)
   vector<string> valid_splitrules = {"logrank", "conserve", "approxlogrank"};
   if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
     throw runtime_error("Invalid splitrule, please choose between logrank, conserve or approxlogrank");
   }
-
-  // for debugging purposes (some strange memory error occurs)
-  cout << "Subset indices: ";
-  printVector(subset_indices_cpp);  // ok
 
   MultistateTree* tree;
   if (!honest) {
@@ -208,10 +206,8 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
     tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, partition.first, num_states, partition.second);
     tree->setRNG(rng);
   }
-  cout << "Finished creating the multi-state tree" << endl;
 
   tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
-  cout << "Finished initialising multi-state tree" << endl;
   tree->grow();
   cout << "Finished growing multi-state tree" << endl;
 
@@ -220,15 +216,14 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   XPtr<MultistateTree> multistate_tree(tree, true);   // cast the multi-state tree as an R pointer
   result["tree.type"] = "Multi-state";
   result["unique.event.times"] = unique_event_times_R;
-  cout << "Saving multistate_tree pointer" << endl;
   result["Tree"] = multistate_tree;               // add the tree (as a pointer, only to be used for prediction in C++)
-  //JFCppTreePredict(result);                       // compute and save predictions on the data
+  JFCppTreePredict(result);                       // compute and save predictions on the data
   //     // compute and save error estimate
 
   // save information about the tree itself
-  //result["num.nodes"] = tree->getNumberOfNodes();
-  //result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
-  //result["tree.depth"] = tree->getTreeDepth();
+  result["num.nodes"] = tree->getNumberOfNodes();
+  result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
+  result["tree.depth"] = tree->getTreeDepth();
   return result;
 }
 
@@ -275,7 +270,23 @@ void JFCppTreePredict(List& JFTree) {
     JFTree["predictions"] = predictions;
   }
   if (type == "Multi-state") {
+    MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
+    size_t num_states = tree->getData()->getNumberOfStates();
+    size_t num_unique_event_times = tree->getNumberOfUniqueEventTimes();
+    List predictions(num_obs);  // each prediction is a list of matrices
 
+    // we saved the corresponding terminal node ID for every observation
+    for (size_t i = 0; i < num_obs; ++i) {
+      List rpred(num_unique_event_times);
+      vector<double> pred = tree->getNA()[tree->getPredictionNodeIDs()[i]];
+      for (size_t j = 0; j < num_unique_event_times; ++j) {
+        auto start_it = pred.begin() + (j * num_states * num_states);
+        NumericMatrix pred_time(num_states, num_states, start_it);
+        rpred[j] = transpose(pred_time);
+      }
+      predictions[i] = rpred;
+    }
+    JFTree["predictions"] = predictions;
   }
 }
 

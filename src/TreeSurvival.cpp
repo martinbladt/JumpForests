@@ -720,7 +720,7 @@ vector<double> computeUniqueEventTimes(const vector<double>& times, const vector
     return observed_times; 
 }
 
-// computes the Kaplan-Meyer estimator given a Nelson-Aalen estimator
+// computes the Kaplan-Meier estimator given a Nelson-Aalen estimator
 vector<double> KaplanMeier(const vector<double>& na) {
     vector<double> KM = vector<double>(na.size() + 1, 1);
     KM[0] = 1;

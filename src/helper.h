@@ -28,6 +28,8 @@ vector<int> columnSums(const vector<int>& matrix, size_t d);
 vector<size_t> transpose(const vector<size_t>& matrix, size_t d);
 vector<size_t> addMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d);
 vector<int> subtractMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d);
+void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matrix, size_t d);
+void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matrix, size_t d, size_t num_vectors);
 
 // flattened matrix operations for flattened vectors
 vector<size_t> columnSums(const vector<size_t>& matrix, size_t begin, size_t end);

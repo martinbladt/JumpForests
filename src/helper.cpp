@@ -170,6 +170,54 @@ vector<int> subtractMatrices(const vector<size_t>& matrix1, size_t begin, size_t
     return result;
 }
 
+// takes a vector of flattened d x d matrices and computes the cumulative sums of these
+void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matrix, size_t d) {
+    size_t dim = d * d;
+    size_t num_matrices = matrix.size() / dim;
+
+    // initialise the first matrix
+    for (size_t j = 0; j < d; ++j) {
+        for (size_t k = 0; k < d; ++k) {
+            acc_matrix[j * d + k] = matrix[j * d + k];
+        }
+    }
+    // now update the matrix
+    for (size_t i = 1; i < num_matrices; ++i) {
+        for (size_t j = 0; j < d; ++j) {
+            for (size_t k = 0; k < d; ++k) {
+                acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[i * dim + j * d + k];
+            }
+        }
+    }
+}
+
+// same as previous function but with num_vectors vectors
+void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matrix, size_t d, size_t num_vectors) {
+    size_t dim = d * d;
+    size_t num_matrices = matrix.size() / (dim * num_vectors);
+
+    // iterate over each matrix
+    for (size_t v = 0; v < num_vectors; ++v) {
+        size_t v_index = v * num_matrices * dim;
+
+        // initialise the first matrix
+        for (size_t j = 0; j < d; ++j) {
+            for (size_t k = 0; k < d; ++k) {
+                acc_matrix[v_index + j * d + k] = matrix[v_index + j * d + k];
+            }
+        }
+        // now update the matrix
+        for (size_t i = 1; i < num_matrices; ++i) {
+            for (size_t j = 0; j < d; ++j) {
+                for (size_t k = 0; k < d; ++k) {
+                    size_t index = i * dim + j * d + k;
+                    acc_matrix[v_index + index] = acc_matrix[v_index + index - dim] + matrix[v_index + index];
+                }
+            }
+        }
+    }
+}
+
 void printVector(const vector<double>& vec) {
     for (int i = 0; i < vec.size() - 1; ++i) {
         cout << vec[i] << ", ";

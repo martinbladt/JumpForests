@@ -12,7 +12,9 @@ public:
   const vector<double> getEventTimes() const {
     return *unique_event_times;
   }
-  
+  const size_t getNumberOfUniqueEventTimes() const {
+    return num_unique_event_times;
+  }
   const vector<vector<double>> getNA() const {
     return na;
   }

@@ -816,3 +816,107 @@ NumericVector JFCppForestPredictSingle(const List& JFForest, const NumericVector
 }
 
 */
+
+// old implementation which doesn't handle at risk calculations correctly (may also be problems with computing the jumps)
+/*
+
+void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& at_risk, vector<size_t>& jumps) {
+    size_t n = indices.size();
+    // fetch states and other relevant data quantities
+    const vector<uint8_t>& states = data->getStates();
+    uint8_t max_response_length = data->getMaxResponseLength();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    
+    num_jumps.assign(num_unique_event_times * dim, 0);
+    num_at_risk.assign(num_unique_event_times * num_states, 0);
+
+    for (size_t i : indices) {
+        size_t j = 0;
+        size_t index = i * max_response_length;
+        // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
+        while (j < max_response_length && states[index] != 0) {
+            size_t id = (*response_time_event_ids)[index];
+            int current_state_index = states[index] - 1;     // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
+            int next_state_index = states[index + 1] - 1;
+            // find jumps (we assume that max_response_length > 1 i.e. at least one jump occurs in the dataset)
+            if (j < max_response_length - 1 && next_state_index != -1 && current_state_index != next_state_index) {
+                ++num_jumps[id * dim + current_state_index * num_states + i] - next_state_index];
+            }
+            // find numbers at risk
+            // j == 0 means that we are at the first state of an observation/path
+            if (j == 0 || current_state_index != states[index - 1] - 1) {
+                ++num_at_risk[id * num_states + current_state_index];
+            }
+            ++j;
+            index = i * max_response_length + j;
+        }
+    }
+}
+
+*/
+
+/*
+
+Gemini's attempt. I do not trust this implementation. It doesn't even handle the j == 0 case
+
+void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
+                                         vector<size_t>& num_at_risk_left, vector<size_t>& num_jumps_left, size_t nsplits_final) {
+    const vector<size_t>& states = data->getStates();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    uint8_t max_response_length = data->getMaxResponseLength();
+    //vector<size_t> delta_num_at_risk_right(nsplits_final * num_unique_event_times * num_states);
+
+    // initialise the number of jumps and at risk to be ones for the parent
+    for (size_t s = 0; s < nsplits_final; ++s) {
+        copy(num_at_risk.begin(), num_at_risk.end(), num_at_risk_left.begin() + s * num_unique_event_times * num_states);
+        copy(num_jumps.begin(), num_jumps.end(), num_jumps_left.begin() + s * num_unique_event_times * dim);
+    }
+
+    // sort indices of observations by feature value
+    vector<size_t> sorted_indices = node_obs[node_index];
+    sort(sorted_indices.begin(), sorted_indices.end(), [&](size_t a, size_t b) {
+        return data->get_x(a, feature) < data->get_x(b, feature);
+    });
+
+    size_t current_obs_idx = 0;
+    for (size_t s = 0; s < nsplits_final; ++s) {
+        // carry over changes from the previous split point
+        if (s > 0) {
+            copy(num_at_risk_left.begin() + (s - 1) * num_unique_event_times * num_states,
+                      num_at_risk_left.begin() + s * num_unique_event_times * num_states,
+                      num_at_risk_left.begin() + s * num_unique_event_times * num_states);
+            copy(num_jumps_left.begin() + (s - 1) * num_unique_event_times * dim,
+                      num_jumps_left.begin() + s * num_unique_event_times * dim,
+                      num_jumps_left.begin() + s * num_unique_event_times * dim);
+        }
+
+        // subtract observations that are to the right of split_points[s]
+        while (current_obs_idx < sorted_indices.size() && data->get_x(sorted_indices[current_obs_idx], feature) > split_points[s]) {
+            size_t idx = i = sorted_indices[current_obs_idx];
+            ++num_obs_right[idx];
+
+            for (size_t j = 0; j < max_response_length; ++j) {
+                size_t idx = i * max_response_length + j;
+                if (states[idx] == 0) break;    // end of path
+
+                size_t id = (*response_time_event_ids)[idx];
+                size_t curr_s = states[idx] - 1;
+
+                // handle jumps
+                if (j + 1 < max_response_length && states[idx + 1] != 0 && states[idx + 1] != states[idx]) {
+                    size_t next_state = states[idx + 1] - 1;
+                    size_t jump_idx = s * num_times * dim + id * dim + curr_s * num_states + next_state;
+                    --num_jumps_left[jump_idx];
+                }
+                // handle at risk
+                size_t risk_idx = s * num_times * num_states + id * num_states + curr_s;
+                --num_at_risk_left[risk_idx];
+            }
+            ++current_obs_idx;
+        }
+    }
+}
+
+*/
