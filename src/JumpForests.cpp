@@ -152,7 +152,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   // make the data into a C++ format and save it via a shared pointer
   shared_ptr<Data> data = make_shared<Data>(jump_data, max_response_length, num_states, df_features, feature_indices_cpp, categorical_cpp, unique_cpp);
-  cout << "Finished creating multi-state data" << endl;
+
   // use all indices since we grow a single tree
   vector<size_t> subset_indices_cpp;
   for (int i = 0; i < data->getNumberOfObs(); ++i) {
@@ -175,8 +175,6 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   vector<double> unique_event_times = uniqueEventTimesMultistate(data->getTimes(), data->getStates());
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
 
-  cout << "Finished creating unique_event_times and response_event_time_ids" << endl;
-
   // create and grow the multi-state tree
   shared_ptr<vector<double>> unique_event_times_ptr = make_shared<vector<double>>(unique_event_times);
   shared_ptr<vector<size_t>> response_event_time_ids_ptr = make_shared<vector<size_t>>(response_event_time_ids);
@@ -191,14 +189,13 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   */
 
   // check validity of splitrule argument (just logrank for now)
-  vector<string> valid_splitrules = {"logrank", "conserve", "approxlogrank"};
+  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank"};
   if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-    throw runtime_error("Invalid splitrule, please choose between logrank, conserve or approxlogrank");
+    throw runtime_error("Invalid splitrule, please choose between logrank, gehan or taroneware");
   }
 
   MultistateTree* tree;
   if (!honest) {
-    cout << "About to create multi-state tree" << endl;
     tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp, num_states); // this creates a memory error, I think
   } else {
     mt19937 rng(seed + 1);

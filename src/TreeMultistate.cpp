@@ -149,7 +149,7 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
                         if ((*unique_event_times)[j] > R) {
                             // all following event times also satisfy > R
                             for (size_t k = j; k < num_unique_event_times; ++k) {
-                                ++censoring_contribution_right[s * num_unique_event_times * num_states + censoring_state - 1];
+                                ++censoring_contribution_right[s * num_unique_event_times * num_states + k * num_states + censoring_state - 1];
                             }
                             break;
                         }
@@ -196,6 +196,18 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
             }
         }
     }
+    
+    // for debugging
+    /*
+    cout << "Numbers of observations in right node " << endl;
+    printVector(num_obs_right);
+    cout << "Computed quantities for every possible split. num_at_risk_right:" << endl;
+    printVector(num_at_risk_right);
+    cout << "num_at_risk:" << endl;
+    printVector(num_at_risk);
+    cout << "num_jumps_acc_right:" << endl;
+    printVector(num_jumps_acc_right);
+    */
 }
 
 /*
@@ -279,14 +291,25 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
         }
 
         double split_val;
-        split_val = logRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);     // temporary until more splitting rules are implemented
+        //split_val = logRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);     // temporary until more splitting rules are implemented
 
-        // CHOOSE SPLITRULE
-        /*
-        if (splitrule == "NAME") {
-            split_value = splitRuleFunction(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
+        // choose splitrule
+        if (splitrule == "logrank") {
+            split_val = logRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
         }
-        */
+        if (splitrule == "gehan") {
+            split_val = Gehan(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
+        }
+        if (splitrule == "taroneware") {
+            split_val = TaroneWare(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
+        }
+        if (splitrule == "conserve") {
+            split_val = conserve(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
+        }
+        if (splitrule == "approxlogrank") {
+            split_val = approxLogRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
+        }
+        cout << "Split value for split " << i << ":" << split_val << endl;
 
         if (split_val > best_split_val) {
             best_split_val = split_val;
@@ -339,12 +362,22 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
         vector<size_t> num_jumps_left, num_at_risk_left;
         computeMultistateQuantities(current_left_indices, num_jumps_left, num_at_risk_left);
         double split_val;
-        // CHOOSE SPLITRULE
-        /*
-        if (splitrule == "NAME") {
-            split_value = splitRuleFunction(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
+        // choose splitrule
+        if (splitrule == "logrank") {
+            split_val = logRank(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
         }
-        */
+        if (splitrule == "gehan") {
+            split_val = Gehan(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
+        }
+        if (splitrule == "taroneware") {
+            split_val = TaroneWare(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
+        }
+        if (splitrule == "conserve") {
+            split_val = conserve(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
+        }
+        if (splitrule == "approxlogrank") {
+            split_val = approxLogRank(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
+        }
 
         if (split_val > best_split_val) {
             best_split_val = split_val;
@@ -532,8 +565,8 @@ void MultistateTree::computeNA(size_t node_index) {
             na[index + j] = diag;
         }
     }
-    cout << "Nelson-Aalen estimator in terminal node:" << endl;
-    printVector(na);
+    //cout << "Nelson-Aalen estimator in terminal node:" << endl;
+    //printVector(na);
     this->na.push_back(move(na));
 }
 
@@ -560,6 +593,12 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
             const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
             const double Y = (double) num_at_risk[i * num_states + j];
             const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
+            
+            // temporary for debugging
+            if (Y < Y1) {
+                cout << "Warning: Y = " << Y << " < Y1 = " << Y1 << endl; 
+            }
+            
 
             // prevent division by zero in the log-rank test
             if (Y < 2 || Y1 < 1) {
@@ -580,8 +619,174 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
     if (LR > 0) {
         return LR;
     } else {
-        return -1;  // if a non-sensical value has been computed, treat as no valid split
+        return -1;  // if a non-sensical value has been computed, treat as unvalid split
     }
+}
+
+double MultistateTree::Gehan(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
+    // fetch relevant data quantities
+    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    size_t num_valid_jumps = valid_jumps.size();
+
+    double G = 0;
+    for (auto jump : valid_jumps) {
+        uint8_t j = jump.first - 1;
+        uint8_t k = jump.second - 1;
+        double sum_num = 0;
+        double sum_den = 0;
+        size_t jump_index = split_id * num_unique_event_times * dim;
+        size_t at_risk_index = split_id * num_unique_event_times * num_states;
+        for (size_t i = 0; i < num_unique_event_times; ++i) {
+            const double d = (double) num_jumps[i * dim + j * num_states + k];
+            const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
+            const double Y = (double) num_at_risk[i * num_states + j];
+            const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
+
+            // prevent division by zero in the log-rank test
+            if (Y < 2 || Y1 < 1) {
+                break;  // since the event times are ordered, all subsequent numbers at risk will also be too small 
+            }
+            if (d > 0) {
+                sum_num += Y * d1 - d * Y1;
+                sum_den += d * Y1 * (Y - Y1) * (Y - d) / (Y - 1.0);
+            }
+        }
+
+        // update the final log-rank statistic
+        if (sum_den != 0) {
+            G += sum_num * sum_num / sum_den;
+        }
+    }
+    if (G > 0) {
+        return G;
+    } else {
+        return -1;  // if a non-sensical value has been computed, treat as unvalid split
+    }
+}
+
+double MultistateTree::TaroneWare(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
+    // fetch relevant data quantities
+    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    size_t num_valid_jumps = valid_jumps.size();
+
+    double TW = 0;
+    for (auto jump : valid_jumps) {
+        uint8_t j = jump.first - 1;
+        uint8_t k = jump.second - 1;
+        double sum_num = 0;
+        double sum_den = 0;
+        size_t jump_index = split_id * num_unique_event_times * dim;
+        size_t at_risk_index = split_id * num_unique_event_times * num_states;
+        for (size_t i = 0; i < num_unique_event_times; ++i) {
+            const double d = (double) num_jumps[i * dim + j * num_states + k];
+            const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
+            const double Y = (double) num_at_risk[i * num_states + j];
+            const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
+
+            // prevent division by zero in the log-rank test
+            if (Y < 2 || Y1 < 1) {
+                break;  // since the event times are ordered, all subsequent numbers at risk will also be too small 
+            }
+            if (d > 0) {
+                double at_risk_frac = Y1 / Y;
+                sum_num += sqrt(Y) * (d1 - d * at_risk_frac);
+                sum_den += d * Y1 * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
+            }
+        }
+
+        // update the final log-rank statistic
+        if (sum_den != 0) {
+            TW += sum_num * sum_num / sum_den;
+        }
+    }
+    if (TW > 0) {
+        return TW;
+    } else {
+        return -1;  // if a non-sensical value has been computed, treat as unvalid split
+    }
+}
+
+// WARNING: This splitting rule may be completely nonsensical for multi-states
+double MultistateTree::conserve(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
+    // fetch relevant data quantities
+    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    size_t num_valid_jumps = valid_jumps.size();
+
+    //initialise vectors to hold the sums and the numbers at risk in the other daughter
+    vector<double> NAsum1(num_unique_event_times, 0);
+    vector<double> NAsum2(num_unique_event_times, 0);
+    vector<size_t> num_at_risk_daughter_2(num_unique_event_times, 0);
+
+    double cons = 0;
+    for (auto jump : valid_jumps) {
+        // save indices
+        uint8_t j = jump.first - 1;
+        uint8_t k = jump.second - 1;
+        size_t jump_index = split_id * num_unique_event_times * dim;
+        size_t at_risk_index = split_id * num_unique_event_times * num_states;
+
+        // temporary quantities, including info on the other daughter computed residually
+        double sum1_jump = 0;
+        double sum2_jump = 0;
+        size_t num_jumps_daughter_2 = num_jumps[j * num_states + k] - num_jumps_daughter[jump_index + j * num_states + k];
+        num_at_risk_daughter_2[0] = num_at_risk[j] - num_at_risk_daughter[at_risk_index + j];
+
+        // compute vectors containing the innermost sum in the approximation used by Ishwaran and Kogalur
+        if (num_jumps_daughter[jump_index + j * num_states + k] > 0) {
+            NAsum1[0] = (double) num_jumps_daughter[jump_index + j * num_states + k] / num_at_risk_daughter[at_risk_index + j];
+        } else {
+            NAsum1[0] = 0;  // ensures that NAsum1 gets reset for every jump
+        }
+        if (num_jumps_daughter_2 > 0) {
+            NAsum2[0] = (double) num_jumps_daughter_2 / num_at_risk_daughter_2[0];
+        } else {
+            NAsum2[0] = 0;  // ensures that NAsum2 gets reset for every jump
+        }
+
+        for (size_t i = 1; i < num_unique_event_times; ++i) {
+            NAsum1[i] = NAsum1[i - 1];
+            NAsum2[i] = NAsum2[i - 1];
+
+            // update quantities for the other daughter
+            size_t d1 = num_jumps_daughter[jump_index + i * dim + j * num_states + k];
+            num_jumps_daughter_2 = num_jumps[i * dim + j * num_states + k] - d1;
+            num_at_risk_daughter_2[i] = num_at_risk[i * num_states + j] - num_at_risk_daughter[at_risk_index + i * num_states + j];
+            cout << "num_at_risk_daughter_2[i] = " << num_at_risk_daughter_2[i] << endl;
+
+            if (d1 > 0) {
+                NAsum1[i] += (double) d1 / num_at_risk_daughter[at_risk_index + i * num_states + j];
+            }
+            if (num_jumps_daughter_2 > 0) {
+                NAsum2[i] += (double) num_jumps_daughter_2 / num_at_risk_daughter_2[i];     // something is weird here...
+            }
+        }
+
+        // now compute the outer sums
+        for (size_t i = 0; i < num_unique_event_times - 1; ++i) {
+            // in survival, you would not need the abs (maybe this adaptation to multi-states does not even make sense)
+            cout << "num_at_risk_daughter_2[i + 1] = " << num_at_risk_daughter_2[i + 1] << ", NAsum2[i] = " << NAsum1[i] << endl;
+            sum1_jump += abs(static_cast<int>(num_at_risk_daughter[at_risk_index + i * num_states + j]) - static_cast<int>(num_at_risk_daughter[at_risk_index + (i + 1) * num_states + j])) * num_at_risk_daughter[at_risk_index + (i + 1) * num_states + j] * NAsum1[i];
+            sum2_jump += abs(static_cast<int>(num_at_risk_daughter_2[i]) - static_cast<int>(num_at_risk_daughter_2[i + 1])) * num_at_risk_daughter_2[i + 1] * NAsum2[i];
+        }
+        cout << "Added to cons: " << (num_at_risk_daughter[at_risk_index + j] * sum1_jump + num_at_risk_daughter_2[0] * sum2_jump) / num_at_risk[j] << endl;
+        cons += (num_at_risk_daughter[at_risk_index + j] * sum1_jump + num_at_risk_daughter_2[0] * sum2_jump) / num_at_risk[j];
+        cout << "cons = " << cons << endl;
+
+        // reset NAsum vectors
+        //fill(NAsum1.begin(), NAsum1.end(), 0);
+        //fill(NAsum2.begin(), NAsum2.end(), 0);
+    }
+    return 1/(1 + cons);
+}
+
+double MultistateTree::approxLogRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
+
 }
 
 // prediction for multi-state trees

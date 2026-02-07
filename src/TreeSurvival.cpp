@@ -538,7 +538,7 @@ double SurvivalTree::logRank(const vector<size_t>& num_deaths, const vector<size
         // return the squared log-rank test
         return(sum_num * sum_num / sum_den);
     } else {
-        return(-1);
+        return -1;
     }
 }
 
@@ -567,7 +567,7 @@ double SurvivalTree::conserve(const vector<size_t>& num_deaths, const vector<siz
     }
 
     for (size_t i = 1; i < num_unique_event_times - 1; ++i) {
-        if (num_deaths_daughter[i] > 0) {
+        if (num_deaths_daughter[array_index + i] > 0) {
             NAsum1[i] = NAsum1[i - 1] + (double) num_deaths_daughter[array_index + i]/num_at_risk_daughter[array_index + i];
         } else {
             NAsum1[i] = NAsum1[i - 1];
@@ -588,7 +588,7 @@ double SurvivalTree::conserve(const vector<size_t>& num_deaths, const vector<siz
     }
 
     double cons = (num_at_risk_daughter[0] * sum1 + num_at_risk_daughter_2[0] * sum2) / num_at_risk[0];
-    return (1/(1 + cons));
+    return 1/(1 + cons);
 }
 
 double SurvivalTree::approxLogRank(const vector<size_t>& num_deaths, const vector<size_t>& num_at_risk, 

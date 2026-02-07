@@ -174,7 +174,6 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
     vector<size_t> unique_values_features(num_features);
     vector<string> feature_names(num_features);
 
-    cout << "num_features = " << num_features << endl;
     for (size_t i = 0; i < num_features; ++i) {
         // update the feature type (categorical or continuous)
         if (categorical[feature_indices[i]] == true) {
@@ -185,7 +184,6 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
         
         // update names of features
         feature_names[i] = as<vector<string>>(feature_data.names())[feature_indices[i]];
-        cout << "Feature name: " << feature_names[i] << endl;
 
         // update the number of unique values
         unique_values_features[i] = unique[feature_indices[i]];

@@ -54,9 +54,12 @@ private:
   void bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
                            vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices); // computes the best split for a chosen categorical feature
   
-  // splitting rules
-  // see notes, many different possibilities once the template functions are up and running
-  double logRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id);
+  // splitting rules (see notes for more ideas)
+  double logRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id = 0);
+  double Gehan(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id = 0);
+  double TaroneWare(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id = 0);
+  double conserve(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id = 0);
+  double approxLogRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id = 0);
 
   // frees memory from temporary quantities used in growing the tree
   void cleanUpTree() override {

@@ -527,6 +527,32 @@ preprocess_data <- function(data) {
   list(data = data, unique_values = unique_values, categorical = categorical)
 }
 
+# function for computing the Kaplan-Meier estimator from a Nelson-Aalen estimator
+# na is the Nelson-Aalen estimator, a vector
+km <- function(na) {
+  res <- rep(1, length(na))
+  for (i in 2:length(na)) {
+    res[i] <- res[i - 1] * (1 - (na[i] - na[i - 1]))
+  }
+  res
+}
+
+# function for computing the Aalen-Johansen estimator from a Nelson-Aalen estimator
+# na is the Nelson-Aalen estimator, a list of matrices
+# a0 is the initial value for the AJ estimator (assumed to be the identity if a0 is not supplied)
+aj <- function(na, a0 = NULL) {
+  res <- list()
+  if(is.null(a0)) {
+    a0 = diag(dim(na[[1]])[1])
+  }
+  res[[1]] <- a0
+  for (i in 2:length(na)) {
+    Delta <- na[[i]] - na[[i - 1]]
+    res[[i]] <- res[[i - 1]] + as.vector(res[[i - 1]] %*% Delta) - res[[i - 1]] * rowSums((Delta))
+  }
+  res
+}
+
 # function for testing the methods in Data.cpp
 test_data_functions <- function(data, response_indices, feature_indices) {
   processed_data <- preprocess_data(data)
