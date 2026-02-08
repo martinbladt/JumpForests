@@ -71,8 +71,8 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         size_t index = i * max_response_length + 1;
         //cout << "j = " << j << ", index = " << index << endl;
         //cout << "states[index] = " << static_cast<size_t>(states[index]) << endl;
-        //cout << "Number of elements in response_event_time_ids: " << response_event_time_ids->size() << endl;   // why is this vector broken specifically?
-        //cout << "Number of unique event times: " << unique_event_times->size() << endl;                         // why does this work fine??
+        //cout << "Number of elements in response_event_time_ids: " << response_event_time_ids->size() << endl;
+        //cout << "Number of unique event times: " << unique_event_times->size() << endl;
         // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
         while (j < max_response_length && states[index] != 0) {
             size_t id = (*response_event_time_ids)[index];
@@ -94,8 +94,6 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     }
     // compute the cumulative number of jumps
     cumulativeMatrixSums(num_jumps_acc, num_jumps, num_states);
-    //cout << "Computed num_jumps_acc" << endl;
-    //printVector(num_jumps_acc);
 
     // now compute number at risk via the key decomposition
     
@@ -108,10 +106,14 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         }
     }
     
-    //cout << "Number of jumps: " << endl;
-    //printVector(num_jumps);
-    //cout << "Numbers at risk: " << endl;
-    //printVector(num_at_risk);
+    cout << "Number of jumps: " << endl;
+    printVector(num_jumps, dim);
+    cout << "Numbers at risk: " << endl;
+    printVector(num_at_risk, num_states);
+    cout << "Computed num_jumps_acc:" << endl;
+    printVector(num_jumps_acc, dim);
+    cout << "Censoring contribution:" << endl;
+    printVector(censoring_contribution, num_states);
 }
 
 // version of jan29
@@ -202,11 +204,13 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
     cout << "Numbers of observations in right node " << endl;
     printVector(num_obs_right);
     cout << "Computed quantities for every possible split. num_at_risk_right:" << endl;
-    printVector(num_at_risk_right);
-    cout << "num_at_risk:" << endl;
-    printVector(num_at_risk);
-    cout << "num_jumps_acc_right:" << endl;
-    printVector(num_jumps_acc_right);
+    printVector(num_at_risk_right, num_states);
+    //cout << "num_at_risk:" << endl;
+    //printVector(num_at_risk, num_states);
+    //cout << "num_jumps_acc_right:" << endl;
+    //printVector(num_jumps_acc_right, dim);
+    cout << "num_jumps_right:" << endl;
+    printVector(num_jumps_right, dim);
     */
 }
 
@@ -549,6 +553,11 @@ void MultistateTree::computeNA(size_t node_index) {
             for (size_t k = 0; k < num_states; ++k) {
                 if (j != k) {
                     na[index + k] = na[index - dim + k];
+                    // for debugging only
+                    if (num_at_risk[i * num_states + j] == 0 && num_jumps[index + k] > 0) {
+                        cout << "Warning in computeNA: num_at_risk[i * num_states + j] = 0, but num_jumps[index + k] = " << num_jumps[index + k] << endl; 
+                    }
+
                     if (num_at_risk[i * num_states + j] != 0) {
                         na[index + k] += double(num_jumps[index + k]) / double(num_at_risk[i * num_states + j]);
                     }
@@ -598,7 +607,12 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
             if (Y < Y1) {
                 cout << "Warning: Y = " << Y << " < Y1 = " << Y1 << endl; 
             }
-            
+            if (d > Y) {
+                cout << "Warning: Number of jumps d = " << d << ", but Y = " << Y << " at event time i = " << i << " and jump (" << static_cast<size_t>(j + 1) << ", " << static_cast<size_t>(k + 1) << ")" << endl;
+            }
+            if (d1 > Y1) {
+                cout << "Warning: Number of jumps d1 = " << d1 << ", but Y1 = " << Y1 << " at event time i = " << i << " and jump (" << static_cast<size_t>(j + 1) << ", " << static_cast<size_t>(k + 1) << ")" << endl;
+            }
 
             // prevent division by zero in the log-rank test
             if (Y < 2 || Y1 < 1) {
@@ -710,7 +724,7 @@ double MultistateTree::TaroneWare(const vector<size_t>& num_jumps, const vector<
     }
 }
 
-// WARNING: This splitting rule may be completely nonsensical for multi-states
+// WARNING: This splitting rule may be completely nonsensical for multi-states (but it seems to work with the absolute value fix)
 double MultistateTree::conserve(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
     // fetch relevant data quantities
     const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
@@ -786,7 +800,7 @@ double MultistateTree::conserve(const vector<size_t>& num_jumps, const vector<si
 }
 
 double MultistateTree::approxLogRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
-
+    
 }
 
 // prediction for multi-state trees

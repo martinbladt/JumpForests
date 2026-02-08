@@ -178,14 +178,16 @@ void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matr
     // initialise the first matrix
     for (size_t j = 0; j < d; ++j) {
         for (size_t k = 0; k < d; ++k) {
-            acc_matrix[j * d + k] = matrix[j * d + k];
+            acc_matrix[j * d + k] = 0;  // =  matrix[j * d + k]
         }
     }
     // now update the matrix
     for (size_t i = 1; i < num_matrices; ++i) {
         for (size_t j = 0; j < d; ++j) {
             for (size_t k = 0; k < d; ++k) {
-                acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[i * dim + j * d + k];
+                // (i - 1) * dim instead of i * dim in matrix because we want t- and not t for the accumulated jumps in the key decomposition for multi-states
+                acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[(i - 1) * dim + j * d + k];
+                //acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[i * dim + j * d + k];
             }
         }
     }
@@ -210,8 +212,9 @@ void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matr
         for (size_t i = 1; i < num_matrices; ++i) {
             for (size_t j = 0; j < d; ++j) {
                 for (size_t k = 0; k < d; ++k) {
-                    size_t index = i * dim + j * d + k;
-                    acc_matrix[v_index + index] = acc_matrix[v_index + index - dim] + matrix[v_index + index];
+                    //size_t index = i * dim + j * d + k;
+                    size_t prev_matrix_index = (i - 1) * dim + j * d + k;   // used to get t- instead of t for accumulated jumps in the key decomposition for multi-states 
+                    acc_matrix[v_index + prev_matrix_index + dim] = acc_matrix[v_index + prev_matrix_index] + matrix[v_index + prev_matrix_index];
                 }
             }
         }
@@ -219,17 +222,29 @@ void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matr
 }
 
 void printVector(const vector<double>& vec) {
-    for (int i = 0; i < vec.size() - 1; ++i) {
+    for (size_t i = 0; i < vec.size() - 1; ++i) {
         cout << vec[i] << ", ";
     }
     cout << vec[vec.size() - 1] << endl;
 }
 
-void printVector(const vector<size_t>& vec) {
-    for (int i = 0; i < vec.size() - 1; ++i) {
-        cout << vec[i] << ", ";
+void printVector(const vector<size_t>& vec, size_t stride_length) {
+    if (stride_length == 0) {
+        for (size_t i = 0; i < vec.size() - 1; ++i) {
+            cout << vec[i] << ", ";
+        }
+        cout << vec[vec.size() - 1] << endl;
+    } else {
+        size_t num_vectors = vec.size() / stride_length;
+        for (size_t i = 0; i < num_vectors; ++i) {
+            cout << i << ": " "{";
+            for (size_t j = 0; j < stride_length - 1; ++j) {
+                cout << vec[i * stride_length + j] << ", ";
+            }
+            cout << vec[(i + 1) * stride_length - 1] << "}" << ", ";
+        }
+        cout << endl;
     }
-    cout << vec[vec.size() - 1] << endl;
 }
 
 void printVector(const vector<uint8_t>& vec) {
@@ -240,14 +255,14 @@ void printVector(const vector<uint8_t>& vec) {
 }
 
 void printVector(const vector<bool>& vec) {
-    for (int i = 0; i < vec.size() - 1; ++i) {
+    for (size_t i = 0; i < vec.size() - 1; ++i) {
         cout << vec[i] << ", ";
     }
     cout << vec[vec.size() - 1] << endl;
 }
 
 void printVector(const vector<string>& vec) {
-    for (int i = 0; i < vec.size() - 1; ++i) {
+    for (size_t i = 0; i < vec.size() - 1; ++i) {
         cout << vec[i] << ", ";
     }
     cout << vec[vec.size() - 1] << endl;

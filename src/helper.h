@@ -38,7 +38,7 @@ vector<int> subtractMatrices(const vector<size_t>& matrix1, size_t begin, size_t
 
 // printing functions
 void printVector(const vector<double>& vec);
-void printVector(const vector<size_t>& vec);
+void printVector(const vector<size_t>& vec, size_t stride_length = 0);
 void printVector(const vector<uint8_t>& vec);
 void printVector(const vector<bool>& vec);
 
