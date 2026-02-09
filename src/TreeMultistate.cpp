@@ -106,6 +106,8 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         }
     }
     
+    // only for debugging
+    /*
     cout << "Number of jumps: " << endl;
     printVector(num_jumps, dim);
     cout << "Numbers at risk: " << endl;
@@ -114,6 +116,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     printVector(num_jumps_acc, dim);
     cout << "Censoring contribution:" << endl;
     printVector(censoring_contribution, num_states);
+    */
 }
 
 // version of jan29
@@ -444,8 +447,8 @@ bool MultistateTree::createSplit(size_t node_index) {
         feature_indices[i] = i;
     }
     vector<size_t> sampled_features = sampleIndices(feature_indices, mtry, false, random_number_generator);
-    cout << "Sampled features: ";
-    printVector(sampled_features);
+    //cout << "Sampled features: ";
+    //printVector(sampled_features);
 
     // now consider each of the sampled features
     for (size_t i : sampled_features) {
@@ -587,7 +590,6 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
     const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
     uint8_t num_states = data->getNumberOfStates();
     uint8_t dim = num_states * num_states;
-    size_t num_valid_jumps = valid_jumps.size();
 
     double LR = 0;
     for (auto jump : valid_jumps) {
@@ -642,7 +644,6 @@ double MultistateTree::Gehan(const vector<size_t>& num_jumps, const vector<size_
     const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
     uint8_t num_states = data->getNumberOfStates();
     uint8_t dim = num_states * num_states;
-    size_t num_valid_jumps = valid_jumps.size();
 
     double G = 0;
     for (auto jump : valid_jumps) {
@@ -685,7 +686,6 @@ double MultistateTree::TaroneWare(const vector<size_t>& num_jumps, const vector<
     const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
     uint8_t num_states = data->getNumberOfStates();
     uint8_t dim = num_states * num_states;
-    size_t num_valid_jumps = valid_jumps.size();
 
     double TW = 0;
     for (auto jump : valid_jumps) {
@@ -800,7 +800,40 @@ double MultistateTree::conserve(const vector<size_t>& num_jumps, const vector<si
 }
 
 double MultistateTree::approxLogRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
-    
+    // fetch relevant data quantities
+    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+
+    double aLR = 0;
+    for (auto jump : valid_jumps) {
+        uint8_t j = jump.first - 1;
+        uint8_t k = jump.second - 1;
+        double D1 = 0;
+        double D = 0;
+        double sum_num = 0;
+        size_t jump_index = split_id * num_unique_event_times * dim;
+        size_t at_risk_index = split_id * num_unique_event_times * num_states;
+        for (size_t i = 0; i < num_unique_event_times; ++i) {
+            const double d = (double) num_jumps[i * dim + j * num_states + k];
+            const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
+            const double Y = (double) num_at_risk[i * num_states + j];
+            const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
+            sum_num += d1 - Y1 * d / Y;
+            D1 += d1;
+            D += d;     // I think this is ok, check that it makes sense
+        }
+
+        double den = sqrt((D1 - sum_num) * (D - D1 + sum_num));
+        if (den != 0) {
+            aLR += abs((sqrt(D) * sum_num ) / den); // alternative: take absolute values in the end, but this is more in line with the log-rank test
+        }
+    }
+    if (aLR > 0) {
+        return aLR;
+    } else {
+        return -1;  // if a non-sensical value has been computed, treat as unvalid split
+    }
 }
 
 // prediction for multi-state trees

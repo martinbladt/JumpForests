@@ -215,7 +215,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   result["unique.event.times"] = unique_event_times_R;
   result["Tree"] = multistate_tree;               // add the tree (as a pointer, only to be used for prediction in C++)
   JFCppTreePredict(result);                       // compute and save predictions on the data
-  //     // compute and save error estimate
+  //     // compute and save error estimate (need to come up with something for multi-states)
 
   // save information about the tree itself
   result["num.nodes"] = tree->getNumberOfNodes();
@@ -266,6 +266,7 @@ void JFCppTreePredict(List& JFTree) {
     predictions = selectColumns(predictions, tree->getTrueEventTimeIDs());
     JFTree["predictions"] = predictions;
   }
+
   if (type == "Multi-state") {
     MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
     size_t num_states = tree->getData()->getNumberOfStates();
@@ -287,7 +288,7 @@ void JFCppTreePredict(List& JFTree) {
   }
 }
 
-// it is possible that the return type should be different such as a list (especially for multi-states)
+// function to predict on a new dataset (Regression, Classification and Survival)
 
 // [[Rcpp::export]]
 NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector feature_indices, 
@@ -329,10 +330,40 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
     predictions = selectColumns(predictions, tree->getTrueEventTimeIDs());
     return predictions;
   }
+}
 
-  if (type == "Multi-state") {
-    
-  }
+// function to predict on a new dataset for multi-states
+
+// [[Rcpp::export]]
+List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, 
+                                 LogicalVector categorical, NumericVector unique) {
+  // convert the input to C++ vectors
+  vector<size_t> response_indices_cpp;  // need an empty vector for the response indices
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+  
+  // convert the new data to a suitable Data object (no need to use the multi-state edition for the new data)
+  Data new_data = Data(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
+  
+  // fetch multi-state tree and relevant quantities
+  MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
+  size_t num_states = tree->getData()->getNumberOfStates();
+  size_t num_unique_event_times = tree->getNumberOfUniqueEventTimes();
+  size_t num_obs = new_data.getNumberOfObs();
+  List predictions(num_obs);  // each prediction is a list of matrices
+
+  for (size_t i = 0; i < num_obs; ++i) {
+      List rpred(num_unique_event_times);
+      vector<double> pred = get<vector<double>>(tree->predict(new_data.get_x_row(i)));
+      for (size_t j = 0; j < num_unique_event_times; ++j) {
+        auto start_it = pred.begin() + (j * num_states * num_states);
+        NumericMatrix pred_time(num_states, num_states, start_it);
+        rpred[j] = transpose(pred_time);
+      }
+      predictions[i] = rpred;
+    }
+    return predictions;
 }
 
 // error computation for decision trees
@@ -531,11 +562,69 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
     result["avg.num.terminal.nodes"] = forest->getAvgNumberOfTerminalNodes();
     result["avg.tree.depth"] = forest->getAvgTreeDepth();
   }
+  return result;
+}
 
-  // the forest is a multi-state forest
-  if (tree_type == 4) {
+// [[Rcpp::export]]
+List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
+  unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector feature_indices, 
+  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers) {
+  
+  // convert the input to C++ vectors
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+  string splitrule_cpp = as<string>(splitrule);
 
+  // make the data into a C++ format and save it via a shared pointer
+  shared_ptr<Data> data = make_shared<Data>(jump_data, max_response_length, num_states, df_features, feature_indices_cpp, categorical_cpp, unique_cpp);
+
+  // we save a list with all information about the forest
+  size_t subsample_size = floor(data->getNumberOfObs() * sample_rate);
+
+  List result = List::create(
+    Named("num.obs") = data->getNumberOfObs(),
+    Named("num.features") = data->getNumberOfFeatures(),
+    Named("feature.names") = data->getFeatureNames(), 
+    Named("sampling.type") = swr,
+    Named("subsample.size") = subsample_size,
+    Named("splitrule") = splitrule,
+    Named("mtry") = mtry,
+    Named("min.node.size") = min_node_size,
+    Named("nsplits") = nsplits,
+    Named("honest") = honest
+  );
+
+  // determine the (sorted) unique event times and the corresponding response IDs
+  vector<double> unique_event_times = uniqueEventTimesMultistate(data->getTimes(), data->getStates());
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
+
+  // check validity of splitrule argument (just logrank for now)
+  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank"};
+  if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
+    throw runtime_error("Invalid splitrule, please choose between logrank, gehan or taroneware");
   }
+
+  // create and grow the multi-state forest
+  MultistateForest* forest = new MultistateForest(unique_event_times, response_event_time_ids, data->getNumberOfStates());
+  forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, seed, nworkers);
+  forest->grow();
+
+  // specific to multi-states
+  NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
+  XPtr<MultistateForest> multistate_forest(forest, true);
+  // compute total number of jumps? maybe in Data?
+  result["tree.type"] = "Multi-state";
+  result["num.trees"] = ntrees;
+  result["unique.event.times"] = unique_event_times_R;
+  result["Forest"] = multistate_forest;           // add the forest as a pointer, only to be used for prediction
+
+  JFCppForestPredict(result);
+
+  result["avg.num.nodes"] = forest->getAvgNumberOfNodes();
+  result["avg.num.terminal.nodes"] = forest->getAvgNumberOfTerminalNodes();
+  result["avg.tree.depth"] = forest->getAvgTreeDepth();
+  
   return result;
 }
 
@@ -569,7 +658,7 @@ void JFCppForestPredict(List& JFForest) {
     // compute predictions via multi-threading
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
     const pair<vector<double>, vector<double>>& predictions_cpp = forest->computePredictions();
-    size_t num_unique_event_times = forest->getEventTimes().size();
+    size_t num_unique_event_times = forest->getNumUniqueEventTimes();
     size_t num_obs = JFForest["num.obs"];
     
     // now fill the matrices of predictions
@@ -592,7 +681,37 @@ void JFCppForestPredict(List& JFForest) {
   }
   
   if (type == "Multi-state") {
+    // compute predictions via multi-threading
+    MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
+    const pair<vector<double>, vector<double>>& predictions_cpp = forest->computePredictions();
+    size_t num_unique_event_times = forest->getNumUniqueEventTimes();
+    size_t num_obs = JFForest["num.obs"];
+    uint8_t num_states = forest->getData()->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    List predictions(num_obs);      // each prediction is a list of matrices
+    List predictions_oob(num_obs);  
 
+    for (size_t i = 0; i < num_obs; ++i) {
+      List rpred(num_unique_event_times);                     // list of NumericMatrix for a single prediction
+      List rpred_oob(num_unique_event_times);                 // ditto for OOB
+      for (size_t t = 0; t < num_unique_event_times; ++t) {
+        NumericMatrix pred_time(num_states, num_states);
+        NumericMatrix pred_time_oob(num_states, num_states);
+        for (size_t j = 0; j < num_states; ++j) {
+          for (size_t k = 0; k < num_states; ++k) {
+            pred_time(j, k) = predictions_cpp.first[i * num_unique_event_times * dim + t * dim + j * num_states + k];
+            pred_time_oob(j, k) = predictions_cpp.second[i * num_unique_event_times * dim + t * dim + j * num_states + k];
+          }
+        }
+        rpred[t] = pred_time;
+        rpred_oob[t] = pred_time_oob;
+      }
+      predictions[i] = rpred;
+      predictions_oob[i] = rpred_oob;
+    }
+    // save predictions
+    JFForest["predictions"] = predictions;
+    JFForest["oob.predictions"] = predictions_oob;
   }
 }
 

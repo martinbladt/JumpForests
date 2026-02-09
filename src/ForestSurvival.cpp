@@ -131,7 +131,7 @@ vector<double> SurvivalForest::predict(const vector<double>& x) {
     for (int i = 0; i < num_unique_event_times; ++i) {
         result[i] = result[i]/ntrees;
     }
-    return(result);
+    return result;
 }
 
 pair<vector<double>, vector<double>> SurvivalForest::computePredictions() {

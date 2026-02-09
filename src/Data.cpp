@@ -34,7 +34,7 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
             y.assign(2*num_obs, 0);
             vector<double> times = as<vector<double>>(data[response_indices[0]]);
             vector<double> ind = as<vector<double>>(data[response_indices[1]]);
-            for (int i = 0; i < num_obs; ++i) {
+            for (size_t i = 0; i < num_obs; ++i) {
                 y[i] = times[i];
                 y[num_obs + i] = ind[i];
             }
@@ -134,12 +134,12 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
         states.assign(num_obs * max_response_length, 0);
         censoring_times.assign(num_obs, 0);
         censoring_states.assign(num_obs, 0);
-        for (int i = 0; i < num_obs; ++i) {
+        for (size_t i = 0; i < num_obs; ++i) {
             List obs = as<List>(jump_data[i]);
             vector<double> obs_times = as<vector<double>>(obs[0]);
             vector<uint8_t> obs_states = as<vector<uint8_t>>(obs[1]);
             size_t response_length = obs_times.size();
-            for (int j = 0; j < response_length; ++j) {
+            for (size_t j = 0; j < response_length; ++j) {
                 times[i * max_response_length + j] = obs_times[j];
                 states[i * max_response_length + j] = obs_states[j];
             }

@@ -51,8 +51,8 @@ vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, boo
     vector<size_t> result;
     if (with_replacement) {
         uniform_int_distribution<> dist(0, n - 1);
-        for (int i = 0; i < k; ++i) {
-            int index = dist(rng);
+        for (size_t i = 0; i < k; ++i) {
+            size_t index = dist(rng);
             result.push_back(global_indices[index]);
         }
     }
@@ -82,7 +82,7 @@ size_t vector_sum(const vector<size_t>& vec) {
 
 // adds the vector add to the vector result and modifies it (result must be at least as large as add)
 void sum_vectors(vector<double>& result, const vector<double>& add) {
-    for (int i = 0; i < add.size(); ++i) {
+    for (size_t i = 0; i < add.size(); ++i) {
         result[i] += add[i];
     }
 }
@@ -248,7 +248,7 @@ void printVector(const vector<size_t>& vec, size_t stride_length) {
 }
 
 void printVector(const vector<uint8_t>& vec) {
-    for (int i = 0; i < vec.size() - 1; ++i) {
+    for (size_t i = 0; i < vec.size() - 1; ++i) {
         cout << static_cast<size_t>(vec[i]) << ", ";
     }
     cout << static_cast<size_t>(vec[vec.size() - 1]) << endl;
@@ -269,7 +269,7 @@ void printVector(const vector<string>& vec) {
 }
 
 // indices: which observations are used to fit, n: the total number of observations
-vector<bool> computeOOBIndices(const vector<size_t>& indices, unsigned int n) {
+vector<bool> computeOOBIndices(const vector<size_t>& indices, size_t n) {
     vector<bool> oob(n, true);
     for (size_t i : indices) {
         oob[i] = false;
@@ -278,7 +278,7 @@ vector<bool> computeOOBIndices(const vector<size_t>& indices, unsigned int n) {
 }
 
 // computes OOB indices when data has been partitioned as for honest trees
-vector<bool> computeOOBIndicesDouble(const vector<size_t>& grow, const vector<size_t>& holdout, unsigned int n) {
+vector<bool> computeOOBIndicesDouble(const vector<size_t>& grow, const vector<size_t>& holdout, size_t n) {
     vector<bool> oob(n, true);
     for (size_t i : grow) {
         oob[i] = false;

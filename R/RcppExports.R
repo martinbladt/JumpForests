@@ -13,12 +13,20 @@ JFCppTreePredict <- function(JFTree, df, feature_indices, categorical, unique) {
     .Call(`_JumpForests_JFCppTreePredict`, JFTree, df, feature_indices, categorical, unique)
 }
 
+JFCppTreePredictMM <- function(JFTree, df, feature_indices, categorical, unique) {
+    .Call(`_JumpForests_JFCppTreePredictMM`, JFTree, df, feature_indices, categorical, unique)
+}
+
 JFCppTreeError <- function(JFTree, df, feature_indices, categorical, unique, response_indices) {
     .Call(`_JumpForests_JFCppTreeError`, JFTree, df, feature_indices, categorical, unique, response_indices)
 }
 
 JFCppForest <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, response_indices, feature_indices, categorical, unique, seed, nworkers) {
     .Call(`_JumpForests_JFCppForest`, tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, response_indices, feature_indices, categorical, unique, seed, nworkers)
+}
+
+JFCppForestMM <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, categorical, unique, seed, nworkers) {
+    .Call(`_JumpForests_JFCppForestMM`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, categorical, unique, seed, nworkers)
 }
 
 JFCppForestPredict <- function(JFForest, df, feature_indices, categorical, unique) {

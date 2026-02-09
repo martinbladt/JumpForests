@@ -38,7 +38,7 @@ lambda <- function(t, x){
 
 set.seed(2026)
 
-n <- 20
+n <- 100
 X <- runif(n)   # signal
 Y <- rnorm(n)   # noise
 c <- runif(n, 0, 5)
@@ -65,8 +65,15 @@ which(names(test_data) %in% attr(terms(formula), "term.labels")) - 1
 #test_data_functions_mm(sim, test_data, c(1, 2))
 # conclusion: Data works precisely as intended, also for multi-states
 
-fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "conserve", min_node_size = 5)
+fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20)
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
+
+jftree.predict(fitted_tree)
+new_d <- data.frame(X2 = runif(5), X1 = rnorm(5))
+jftree.predict(fitted_tree, new_d)
+
+# holy..., no errors?? Check thoroughly
+fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 10, splitrule = "logrank")
 
 # conditional Aalen-johansen
 set.seed(2026)

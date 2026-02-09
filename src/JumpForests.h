@@ -20,6 +20,8 @@ void JFCppTreePredict(List& JFTree);
 //List JFCppTreePredict(const List& JFTree, DataFrame df);
 NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector feature_indices, 
                                LogicalVector categorical, NumericVector unique);
+List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, 
+                                 LogicalVector categorical, NumericVector unique);
 
 // error computation with trees
 void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response);
@@ -35,6 +37,9 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
 List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule,
     unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector response_indices, NumericVector feature_indices, 
     LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers);
+List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
+  unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector feature_indices, 
+  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers);
 
 // predicting with forests
 void JFCppForestPredict(List& JFForest);

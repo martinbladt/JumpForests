@@ -43,8 +43,8 @@ void printVector(const vector<uint8_t>& vec);
 void printVector(const vector<bool>& vec);
 
 // helper functions for forests
-vector<bool> computeOOBIndices(const vector<size_t>& indices, unsigned int n);
-vector<bool> computeOOBIndicesDouble(const vector<size_t>& grow, const vector<size_t>& holdout, unsigned int n);
+vector<bool> computeOOBIndices(const vector<size_t>& indices, size_t n);
+vector<bool> computeOOBIndicesDouble(const vector<size_t>& grow, const vector<size_t>& holdout, size_t n);
 pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indices, mt19937 rng);
 
 // helper functions for Rcpp

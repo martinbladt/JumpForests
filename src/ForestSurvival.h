@@ -21,6 +21,9 @@ public:
   const vector<size_t> getTrueEventTimeIDs() const {
     return true_event_time_ids;
   }
+  const size_t getNumUniqueEventTimes() const {
+    return num_unique_event_times;
+  }
 
   const vector<vector<double>> getCHF() const {
     return chf;

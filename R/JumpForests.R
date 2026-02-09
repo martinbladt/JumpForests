@@ -151,8 +151,15 @@ jftree.predict <- function(tree_list, new_data = NULL) {
   new_data <- new_data[, covariates]  # ensures the columns have the same order as the original dataset
   feature_indices <- which(names(new_data) %in% covariates) - 1
   processed_data <- preprocess_data(new_data)
-  return(JFCppTreePredict(tree_list, processed_data$data, feature_indices,
+
+  # may need to be adapted when more types of trees are implemented
+  if (tree_list$tree.type != "Multi-state") {
+    return(JFCppTreePredict(tree_list, processed_data$data, feature_indices,
                           processed_data$categorical, processed_data$unique_values))
+  } else {
+    return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices,
+                          processed_data$categorical, processed_data$unique_values))
+  }
 }
 
 jftree.error <- function(tree_list, new_data = NULL) {
@@ -188,12 +195,10 @@ jftree.error <- function(tree_list, new_data = NULL) {
                           processed_data$categorical, processed_data$unique_values, response_indices))
 }
 
-# the main function for fitting forests
-jfforest <- function(formula, data, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
+# the main function for fitting forests (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
+jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
                      ntrees = NULL, honest = FALSE, swr = FALSE, sample_rate = NULL, double_bootstrap = FALSE, 
                      seed = NULL, nworkers = 0) {
-  # preprocess the entire dataset
-  processed_data <- preprocess_data(data)
   lhs <- as.character(formula[[2]])
 
   # if seed is not set, generate a random one
@@ -220,8 +225,10 @@ jfforest <- function(formula, data, splitrule = NULL, mtry = NULL, min_node_size
     }
   }
 
-  # if left hand side is of length 1, classification or regression
-  if (length(lhs) == 1) {
+  # if left hand side is of length 1, classification, regression or multi-state
+  if (length(lhs) == 1 && lhs[1] != "MM") {
+    # preprocess the entire dataset
+    processed_data <- preprocess_data(data)
     response_indices <- which(names(data) %in% as.character(formula[[2]])[1]) - 1
     # formula determines the type of tree, the features and the response. if the
     # user supplies ~ ., all covariates are used
@@ -249,7 +256,6 @@ jfforest <- function(formula, data, splitrule = NULL, mtry = NULL, min_node_size
     if (is.null(splitrule)) {
       splitrule <- "mse"
     }
-
     JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
               sample_rate, response_indices, feature_indices, processed_data$categorical,
               processed_data$unique_values, seed, nworkers)
@@ -297,7 +303,42 @@ jfforest <- function(formula, data, splitrule = NULL, mtry = NULL, min_node_size
   }
   # if the left hand side is "MM(...)", multi-state
   else if (lhs[1] == "MM") {
-    # TODO
+    if (formula[[3]] == ".") {
+      covariates <- names(feature_data)
+    } else {
+      covariates <- attr(terms(formula), "term.labels")
+    }
+    feature_indices <- which(names(feature_data) %in% covariates) - 1
+
+    # by default, the number of variables tried at each split is the
+    # square root of the number of covariates
+    if (is.null(mtry)) {
+      mtry <- ceiling(sqrt(length(covariates)))
+    }
+    # for multi-states, the default minimal node size is 20
+    if (is.null(min_node_size)) {
+      min_node_size <- 20
+    }
+    # set default splitting rule (log-rank for multi-states so far)
+    if (is.null(splitrule)) {
+      splitrule <- "logrank"
+    }
+
+    # for multi-state trees, we need to process the feature data
+    if (is.null(feature_data)) {
+      stop("For multi-state trees, features have to be provided in feature_data")
+    } else {
+      processed_data <- preprocess_data(feature_data)
+    }
+
+    # determine number of states and max_response_length
+    max_response_length <- max(sapply(data, function(e) length(e$states)))
+    num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
+
+    JFCppForestMM(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
+                  nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, processed_data$categorical,
+                  processed_data$unique, seed, nworkers);
+
   } else {
     stop("Type of tree not recognised from the formula.")
   }
@@ -407,7 +448,9 @@ print_tree <- function(tree_list, full = FALSE) {
     cat("Training error:",tree_list$error, "\n")
   }
   if (tree_list$tree.type == "Multi-state") {
-    # TODO
+    if (length(tree_list$unique.event.times) <= 20) {
+      cat("Unique event times:", tree_list$unique.event.times, "\n")
+    }
   }
 
   # print hyperparameters
