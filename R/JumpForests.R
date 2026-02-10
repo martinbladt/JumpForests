@@ -359,8 +359,13 @@ jfforest.predict <- function(forest_list, new_data = NULL) {
     }
     feature_indices <- which(names(new_data) %in% covariates) - 1
     processed_data <- preprocess_data(new_data)
-    return(JFCppForestPredict(forest_list, processed_data$data, feature_indices,
+    if (forest_list$tree.type != "Multi-state") {
+      return(JFCppForestPredict(forest_list, processed_data$data, feature_indices,
                             processed_data$categorical, processed_data$unique_values))
+    } else {
+      return(JFCppForestPredictMM(forest_list, processed_data$data, feature_indices,
+                            processed_data$categorical, processed_data$unique_values))
+    }
   } else {
     cat("Error: If new_data is supplied, it must be a data.frame with the same names as the original dataset \n")
   }
@@ -521,7 +526,9 @@ print_forest <- function(forest_list) {
     cat("OOB error:", forest_list$oob.error, "\n")
   }
   if (forest_list$tree.type == "Multi-state") {
-    # TODO
+    if (length(forest_list$unique.event.times) <= 20) {
+      cat("Unique event times:", forest_list$unique.event.times, "\n")
+    }
   }
 
   # print hyperparameters
@@ -637,4 +644,8 @@ fit_survival_tree <- function(data, mtry, min_node_size, nsplits,
   fitSurvivalTree(processed_data$data, mtry, min_node_size, nsplits, response_indices,
                   feature_indices, processed_data$categorical, processed_data$unique_values,
                   subset_indices)
+}
+
+test_unique_event_times <- function(unique_event_times, prop_to_remove) {
+  testUniqueEventTimesThinning(unique_event_times, prop_to_remove)
 }

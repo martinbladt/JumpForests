@@ -119,8 +119,122 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     */
 }
 
-// version of jan29
+// version of feb10 (makes pre-sweep and checks for invalid splits before computing quantities)
 // for computing multi-state quantities (number at risk and number of jumps) for all splits in a node (for splits on continuous features)
+void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
+                                         vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final) {
+    // fetch states and other relevant data quantities
+    const vector<uint8_t>& states = data->getStates();
+    const vector<double>& censoring_times = data->getCensoringTimes();
+    const vector<uint8_t>& censoring_states = data->getCensoringStates();
+    uint8_t max_response_length = data->getMaxResponseLength();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    const vector<size_t>& current_node_obs = node_obs[node_index];
+
+    // all temporary quantities used for the key decomposition (for the right node)
+    vector<size_t> censoring_contribution_right(nsplits_final * num_unique_event_times * num_states, 0);
+    vector<size_t> num_jumps_acc_right(nsplits_final * num_unique_event_times * dim, 0);
+
+    // do initial sweep to check for invalid splits
+    for (size_t i : current_node_obs) {
+        double feature_val = data->get_x(i, feature);
+        for (size_t s = 0; s < nsplits_final; ++s) {
+            if (feature_val > split_points[s]) {
+                // add one to the number of observations in right node for split s
+                ++num_obs_right[s];
+            }
+        }
+    }
+
+    // compute initial rates, the censoring contribution C and the number of jumps across all event times and
+    // observations in the right node
+    for (size_t i : current_node_obs) {
+        double feature_val = data->get_x(i, feature);
+        for (size_t s = 0; s < nsplits_final; ++s) {
+            // if one of the daughter nodes are too small, skip the computation for that split
+            size_t num_obs_left = current_node_obs.size() - num_obs_right[s];
+            if (num_obs_right[s] < min_node_size || num_obs_left < min_node_size) {
+                continue;
+            }
+            if (feature_val > split_points[s]) {
+                // update I0
+                ++num_at_risk_right[s * num_unique_event_times * num_states + states[i * max_response_length] - 1];
+
+                // censoring contribution
+                uint8_t censoring_state = censoring_states[i];
+                if (censoring_state != 0) {     // censoring actually occurs
+                    double R  = censoring_times[i];
+                    for (size_t j = 0; j < num_unique_event_times; ++j) {
+                        if ((*unique_event_times)[j] > R) {
+                            // all following event times also satisfy > R
+                            for (size_t k = j; k < num_unique_event_times; ++k) {
+                                ++censoring_contribution_right[s * num_unique_event_times * num_states + k * num_states + censoring_state - 1];
+                            }
+                            break;
+                        }
+                    }
+                }
+                // compute the number of jumps
+                size_t j = 1;
+                size_t index = i * max_response_length + 1;
+                while(j < max_response_length && states[index] != 0) {
+                    size_t id = (*response_event_time_ids)[index];
+                    int current_state_index = states[index] - 1;
+                    int prev_state_index = states[index - 1] - 1;
+                    if (current_state_index != prev_state_index) {
+                        ++num_jumps_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index];
+                        //num_jumps_acc_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc_right[s * num_unique_event_times * dim + (id - 1) * dim + prev_state_index * num_states + current_state_index] + 1;
+                    } else {
+                        //num_jumps_acc_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc_right[s * num_unique_event_times * dim + (id - 1) * dim + prev_state_index * num_states + current_state_index];
+                    }
+                    ++j;
+                    ++index;
+                }
+
+            } else {
+                break;  // since the split points are sorted
+            }
+        }
+    }
+    
+    // compute the cumulative number of jumps across all splits
+    cumulativeMatrixSums(num_jumps_acc_right, num_jumps_right, num_states, nsplits_final);
+
+    // now compute number at risk for each possible split via the key decomposition
+    for (size_t s = 0; s < nsplits_final; ++s) {
+        size_t begin = s * num_unique_event_times * dim + dim;
+        size_t end = s * num_unique_event_times * dim + 2 * dim - 1;
+        for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above for each split
+            vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc_right, begin, end, transpose(num_jumps_acc_right, begin, end)), static_cast<size_t>(num_states));
+            begin += dim;
+            end += dim;
+            for (size_t k = 0; k < num_states; ++k) {
+                // key decomposition
+                size_t split_stride = s * num_unique_event_times * num_states;
+                num_at_risk_right[split_stride + j * num_states + k] = num_at_risk_right[split_stride + k] - censoring_contribution_right[split_stride + j * num_states + k] + jump_contributions[k];
+            }
+        }
+    }
+    
+    // for debugging
+    /*
+    cout << "Numbers of observations in right node " << endl;
+    printVector(num_obs_right);
+    cout << "Computed quantities for every possible split. num_at_risk_right:" << endl;
+    printVector(num_at_risk_right, num_states);
+    //cout << "num_at_risk:" << endl;
+    //printVector(num_at_risk, num_states);
+    //cout << "num_jumps_acc_right:" << endl;
+    //printVector(num_jumps_acc_right, dim);
+    cout << "num_jumps_right:" << endl;
+    printVector(num_jumps_right, dim);
+    */
+}
+
+// old version
+// for computing multi-state quantities (number at risk and number of jumps) for all splits in a node (for splits on continuous features)
+/*
 void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final) {
     // fetch states and other relevant data quantities
@@ -203,7 +317,7 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
     }
     
     // for debugging
-    /*
+    
     cout << "Numbers of observations in right node " << endl;
     printVector(num_obs_right);
     cout << "Computed quantities for every possible split. num_at_risk_right:" << endl;
@@ -214,8 +328,9 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
     //printVector(num_jumps_acc_right, dim);
     cout << "num_jumps_right:" << endl;
     printVector(num_jumps_right, dim);
-    */
+    
 }
+*/
 
 /*
 
@@ -316,7 +431,7 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
         if (splitrule == "approxlogrank") {
             split_val = approxLogRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
         }
-        cout << "Split value for split " << i << ":" << split_val << endl;
+        //cout << "Split value for split " << i << ":" << split_val << endl;
 
         if (split_val > best_split_val) {
             best_split_val = split_val;
@@ -412,13 +527,13 @@ void MultistateTree::makeLeaf(size_t node_index) {
 
 // function to create a split for a multi-state tree. returns true if leaf, otherwise false
 bool MultistateTree::createSplit(size_t node_index) {
-    cout << "Creating split on node " << node_index << endl;
+    //cout << "Creating split on node " << node_index << endl;
     const vector<size_t>& current_node_obs = node_obs[node_index];
 
     // if no split is possible, make the node a leaf
     if (current_node_obs.size() < 2 * min_node_size) {
         if (!honest) {
-            cout << "Computing multi-state quantities in node (leaf)" << endl;
+            //cout << "Computing multi-state quantities in node (leaf)" << endl;
             computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);               // for dishonest trees, use the growing indices
         } else {
             computeMultistateQuantities(holdout_node_obs[node_index], num_jumps, num_at_risk);   // for honest trees, use the holdout set for computing the CHF
@@ -427,7 +542,7 @@ bool MultistateTree::createSplit(size_t node_index) {
         return true;
     }
 
-    cout << "Computing multi-state quantities in node (not leaf)" << endl;
+    //cout << "Computing multi-state quantities in node (not leaf)" << endl;
     computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);   // update parent multi-state info
 
     double best_split_val = -1.0;
@@ -462,7 +577,7 @@ bool MultistateTree::createSplit(size_t node_index) {
         }
     }
 
-    cout << "best_split_val = " << best_split_val << endl;
+    //cout << "best_split_val = " << best_split_val << endl;
 
     // if no best split is found, make the node a leaf
     if (best_split_val < 0) {
@@ -730,7 +845,6 @@ double MultistateTree::conserve(const vector<size_t>& num_jumps, const vector<si
     const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
     uint8_t num_states = data->getNumberOfStates();
     uint8_t dim = num_states * num_states;
-    size_t num_valid_jumps = valid_jumps.size();
 
     //initialise vectors to hold the sums and the numbers at risk in the other daughter
     vector<double> NAsum1(num_unique_event_times, 0);

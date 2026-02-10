@@ -362,7 +362,7 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
         rpred[j] = transpose(pred_time);
       }
       predictions[i] = rpred;
-    }
+  }
     return predictions;
 }
 
@@ -619,6 +619,7 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
   result["unique.event.times"] = unique_event_times_R;
   result["Forest"] = multistate_forest;           // add the forest as a pointer, only to be used for prediction
 
+  cout << "Computing forest predictions" << endl;
   JFCppForestPredict(result);
 
   result["avg.num.nodes"] = forest->getAvgNumberOfNodes();
@@ -745,7 +746,7 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
 
   if (type == "Survival") {
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
-    size_t num_unique_event_times = forest->getEventTimes().size();
+    size_t num_unique_event_times = forest->getNumUniqueEventTimes();
     NumericMatrix predictions(num_obs, num_unique_event_times);
     const vector<double>& predictions_cpp = forest->computePredictions(new_data);
     for (size_t i = 0; i < num_obs; ++i) {
@@ -754,12 +755,43 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
 
     // truncate the predictions to only include non-censored times
     predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
-    return(predictions);
+    return predictions;
   }
+}
 
-  if (type == "Multi-state") {
-    
+// [[Rcpp::export]]
+List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices,
+                          LogicalVector categorical, NumericVector unique) {
+  // convert the input to C++ vectors
+  vector<size_t> response_indices_cpp;  // need an empty vector for the response indices
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+
+  // convert the new data to a suitable C++ Data object
+  Data new_data = Data(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
+  size_t num_obs = new_data.getNumberOfObs();
+
+  MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
+  size_t num_unique_event_times = forest->getNumUniqueEventTimes();
+  uint8_t num_states = forest->getData()->getNumberOfStates();
+  uint8_t dim = num_states * num_states;
+  List predictions(num_obs);
+  const vector<double>& predictions_cpp = forest->computePredictions(new_data);
+  for (size_t i = 0; i < num_obs; ++i) {
+    List rpred(num_unique_event_times);
+    for (size_t t = 0; t < num_unique_event_times; ++t) {
+      NumericMatrix pred_time(num_states, num_states);
+      for (size_t j = 0; j < num_states; ++j) {
+        for (size_t k = 0; k < num_states; ++k) {
+          pred_time(j, k) = predictions_cpp[i * num_unique_event_times + dim * t + j * num_states + k];
+        }
+      }
+      rpred[t] = pred_time;
+    }
+    predictions[i] = rpred;
   }
+  return predictions;
 }
 
 // error computation for random forests
@@ -1168,8 +1200,8 @@ void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_
   for (auto jump : data.getValidJumps()) {
     cout << "(" << static_cast<size_t>(jump.first) << ", " << static_cast<size_t>(jump.second) << ")";
   }
-  cout << endl << "The unique event times are: ";
   vector<double> unique_event_times = uniqueEventTimesMultistate(data.getTimes(), data.getStates());
+  cout << endl << "The unique event times are: (total number : " << unique_event_times.size() << "):" << endl;;
   printVector(unique_event_times);
   cout << "The response event time ids are: ";
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data.getTimes(), data.getStates());
@@ -1178,6 +1210,16 @@ void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_
   // some metadata
   cout << "Number of observations: " << data.getNumberOfObs() << endl;
   cout << "Number of states: " << static_cast<size_t>(data.getNumberOfStates()) << endl;
+}
+
+// [[Rcpp::export]]
+void testUniqueEventTimesThinning(const NumericVector& unique_event_times, double prop_to_remove) {
+  vector<double> unique_event_times_cpp = as<vector<double>>(unique_event_times);
+  vector<double> result = thinUniqueEventTimes(unique_event_times_cpp, prop_to_remove);
+  cout << "Original vector of length " << unique_event_times.size() << ":" << endl;
+  printVector(unique_event_times_cpp);
+  cout << "Thinned vector of length " << result.size() << ":" << endl;
+  printVector(result);
 }
 
 // for testing OpenMP

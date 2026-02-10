@@ -36,6 +36,7 @@ void MultistateForest::grow() {
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t i = 0; i < static_cast<size_t>(ntrees); ++i) {
         // give each thread its own random number generator to prevent races
+        cout << "Growing tree " << i << "/" << ntrees << endl;
         mt19937 local_rng(seed + i);
         unique_ptr<MultistateTree> tree;
 
@@ -140,7 +141,6 @@ pair<vector<double>, vector<double>> MultistateForest::computePredictions() {
             oob_predictions[i * num_unique_event_times * dim + k] = oob_pred[k];
         }
     }
-
     return {predictions, oob_predictions};
 }
 

@@ -14,6 +14,90 @@ vector<double> uniqueValues(vector<double> input) {
     return(input);
 }
 
+// used to thin out the UniqueEventTimes for survival and multi-states by a proportion to be removed (implemented by Gemini)
+vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, double proportion_to_remove) {
+    size_t n = unique_event_times.size();
+    if (n < 2 || proportion_to_remove <= 0) return unique_event_times;
+
+    size_t target_size = static_cast<size_t>(n * (1.0 - proportion_to_remove));
+    if (target_size < 1) target_size = 1;
+
+    vector<Node> nodes(n);
+    priority_queue<Gap, std::vector<Gap>, std::greater<Gap>> pq;
+
+    // 1. Initialize nodes and initial gaps
+    for (size_t i = 0; i < n; ++i) {
+        nodes[i].time = unique_event_times[i];
+        nodes[i].prev = (i == 0) ? -1 : (int)i - 1;
+        nodes[i].next = (i == n - 1) ? -1 : (int)i + 1;
+        nodes[i].version = 0;
+        
+        if (i > 0) {
+            pq.push({unique_event_times[i] - unique_event_times[i-1], (int)i-1, (int)i, 0, 0});
+        }
+    }
+
+    size_t current_count = n;
+
+    // 2. Main loop: Merge until target size is reached
+    while (current_count > target_size && !pq.empty()) {
+        Gap top = pq.top();
+        pq.pop();
+
+        Node& left = nodes[top.left_idx];
+        Node& right = nodes[top.right_idx];
+
+        // Lazy deletion check: if the nodes were updated/removed since this gap was queued, skip
+        if (!left.active || !right.active || left.version != top.left_ver || right.version != top.right_ver) {
+            continue;
+        }
+
+        // --- MERGE STEP ---
+        // 1. Update left node to the average
+        left.time = (left.time + right.time) / 2.0;
+        left.version++;
+
+        // 2. Remove right node from the chain
+        right.active = false;
+        int r_next_idx = right.next;
+        left.next = r_next_idx;
+        
+        if (r_next_idx != -1) {
+            nodes[r_next_idx].prev = top.left_idx;
+            nodes[r_next_idx].version++;
+        }
+
+        // 3. Update the left node's previous neighbor to increment version 
+        // (because its gap with 'left' has changed)
+        if (left.prev != -1) {
+            nodes[left.prev].version++;
+            pq.push({left.time - nodes[left.prev].time, 
+                     left.prev, top.left_idx, 
+                     nodes[left.prev].version, left.version});
+        }
+
+        // 4. Push the new gap formed to the right
+        if (left.next != -1) {
+            pq.push({nodes[left.next].time - left.time, 
+                     top.left_idx, left.next, 
+                     left.version, nodes[left.next].version});
+        }
+
+        current_count--;
+    }
+
+    // 3. Collect remaining points
+    std::vector<double> result;
+    result.reserve(current_count);
+    for (const auto& node : nodes) {
+        if (node.active) {
+            result.push_back(node.time);
+        }
+    }
+    result.shrink_to_fit();
+    return result;
+}
+
 // computes all 2-partitions of the vector of doubles feature_values and puts all subsets in one vector
 // used for determining splits on a categorical variable
 vector<vector<double>> compute2Partitions(const vector<double>& feature_values) {

@@ -33,6 +33,10 @@ JFCppForestPredict <- function(JFForest, df, feature_indices, categorical, uniqu
     .Call(`_JumpForests_JFCppForestPredict`, JFForest, df, feature_indices, categorical, unique)
 }
 
+JFCppForestPredictMM <- function(JFForest, df, feature_indices, categorical, unique) {
+    .Call(`_JumpForests_JFCppForestPredictMM`, JFForest, df, feature_indices, categorical, unique)
+}
+
 JFCppForestError <- function(JFForest, df, feature_indices, categorical, unique, response_indices) {
     .Call(`_JumpForests_JFCppForestError`, JFForest, df, feature_indices, categorical, unique, response_indices)
 }
@@ -59,6 +63,10 @@ testData <- function(df, response_indices, feature_indices, categorical, unique)
 
 testDataMM <- function(jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique) {
     invisible(.Call(`_JumpForests_testDataMM`, jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique))
+}
+
+testUniqueEventTimesThinning <- function(unique_event_times, prop_to_remove) {
+    invisible(.Call(`_JumpForests_testUniqueEventTimesThinning`, unique_event_times, prop_to_remove))
 }
 
 test_omp <- function() {

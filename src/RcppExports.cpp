@@ -169,6 +169,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// JFCppForestPredictMM
+List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
+RcppExport SEXP _JumpForests_JFCppForestPredictMM(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFForest(JFForestSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestPredictMM(JFForest, df, feature_indices, categorical, unique));
+    return rcpp_result_gen;
+END_RCPP
+}
 // JFCppForestError
 List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, NumericVector response_indices);
 RcppExport SEXP _JumpForests_JFCppForestError(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP response_indicesSEXP) {
@@ -264,6 +279,17 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const LogicalVector& >::type categorical(categoricalSEXP);
     Rcpp::traits::input_parameter< const NumericVector& >::type unique(uniqueSEXP);
     testDataMM(jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique);
+    return R_NilValue;
+END_RCPP
+}
+// testUniqueEventTimesThinning
+void testUniqueEventTimesThinning(const NumericVector& unique_event_times, double prop_to_remove);
+RcppExport SEXP _JumpForests_testUniqueEventTimesThinning(SEXP unique_event_timesSEXP, SEXP prop_to_removeSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericVector& >::type unique_event_times(unique_event_timesSEXP);
+    Rcpp::traits::input_parameter< double >::type prop_to_remove(prop_to_removeSEXP);
+    testUniqueEventTimesThinning(unique_event_times, prop_to_remove);
     return R_NilValue;
 END_RCPP
 }
@@ -373,6 +399,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 16},
     {"_JumpForests_JFCppForestMM", (DL_FUNC) &_JumpForests_JFCppForestMM, 17},
     {"_JumpForests_JFCppForestPredict", (DL_FUNC) &_JumpForests_JFCppForestPredict, 5},
+    {"_JumpForests_JFCppForestPredictMM", (DL_FUNC) &_JumpForests_JFCppForestPredictMM, 5},
     {"_JumpForests_JFCppForestError", (DL_FUNC) &_JumpForests_JFCppForestError, 6},
     {"_JumpForests_JFCppForestVIMPFeature", (DL_FUNC) &_JumpForests_JFCppForestVIMPFeature, 4},
     {"_JumpForests_JFCppForestVIMP", (DL_FUNC) &_JumpForests_JFCppForestVIMP, 3},
@@ -380,6 +407,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_df_test", (DL_FUNC) &_JumpForests_df_test, 5},
     {"_JumpForests_testData", (DL_FUNC) &_JumpForests_testData, 5},
     {"_JumpForests_testDataMM", (DL_FUNC) &_JumpForests_testDataMM, 7},
+    {"_JumpForests_testUniqueEventTimesThinning", (DL_FUNC) &_JumpForests_testUniqueEventTimesThinning, 2},
     {"_JumpForests_test_omp", (DL_FUNC) &_JumpForests_test_omp, 0},
     {"_JumpForests_testList", (DL_FUNC) &_JumpForests_testList, 0},
     {"_JumpForests_extract_column", (DL_FUNC) &_JumpForests_extract_column, 2},

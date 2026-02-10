@@ -62,18 +62,29 @@ which(names(test_data) %in% attr(terms(formula), "term.labels")) - 1
 
 # test data
 #sim
-#test_data_functions_mm(sim, test_data, c(1, 2))
+test_data_functions_mm(sim, test_data, c(1, 2))
 # conclusion: Data works precisely as intended, also for multi-states
+
+# testing thinning of the unique event times
+# (unique_event_times includes censoring in contrast to the functions below, just for testing purposes)
+unique_event_times <- sort(unique(unlist(lapply(sim, function(x) x$times))))
+test_unique_event_times(unique_event_times, 0.5)  # looks fine
+# implement as an option
 
 fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20)
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
 
 jftree.predict(fitted_tree)
-new_d <- data.frame(X2 = runif(5), X1 = rnorm(5))
+new_data <- data.frame(X2 = runif(5), X1 = rnorm(5))
 jftree.predict(fitted_tree, new_d)
 
 # holy..., no errors?? Check thoroughly
-fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 10, splitrule = "logrank")
+fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, splitrule = "logrank")
+
+jfforest.predict(fitted_forest)[[1]]
+#new_data <- data.frame(X2 = runif(1), X1 = rnorm(1))
+new_data <- test_data[1,]
+jfforest.predict(fitted_forest, new_data)
 
 # conditional Aalen-johansen
 set.seed(2026)
@@ -127,5 +138,3 @@ lines(seq(0, 5, 0.01), P2, col = "blue")
 #                      data = test_data, splitrule = "conserve", min_node_size = 2, nsplits = 2, seed = 2025)
 
 #nolint_end
-
-

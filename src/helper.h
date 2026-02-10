@@ -8,13 +8,37 @@
 #include <iterator>
 #include <string>
 #include <stdexcept>
+#include <queue>
 #include <Rcpp.h>
 
 using namespace std;
 using namespace Rcpp;
 
+// the following structs are for thinning out unique event times
+struct Node {
+    double time;
+    int prev = -1;
+    int next = -1;
+    bool active = true;
+    size_t version = 0; // Incremented every time the node's neighbors or value change
+};
+
+struct Gap {
+    double delta;
+    int left_idx;
+    int right_idx;
+    size_t left_ver;
+    size_t right_ver;
+
+    // Min-priority queue: smallest gap at the top
+    bool operator>(const Gap& other) const {
+        return delta > other.delta;
+    }
+};
+
 // helper functions for growing trees
 vector<double> uniqueValues(vector<double> input);
+vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, double proportion_to_remove);
 vector<vector<double>> compute2Partitions(const vector<double>& feature_values);
 vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, bool with_replacement, mt19937 rng);
 
