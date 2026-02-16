@@ -90,7 +90,7 @@ jfforest.predict(fitted_forest)[[1]]
 #new_data <- test_data[1,]
 
 x1 <- 0.2
-x2 <- 0.6
+x2 <- 0.4
 x3 <- 0.8
 
 new_data <- data.frame(X1 = c(x1, x2, x3), X2 = c(0, 0, 0))
@@ -113,6 +113,9 @@ FUN = function(L) (c(1/2, 1/2, 0) %*% L)[2]))
 p2 <- unlist(lapply(fit2$p, FUN = function(L) L[2]))
 P2 <- unlist(lapply(prodint(0, 5, 0.01, function(t){lambda(t, x = x2)}),
 FUN = function(L) (c(1/2, 1/2, 0) %*% L)[2]))
+p3 <- unlist(lapply(fit3$p, FUN = function(L) L[2]))
+P3 <- unlist(lapply(prodint(0, 5, 0.01, function(t){lambda(t, x = x3)}),
+FUN = function(L) (c(1/2, 1/2, 0) %*% L)[2]))
 
 # compute the predictios from the random forest
 times <- fitted_forest$unique.event.times
@@ -124,27 +127,33 @@ v31_forest <- unlist(lapply(forest_fit[[3]], FUN = function(L) L[2,1]))
 #FUN = function(L) (c(1/2, 1/2, 0) %*% L)[2]))
 
 # plot options
-par(mfrow = c(1, 2))
+par(mfrow = c(1, 3))
 par(mar = c(2.5, 2.5, 1.5, 1.5))
-options(vsc.dev.args = list(width = 1000, height = 600, res = 100))
+options(vsc.dev.args = list(width = 800, height = 600, res = 100))
 
 # cumulative hazard for the transition from 2 to 1 (cAJ)
-plot(v10, v11, type = "l", lty = 2, xlab = "", ylab = "", main = "Hazard (cAJ)", col = "red", xlim = c(0, 5), ylim = c(0, 4))
+plot(v10, v11, type = "l", lty = 2, xlab = "", ylab = "", main = "Hazard", col = "red")
 lines(v10, 2/x1*log(1+x1*v10), col = "red")
 lines(v20, v21, lty = 2, col = "blue")
 lines(v20, 2/x2*log(1+x2*v20), col = "blue")
+lines(v30, v31, lty = 2, col = "darkgreen")
+lines(v30, 2/x3*log(1+x3*v30), col = "darkgreen")
 
 # occupation probability for state 2 (cAJ)
-plot(v10, p1, type = "l", lty = 2, xlab = "", ylab = "", main = "Probability (cAJ)", col = "red")
+plot(v10, p1, type = "l", lty = 2, xlab = "", ylab = "", main = "Probability", col = "red")
 lines(seq(0, 5, 0.01), P1, col = "red")
 lines(v20, p2, lty = 2, col = "blue")
 lines(seq(0, 5, 0.01), P2, col = "blue")
+lines(v30, p3, lty = 2, col = "darkgreen")
+lines(seq(0, 5, 0.01), P3, col = "darkgreen")
 
 # cumulative hazard for the transition from 2 to 1 (RF)
-plot(times, v11_forest, type = "l", lty = 2, xlab = "", ylab = "", main = "Hazard (RF)", col = "red", xlim = c(0, 5), ylim = c(0, 4))
+plot(times, v11_forest, type = "l", lty = 2, xlab = "", ylab = "", main = "Hazard", col = "red")
 lines(times, 2/x1*log(1+x1*times), col = "red")
 lines(times, v21_forest, lty = 2, col = "blue")
 lines(times, 2/x2*log(1+x2*times), col = "blue")
+lines(times, v31_forest, lty = 2, col = "darkgreen")
+lines(times, 2/x3*log(1+x3*times), col = "darkgreen")
 
 # plot the predictions from the random forest
 
@@ -153,5 +162,4 @@ lines(times, 2/x2*log(1+x2*times), col = "blue")
 #                      data = test_data, splitrule = "conserve", min_node_size = 2, nsplits = 2, seed = 2025)
 
 #nolint_end
-
 

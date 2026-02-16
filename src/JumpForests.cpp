@@ -784,7 +784,7 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
       NumericMatrix pred_time(num_states, num_states);
       for (size_t j = 0; j < num_states; ++j) {
         for (size_t k = 0; k < num_states; ++k) {
-          pred_time(j, k) = predictions_cpp[i * num_unique_event_times + dim * t + j * num_states + k];
+          pred_time(j, k) = predictions_cpp[i * num_unique_event_times * dim + dim * t + j * num_states + k];
         }
       }
       rpred[t] = pred_time;
