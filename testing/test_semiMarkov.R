@@ -1,4 +1,3 @@
-#nolint start: line_length_linter
 devtools::load_all()
 library(AalenJohansen)
 
@@ -35,7 +34,7 @@ mark_dist <- function(i, s, v) {
   }
 }
 
-n <- 10000
+n <- 5000
 cens <- runif(n, 10, 40)
 sim <- vector("list", n)
 for (i in seq_len(n)) {
@@ -96,9 +95,9 @@ cond_forest <- jfforest(
   data = landmark,
   feature_data = duration_features,
   mtry = 1,
-  min_node_size = 50,
+  min_node_size = 150,
   nsplits = 10,
-  ntrees = 200,
+  ntrees = 5000,
   splitrule = "logrank",
   seed = 2026,
   nworkers = 0,
@@ -127,4 +126,137 @@ legend("topright",
        inset = c(0.05, 0.05))
 dev.off()
 
-#nolint end
+# second step: 3D surfaces over (t, u)
+# study design implies t >= 10 (landmark time) and u in [0, 10] (duration spent in state 2 at t = 10)
+durations <- vapply(landmark, function(z) z$X, numeric(1))
+u_bounds <- quantile(durations, probs = c(0.10, 0.90), na.rm = TRUE)
+u_min <- max(0, as.numeric(u_bounds[1]))
+u_max <- min(10, as.numeric(u_bounds[2]))
+if (u_max <= u_min) {
+  u_min <- max(0, min(durations, na.rm = TRUE))
+  u_max <- min(10, max(durations, na.rm = TRUE))
+}
+u_grid <- seq(u_min, u_max, length.out = 8)
+t_max <- min(40, max(cond_forest$unique.event.times))
+t_grid <- seq(10, t_max, length.out = 20)
+z_true <- outer(t_grid, u_grid, P)
+
+rf_surface_pred <- jfforest.predict(cond_forest, data.frame(duration = u_grid))
+z_rf <- matrix(NA_real_, nrow = length(t_grid), ncol = length(u_grid))
+for (j in seq_along(u_grid)) {
+  p_rf <- extract_prob(rf_surface_pred[[j]], from = 2, to = 2)
+  z_rf[, j] <- approx(
+    x = cond_forest$unique.event.times,
+    y = p_rf,
+    xout = t_grid,
+    method = "constant",
+    f = 0,
+    rule = 2
+  )$y
+}
+
+pdf(plot_file("p2_conditional_surface_forest.pdf"), width = 6, height = 6)
+persp(
+  x = t_grid,
+  y = u_grid,
+  z = z_rf,
+  theta = 45,
+  phi = 25,
+  expand = 0.8,
+  col = "#6baed6",
+  border = "grey40",
+  ticktype = "detailed",
+  xlab = "t",
+  ylab = "u",
+  zlab = "P(X_t = 2 | U_10 = u), JumpForest",
+  main = "Conditional Surface: JumpForest"
+)
+dev.off()
+
+z_diff_rf <- z_true - z_rf
+pdf(plot_file("p2_conditional_surface_diff_forest.pdf"), width = 6, height = 6)
+persp(
+  x = t_grid,
+  y = u_grid,
+  z = z_diff_rf,
+  theta = 45,
+  phi = 25,
+  expand = 0.8,
+  col = "#fdae61",
+  border = "grey40",
+  ticktype = "detailed",
+  xlab = "t",
+  ylab = "u",
+  zlab = "True - Fitted, JumpForest",
+  main = "Difference Surface: True - JumpForest"
+)
+dev.off()
+
+z_aj <- matrix(NA_real_, nrow = length(t_grid), ncol = length(u_grid))
+for (j in seq_along(u_grid)) {
+  fit_u <- tryCatch(AalenJohansen::aalen_johansen(landmark, x = u_grid[j]), error = function(e) NULL)
+  if (!is.null(fit_u) && length(fit_u$t) > 1) {
+    p_aj <- unlist(lapply(fit_u$p, function(L) L[2]))
+    z_aj[, j] <- approx(
+      x = fit_u$t,
+      y = p_aj,
+      xout = t_grid,
+      method = "constant",
+      f = 0,
+      rule = 2
+    )$y
+  }
+}
+
+valid_cols <- which(colSums(is.na(z_aj)) < nrow(z_aj))
+ise_aj <- NA_real_
+if (length(valid_cols) >= 2) {
+  pdf(plot_file("p2_conditional_surface_aj.pdf"), width = 6, height = 6)
+  persp(
+    x = t_grid,
+    y = u_grid[valid_cols],
+    z = z_aj[, valid_cols, drop = FALSE],
+    theta = 45,
+    phi = 25,
+    expand = 0.8,
+    col = "#74c476",
+    border = "grey40",
+    ticktype = "detailed",
+    xlab = "t",
+    ylab = "u",
+    zlab = "P(X_t = 2 | U_10 = u), cAJ",
+    main = "Conditional Surface: cAJ"
+  )
+  dev.off()
+
+  z_diff_aj <- z_true[, valid_cols, drop = FALSE] - z_aj[, valid_cols, drop = FALSE]
+  pdf(plot_file("p2_conditional_surface_diff_aj.pdf"), width = 6, height = 6)
+  persp(
+    x = t_grid,
+    y = u_grid[valid_cols],
+    z = z_diff_aj,
+    theta = 45,
+    phi = 25,
+    expand = 0.8,
+    col = "#fd8d3c",
+    border = "grey40",
+    ticktype = "detailed",
+    xlab = "t",
+    ylab = "u",
+    zlab = "True - Fitted, cAJ",
+    main = "Difference Surface: True - cAJ"
+  )
+  dev.off()
+
+  dt <- mean(diff(t_grid))
+  du_aj <- mean(diff(u_grid[valid_cols]))
+  ise_aj <- sum(z_diff_aj^2, na.rm = TRUE) * dt * du_aj
+}
+
+dt <- mean(diff(t_grid))
+du <- mean(diff(u_grid))
+ise_rf <- sum(z_diff_rf^2, na.rm = TRUE) * dt * du
+cat("ISE (JumpForest):", signif(ise_rf, 6), "\n")
+if (!is.na(ise_aj)) {
+  cat("ISE (cAJ):", signif(ise_aj, 6), "\n")
+}
