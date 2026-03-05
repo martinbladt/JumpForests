@@ -568,7 +568,7 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 // [[Rcpp::export]]
 List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
   unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector feature_indices, 
-  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers) {
+  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions) {
   
   // convert the input to C++ vectors
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -619,8 +619,13 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
   result["unique.event.times"] = unique_event_times_R;
   result["Forest"] = multistate_forest;           // add the forest as a pointer, only to be used for prediction
 
-  Rcout << "Computing forest predictions" << endl;
-  JFCppForestPredict(result);
+  if (save_predictions) {
+    Rcout << "Computing forest predictions" << endl;
+    JFCppForestPredict(result);
+  } else {
+    result["predictions"] = R_NilValue;
+    result["oob.predictions"] = R_NilValue;
+  }
 
   result["avg.num.nodes"] = forest->getAvgNumberOfNodes();
   result["avg.num.terminal.nodes"] = forest->getAvgNumberOfTerminalNodes();

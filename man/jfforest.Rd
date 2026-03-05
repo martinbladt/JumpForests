@@ -18,7 +18,8 @@ jfforest(
   sample_rate = NULL,
   double_bootstrap = FALSE,
   seed = NULL,
-  nworkers = 0
+  nworkers = 0,
+  save_predictions = TRUE
 )
 }
 \arguments{
@@ -49,6 +50,8 @@ jfforest(
 \item{seed}{Optional random seed.}
 
 \item{nworkers}{Number of worker threads.}
+
+\item{save_predictions}{Logical, whether to compute and store in-sample/OOB predictions at fit time for multi-state forests.}
 }
 \value{
 A fitted forest object as a list.

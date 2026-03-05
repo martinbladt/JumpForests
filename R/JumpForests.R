@@ -246,6 +246,7 @@ jftree.error <- function(tree_list, new_data = NULL) {
 #' @param double_bootstrap Whether to use double bootstrap.
 #' @param seed Optional random seed.
 #' @param nworkers Number of worker threads.
+#' @param save_predictions Logical, whether to compute and store in-sample/OOB predictions at fit time for multi-state forests.
 #'
 #' @return A fitted forest object as a list.
 #' @export
@@ -253,7 +254,7 @@ jftree.error <- function(tree_list, new_data = NULL) {
 # the main function for fitting forests (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
 jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
                      ntrees = NULL, honest = FALSE, swr = FALSE, sample_rate = NULL, double_bootstrap = FALSE, 
-                     seed = NULL, nworkers = 0) {
+                     seed = NULL, nworkers = 0, save_predictions = TRUE) {
   lhs <- as.character(formula[[2]])
 
   # if seed is not set, generate a random one
@@ -392,7 +393,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
 
     JFCppForestMM(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
                   nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, processed_data$categorical,
-                  processed_data$unique, seed, nworkers);
+                  processed_data$unique, seed, nworkers, save_predictions);
 
   } else {
     stop("Type of tree not recognised from the formula.")
