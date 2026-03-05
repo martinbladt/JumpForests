@@ -196,7 +196,7 @@ void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t f
             if (feature_val > split_points[j]) {
                 ++num_obs_right[j];
                 ++delta_num_at_risk_right[j * num_unique_event_times + time_id];
-                //cout << "Line 152: death? " << data->get_y(i, 1) << endl;
+                //Rcout << "Line 152: death? " << data->get_y(i, 1) << endl;
                 if (data->get_y(i, 1) == 1) {
                     ++num_deaths_right[j * num_unique_event_times + time_id];
                 }
@@ -253,7 +253,7 @@ void SurvivalTree::bestSplitContinuous(size_t node_index, size_t feature, double
         if (splitrule == "approxlogrank") {
             split_val = approxLogRank(num_deaths, num_at_risk, num_deaths_right, num_at_risk_right, i);
         }
-        //cout << "Line 193: log-rank value: " << split_val << endl;
+        //Rcout << "Line 193: log-rank value: " << split_val << endl;
         if (split_val > best_split_val) {
             best_split_val = split_val;
             best_feature = feature;
@@ -317,8 +317,8 @@ void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, doubl
 
         if (split_val > best_split_val) {
             best_split_val = split_val;
-            best_left_indices = move(current_left_indices);
-            best_right_indices = move(current_right_indices);
+            best_left_indices = std::move(current_left_indices);
+            best_right_indices = std::move(current_right_indices);
             best_feature = feature;
             best_threshold.assign(left_values.begin(), left_values.end());
         }
@@ -465,7 +465,7 @@ void SurvivalTree::computeChf(size_t node_index) {
             chf[i] = chf[i - 1];
         }
     }
-    this->chf.push_back(move(chf));
+    this->chf.push_back(std::move(chf));
 }
 
 /*
@@ -481,7 +481,7 @@ void SurvivalTree::grow() {
   size_t i = 0;
   depths.push_back(depth);
   while (num_queue > 0) {
-    //cout << "Line 406: Current node ID:" << i << endl;
+    //Rcout << "Line 406: Current node ID:" << i << endl;
     bool is_leaf = createSplit(i);
     if (is_leaf) {
         num_queue--;

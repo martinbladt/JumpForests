@@ -181,9 +181,9 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   // for debugging purposes
   /*
-  cout << "Number of unique event times:" << unique_event_times.size() << endl;
-  cout << "Length of response_event_time_ids: " << response_event_time_ids.size() << ", number of obs in flattened vector: " << data->getStates().size() << endl;
-  cout << "Printing unique_event_times and response_event_time_ids:" << endl;
+  Rcout << "Number of unique event times:" << unique_event_times.size() << endl;
+  Rcout << "Length of response_event_time_ids: " << response_event_time_ids.size() << ", number of obs in flattened vector: " << data->getStates().size() << endl;
+  Rcout << "Printing unique_event_times and response_event_time_ids:" << endl;
   printVector(*unique_event_times_ptr);
   printVector(*response_event_time_ids_ptr);
   */
@@ -206,7 +206,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
   tree->grow();
-  cout << "Finished growing multi-state tree" << endl;
+  Rcout << "Finished growing multi-state tree" << endl;
 
   // specific to multi-states
   NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
@@ -402,7 +402,7 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
                                  LogicalVector categorical, NumericVector unique, NumericVector response_indices) {
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp = as<vector<size_t>>(response_indices);
-  cout << "Line 280:" << response_indices_cpp[0] << endl;
+  Rcout << "Line 280:" << response_indices_cpp[0] << endl;
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
   vector<bool> categorical_cpp = as<vector<bool>>(categorical);
   vector<size_t> unique_cpp = as<vector<size_t>>(unique);
@@ -619,7 +619,7 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
   result["unique.event.times"] = unique_event_times_R;
   result["Forest"] = multistate_forest;           // add the forest as a pointer, only to be used for prediction
 
-  cout << "Computing forest predictions" << endl;
+  Rcout << "Computing forest predictions" << endl;
   JFCppForestPredict(result);
 
   result["avg.num.nodes"] = forest->getAvgNumberOfNodes();
@@ -922,7 +922,7 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
       throw runtime_error("Type of VIMP computation method not recognised, use 'permute' or 'random'");
     }
 
-    //cout << "Line 376: Done computing VIMP predictions for feature " << feature << endl;
+    //Rcout << "Line 376: Done computing VIMP predictions for feature " << feature << endl;
     size_t num_unique_event_times = forest->getEventTimes().size();
     NumericMatrix predictions_vimp(num_obs, num_unique_event_times);
     for (size_t i = 0; i < num_obs; ++i) {
@@ -932,12 +932,12 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     }
 
     vector<double> outcomes_vimp = computeOutcomes(predictions_vimp);
-    //cout << "Line 386: VIMP outcomes computed for feature " << feature << endl;
-    //cout << "Line 387: times: "; printVector(forest->getData()->get_y_col(0)); 
-    //cout << "Line 388: ind: "; printVector(forest->getData()->get_y_col(1));
+    //Rcout << "Line 386: VIMP outcomes computed for feature " << feature << endl;
+    //Rcout << "Line 387: times: "; printVector(forest->getData()->get_y_col(0)); 
+    //Rcout << "Line 388: ind: "; printVector(forest->getData()->get_y_col(1));
     double vimp_error = (1 - computeConcordanceIndex(outcomes_vimp, forest->getData()->get_y_col(0), forest->getData()->get_y_col(1)));
     double vimp = vimp_error - as<double>(JFForest["oob.error"]);
-    cout << "Line 389: VIMP for feature " << feature << ": " << vimp << endl;
+    Rcout << "Line 389: VIMP for feature " << feature << ": " << vimp << endl;
     return vimp;
     */
   }
@@ -995,27 +995,27 @@ void df_test(DataFrame data, NumericVector response_indices, NumericVector featu
   Data test = Data(data, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
 
   // for testing purposes
-  cout << "Number of features: " << test.getNumberOfFeatures() << endl;
-  cout << "Number of observations: " << test.getNumberOfObs() << endl;
+  Rcout << "Number of features: " << test.getNumberOfFeatures() << endl;
+  Rcout << "Number of observations: " << test.getNumberOfObs() << endl;
   if (response_indices_cpp.size() > 0) {
-    cout << endl << "The response vector is: ";
+    Rcout << endl << "The response vector is: ";
     for (int i = 0; i < test.getNumberOfObs(); ++i) {
-      cout << test.get_y(i, 0) << ", ";
+      Rcout << test.get_y(i, 0) << ", ";
     }
   }
-  cout << endl << "The number of unique values of the features are: ";
+  Rcout << endl << "The number of unique values of the features are: ";
   for (int i  = 0; i < test.getUniqueValues().size(); ++i) {
-    cout << test.getUniqueValues()[i] << ", ";
+    Rcout << test.getUniqueValues()[i] << ", ";
   }
-  cout << endl << "The categorical indicators are: ";
+  Rcout << endl << "The categorical indicators are: ";
   for (int i = 0; i < test.getCategorical().size(); ++i) {
-    cout << test.getCategorical()[i] << ", ";
+    Rcout << test.getCategorical()[i] << ", ";
   }
-  cout << endl << "The variable names are: ";
+  Rcout << endl << "The variable names are: ";
   for (string name : test.getFeatureNames()) {
-    cout << name << ", ";
+    Rcout << name << ", ";
   }
-  cout << endl << "The feature values are: " << endl;
+  Rcout << endl << "The feature values are: " << endl;
   for (int i = 0; i < test.getNumberOfObs(); ++i) {
     printVector(test.get_x_row(i));
   }
@@ -1068,27 +1068,27 @@ void fitSurvivalTree(DataFrame df, unsigned int mtry, unsigned int min_node_size
   // grow the SurvivalTree
   // the bug happens after
   tree.grow();
-  cout << "Done!" << endl;
+  Rcout << "Done!" << endl;
 
   
   // write out predictions (testing)
-  cout << "The terminal node values are:" << endl;
+  Rcout << "The terminal node values are:" << endl;
   vector<vector<double>> predictions = tree.getCHF();
   for (vector<double> vec : predictions) {
     for (int i = 0; i < vec.size(); ++i) {
-      cout << vec[i] << ", ";
+      Rcout << vec[i] << ", ";
     }
-    cout << endl;
+    Rcout << endl;
   }
 
   // compute predictions (testing)
-  cout << "The predicted values for the data are: " << endl;
+  Rcout << "The predicted values for the data are: " << endl;
   for (int i = 0; i < (*(tree.getData())).getNumberOfObs(); ++i) {
     vector<double> pred = get<vector<double>>(tree.predict((*(tree.getData())).get_x_row(i)));
     for (double h : pred) {
-      cout << h << ", ";
+      Rcout << h << ", ";
     }
-    cout << endl;
+    Rcout << endl;
   }
     
 }
@@ -1109,29 +1109,29 @@ void testData(const DataFrame& df, const NumericVector& response_indices, const 
   // create Data object
   Data data = Data(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
 
-  cout << "Number of features: " << data.getNumberOfFeatures() << endl;
-  cout << "Feature names: ";
+  Rcout << "Number of features: " << data.getNumberOfFeatures() << endl;
+  Rcout << "Feature names: ";
   for (string s : data.getFeatureNames()) {
-    cout << s << ", ";
+    Rcout << s << ", ";
   }
-  cout << endl << "Features categorical? ";
+  Rcout << endl << "Features categorical? ";
   printVector(data.getCategorical());
-  cout << "Unique values of features: ";
+  Rcout << "Unique values of features: ";
   printVector(data.getUniqueValues());
   // print first 10 feature values
   for (size_t i = 0; i < data.getNumberOfFeatures(); ++i) {
-    cout << data.getFeatureNames()[i] << ":";
+    Rcout << data.getFeatureNames()[i] << ":";
     for (size_t j = 0; j < 30; ++j) {
-      cout << data.get_x(j, i) << ", ";
+      Rcout << data.get_x(j, i) << ", ";
     }
-    cout << endl;
+    Rcout << endl;
   }
 
   // compare feature names
   for (size_t i = 0; i < data.getNumberOfFeatures(); ++i) {
-    cout << "Internal feature ID: " << i << endl;
-    cout << "Feature name is: " << data.getFeatureNames()[i] << endl;
-    cout << "getFeatureID: " << data.getFeatureID(data.getFeatureNames()[i]) << endl;
+    Rcout << "Internal feature ID: " << i << endl;
+    Rcout << "Feature name is: " << data.getFeatureNames()[i] << endl;
+    Rcout << "getFeatureID: " << data.getFeatureID(data.getFeatureNames()[i]) << endl;
   }
 
   /*
@@ -1139,13 +1139,13 @@ void testData(const DataFrame& df, const NumericVector& response_indices, const 
   vector<double> times_trunc = data.get_y_col(0);
   vector<double> ind_trunc  = data.get_y_col(1);
   for (size_t i = 0; i < 10; ++i) {
-    cout << times_trunc[i] << ", ";
+    Rcout << times_trunc[i] << ", ";
   }
-  cout << endl;
+  Rcout << endl;
   for (size_t i = 0; i < 10; ++i) {
-    cout << ind_trunc[i] << ", ";
+    Rcout << ind_trunc[i] << ", ";
   }
-  cout << endl;
+  Rcout << endl;
   */
   
 }
@@ -1162,63 +1162,63 @@ void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_
   // create Data object
   Data data = Data(jump_data, max_response_length, num_states, feature_df, feature_indices_cpp, categorical_cpp, unique_cpp);
   
-  cout << "Number of features: " << data.getNumberOfFeatures() << endl;
-  cout << "Feature names: ";
+  Rcout << "Number of features: " << data.getNumberOfFeatures() << endl;
+  Rcout << "Feature names: ";
   for (string s : data.getFeatureNames()) {
-    cout << s << ", ";
+    Rcout << s << ", ";
   }
-  cout << endl << "Features categorical? ";
+  Rcout << endl << "Features categorical? ";
   printVector(data.getCategorical());
-  cout << "Unique values of features: ";
+  Rcout << "Unique values of features: ";
   printVector(data.getUniqueValues());
   // print feature values
   for (size_t i = 0; i < data.getNumberOfFeatures(); ++i) {
-    cout << data.getFeatureNames()[i] << ":";
+    Rcout << data.getFeatureNames()[i] << ":";
     for (size_t j = 0; j < data.getNumberOfObs(); ++j) {
-      cout << data.get_x(j, i) << ", ";
+      Rcout << data.get_x(j, i) << ", ";
     }
-    cout << endl;
+    Rcout << endl;
   }
 
   // compare feature names
   for (size_t i = 0; i < data.getNumberOfFeatures(); ++i) {
-    cout << "Internal feature ID: " << i << endl;
-    cout << "Feature name is: " << data.getFeatureNames()[i] << endl;
-    cout << "getFeatureID: " << data.getFeatureID(data.getFeatureNames()[i]) << endl;
+    Rcout << "Internal feature ID: " << i << endl;
+    Rcout << "Feature name is: " << data.getFeatureNames()[i] << endl;
+    Rcout << "getFeatureID: " << data.getFeatureID(data.getFeatureNames()[i]) << endl;
   }
 
   // print jump data
-  cout << "Times: ";
+  Rcout << "Times: ";
   printVector(data.getTimes());
-  cout << "States: ";
+  Rcout << "States: ";
   printVector(data.getStates());
-  cout << "Censoring times: ";
+  Rcout << "Censoring times: ";
   printVector(data.getCensoringTimes());
-  cout << "Censoring states: ";
+  Rcout << "Censoring states: ";
   printVector(data.getCensoringStates());
-  cout << "Valid jumps: ";
+  Rcout << "Valid jumps: ";
   for (auto jump : data.getValidJumps()) {
-    cout << "(" << static_cast<size_t>(jump.first) << ", " << static_cast<size_t>(jump.second) << ")";
+    Rcout << "(" << static_cast<size_t>(jump.first) << ", " << static_cast<size_t>(jump.second) << ")";
   }
   vector<double> unique_event_times = uniqueEventTimesMultistate(data.getTimes(), data.getStates());
-  cout << endl << "The unique event times are: (total number : " << unique_event_times.size() << "):" << endl;;
+  Rcout << endl << "The unique event times are: (total number : " << unique_event_times.size() << "):" << endl;;
   printVector(unique_event_times);
-  cout << "The response event time ids are: ";
+  Rcout << "The response event time ids are: ";
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data.getTimes(), data.getStates());
   printVector(response_event_time_ids);
 
   // some metadata
-  cout << "Number of observations: " << data.getNumberOfObs() << endl;
-  cout << "Number of states: " << static_cast<size_t>(data.getNumberOfStates()) << endl;
+  Rcout << "Number of observations: " << data.getNumberOfObs() << endl;
+  Rcout << "Number of states: " << static_cast<size_t>(data.getNumberOfStates()) << endl;
 }
 
 // [[Rcpp::export]]
 void testUniqueEventTimesThinning(const NumericVector& unique_event_times, double prop_to_remove) {
   vector<double> unique_event_times_cpp = as<vector<double>>(unique_event_times);
   vector<double> result = thinUniqueEventTimes(unique_event_times_cpp, prop_to_remove);
-  cout << "Original vector of length " << unique_event_times.size() << ":" << endl;
+  Rcout << "Original vector of length " << unique_event_times.size() << ":" << endl;
   printVector(unique_event_times_cpp);
-  cout << "Thinned vector of length " << result.size() << ":" << endl;
+  Rcout << "Thinned vector of length " << result.size() << ":" << endl;
   printVector(result);
 }
 

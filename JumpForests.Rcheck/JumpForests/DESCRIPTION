@@ -1,0 +1,22 @@
+Package: JumpForests
+Type: Package
+Title: Adaptive Conditional Aalen-Johansen Estimation
+Version: 1.0
+Date: 2026-03-05
+Authors@R: c(person("Martin", "Bladt", email = "martinbladt@math.ku.dk", role = c("aut", "cre")),
+              person("Rasmus", "Lemvig", email = "rfl@math.ku.dk",
+              role = "aut")
+              )
+Maintainer: Martin Bladt <martinbladt@math.ku.dk>
+Description: Provides random forest versions of the Nelson-Aalen and Aalen-Johansen estimators. The methods are based on Bladt & Lemvig (2025+), in preparation.
+License: GPL-2 | file LICENSE
+Imports: Rcpp, stats, utils
+LinkingTo: Rcpp
+SystemRequirements: C++17, OpenMP
+RoxygenNote: 7.3.2
+Encoding: UTF-8
+NeedsCompilation: yes
+Packaged: 2026-03-05 16:58:30 UTC; wtz155
+Author: Martin Bladt [aut, cre],
+  Rasmus Lemvig [aut]
+Built: R 4.4.2; aarch64-apple-darwin20; 2026-03-05 16:58:32 UTC; unix

@@ -31,7 +31,7 @@ void SurvivalForest::grow() {
 
     size_t n_threads = this->nworkers;
     omp_set_num_threads(n_threads);
-    cout << "Growing forest using " << n_threads << " threads" << endl;
+    Rcout << "Growing forest using " << n_threads << " threads" << endl;
 
     // use OpenMP for parallel tree growing
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
@@ -79,11 +79,11 @@ void SurvivalForest::grow() {
         tree->initialise(data, mtry, min_node_size, nsplits, splitrule, honest, dist(local_rng));
         tree->setRNG(local_rng);
         tree->grow();
-        trees[i] = move(tree);
+        trees[i] = std::move(tree);
 
         // for debugging
         //#pragma omp critical
-        //cout << "Finished growing tree " << i 
+        //Rcout << "Finished growing tree " << i 
         //          << " on thread " << omp_get_thread_num() << endl;
     }
 
@@ -103,13 +103,13 @@ void SurvivalForest::grow() {
         oob_indices.push_back(oob_indices_tree);
 
         // grow each survival tree
-        cout << "Growing tree " << i << endl;
+        Rcout << "Growing tree " << i << endl;
         unique_ptr<SurvivalTree> tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, bootstrap_indices);
         uniform_int_distribution<size_t> dist(0, numeric_limits<size_t>::max());
         tree->initialise(data, mtry, min_node_size, nsplits, dist(random_number_generator));
         tree->setRNG(random_number_generator);
         tree->grow();
-        trees.push_back(move(tree));
+        trees.push_back(std::move(tree));
     }
 
     // compute all quantities of interest from the vector of trees

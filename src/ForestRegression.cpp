@@ -22,7 +22,7 @@ void RegressionForest::grow() {
 
     int n_threads = this->nworkers;
     omp_set_num_threads(n_threads);
-    cout << "Growing forest using " << n_threads << " threads" << endl;
+    Rcout << "Growing forest using " << n_threads << " threads" << endl;
 
     // use OpenMP for parallel tree growing
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
@@ -67,7 +67,7 @@ void RegressionForest::grow() {
         tree->initialise(data, mtry, min_node_size, nsplits, splitrule, honest, dist(local_rng));
         tree->setRNG(local_rng);
         tree->grow();
-        trees[i] = move(tree);
+        trees[i] = std::move(tree);
     }
 
     // compute all quantities of interest from the vector of trees

@@ -3,9 +3,10 @@
 #' Compute the Nelson-Aalen estimator based on data in a node
 #'
 #' @param data A list of trajectory data for each individual.
+#' @noRd
 #'
 
-nelson_aalen <- function(data) {
+nelson_aalen_legacy <- function(data) {
   n <- length(data)
   p <- max(unique(unlist(lapply(data, function(Z) Z$states)))) - 1
 
@@ -114,12 +115,13 @@ nelson_aalen <- function(data) {
 #'
 #' @param data A list of trajectory data for each individual.
 #' @param na A list of Nelson-Aalen estimators
+#' @noRd
 #'
 
-aalen_johansen <- function(data = null, na = null) {
+aalen_johansen_legacy <- function(data = null, na = null) {
   if(data == null & na == null) stop("Provide either data or ")
   if (na == null) {
-    na <- nelson_aalen(data)
+    na <- nelson_aalen_legacy(data)
   }
 
   # Recompute contributions

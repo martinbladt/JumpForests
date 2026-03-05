@@ -60,7 +60,7 @@ size_t Tree::predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt199
             //size_t right_daughter_size = node_sizes[left_daughters[current_node] + 1];
             //discrete_distribution<size_t> daughter_id({left_daughter_size, right_daughter_size});
             size_t daughter = daughter_id(rng);
-            //cout << "daughter:" << daughter << endl;
+            //Rcout << "daughter:" << daughter << endl;
             current_node = left_daughters[current_node] + daughter;
         }
         // if not, do prediction as normal

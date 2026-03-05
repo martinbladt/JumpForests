@@ -307,49 +307,49 @@ void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matr
 
 void printVector(const vector<double>& vec) {
     for (size_t i = 0; i < vec.size() - 1; ++i) {
-        cout << vec[i] << ", ";
+        Rcout << vec[i] << ", ";
     }
-    cout << vec[vec.size() - 1] << endl;
+    Rcout << vec[vec.size() - 1] << endl;
 }
 
 void printVector(const vector<size_t>& vec, size_t stride_length) {
     if (stride_length == 0) {
         for (size_t i = 0; i < vec.size() - 1; ++i) {
-            cout << vec[i] << ", ";
+            Rcout << vec[i] << ", ";
         }
-        cout << vec[vec.size() - 1] << endl;
+        Rcout << vec[vec.size() - 1] << endl;
     } else {
         size_t num_vectors = vec.size() / stride_length;
         for (size_t i = 0; i < num_vectors; ++i) {
-            cout << i << ": " "{";
+            Rcout << i << ": " "{";
             for (size_t j = 0; j < stride_length - 1; ++j) {
-                cout << vec[i * stride_length + j] << ", ";
+                Rcout << vec[i * stride_length + j] << ", ";
             }
-            cout << vec[(i + 1) * stride_length - 1] << "}" << ", ";
+            Rcout << vec[(i + 1) * stride_length - 1] << "}" << ", ";
         }
-        cout << endl;
+        Rcout << endl;
     }
 }
 
 void printVector(const vector<uint8_t>& vec) {
     for (size_t i = 0; i < vec.size() - 1; ++i) {
-        cout << static_cast<size_t>(vec[i]) << ", ";
+        Rcout << static_cast<size_t>(vec[i]) << ", ";
     }
-    cout << static_cast<size_t>(vec[vec.size() - 1]) << endl;
+    Rcout << static_cast<size_t>(vec[vec.size() - 1]) << endl;
 }
 
 void printVector(const vector<bool>& vec) {
     for (size_t i = 0; i < vec.size() - 1; ++i) {
-        cout << vec[i] << ", ";
+        Rcout << vec[i] << ", ";
     }
-    cout << vec[vec.size() - 1] << endl;
+    Rcout << vec[vec.size() - 1] << endl;
 }
 
 void printVector(const vector<string>& vec) {
     for (size_t i = 0; i < vec.size() - 1; ++i) {
-        cout << vec[i] << ", ";
+        Rcout << vec[i] << ", ";
     }
-    cout << vec[vec.size() - 1] << endl;
+    Rcout << vec[vec.size() - 1] << endl;
 }
 
 // indices: which observations are used to fit, n: the total number of observations

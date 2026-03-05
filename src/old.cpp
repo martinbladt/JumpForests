@@ -19,7 +19,7 @@ List testList() {
 // [[Rcpp::export]]
 int extract_column(DataFrame data, size_t index) {
   NumericVector col = data[index];
-  cout << "The given vector is: " << col << endl;
+  Rcout << "The given vector is: " << col << endl;
 
   // the line below is not an issue
   vector<double> output(col.begin(), col.end());
@@ -68,9 +68,9 @@ void sampler(int n, int k) {
                 std::mt19937 {random_device{}()});
   
   for (int i = 0; i < k; ++i) {
-    cout << out[i] << ", ";
+    Rcout << out[i] << ", ";
   }
-  cout << endl;
+  Rcout << endl;
 }
 
 // [[Rcpp::export]]
@@ -80,9 +80,9 @@ void silly_sampler(int k) {
   sample(vec.begin(), vec.end(), back_inserter(out), k,
                 std::mt19937 {random_device{}()});
   for (int i = 0; i < k; ++i) {
-    cout << out[i] << ", ";
+    Rcout << out[i] << ", ";
   }
-  cout << endl;
+  Rcout << endl;
 }
 
 // [[Rcpp::export]]
@@ -94,9 +94,9 @@ void sampler_wrapper(int n, int k, bool wr) {
   }
   vector<size_t> output = sampleIndices(global_indices, k, wr, generator);
   for (size_t o: output) {
-    cout << o << ", ";
+    Rcout << o << ", ";
   }
-  cout << endl;
+  Rcout << endl;
 }
 
 /*
@@ -137,8 +137,8 @@ void SurvivalTree::bestSplitContinuous(size_t node_index, size_t feature, double
         double split_val = log_rank(left_indices, right_indices);
         if (split_val > best_split_val) {
             best_split_val = split_val;
-            best_left_indices = move(left_indices);
-            best_right_indices = move(right_indices);
+            best_left_indices = std::move(left_indices);
+            best_right_indices = std::move(right_indices);
             best_feature = feature;
             // should maybe be changed to an average to improve stability
             best_threshold = {c};
@@ -326,8 +326,8 @@ void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, doubl
         double split_val = log_rank(left_indices, right_indices);
         if (split_val > best_split_val) {
             best_split_val = split_val;
-            best_left_indices = move(left_indices);
-            best_right_indices = move(right_indices);
+            best_left_indices = std::move(left_indices);
+            best_right_indices = std::move(right_indices);
             best_feature = feature;
             best_threshold = partitions[i];
         }
@@ -550,10 +550,10 @@ bool SurvivalTree::createSplit(size_t node_index) {
     // update the survival quantities
     size_t left_child_id = node_obs.size();
     size_t right_child_id = node_obs.size() + 1;
-    cache_num_deaths[left_child_id] = move(best_num_deaths_left);
-    cache_num_at_risk[left_child_id] = move(best_num_at_risk_left);
-    cache_num_deaths[right_child_id] = move(best_num_deaths_right);
-    cache_num_at_risk[right_child_id] = move(best_num_at_risk_right);
+    cache_num_deaths[left_child_id] = std::move(best_num_deaths_left);
+    cache_num_at_risk[left_child_id] = std::move(best_num_at_risk_left);
+    cache_num_deaths[right_child_id] = std::move(best_num_deaths_right);
+    cache_num_at_risk[right_child_id] = std::move(best_num_at_risk_right);
 
     // update tree
     node_obs.push_back(best_left_indices);
@@ -590,7 +590,7 @@ void SurvivalForest::grow() {
             }
 
             // grow survival tree
-            cout << "Growing tree " << i << " on thread " 
+            Rcout << "Growing tree " << i << " on thread " 
                       << this_thread::get_id() << endl;
 
             auto tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, bootstrap_indices);
@@ -603,7 +603,7 @@ void SurvivalForest::grow() {
             // store tree safely
             {
                 lock_guard<mutex> lock(mutex_trees);
-                trees.push_back(move(tree));
+                trees.push_back(std::move(tree));
             }
         }));
     }

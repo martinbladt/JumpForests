@@ -137,8 +137,8 @@ void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, dou
 
     if (decrease > best_split_val) {
         best_split_val = decrease;
-        best_left_indices = move(current_left_indices);
-        best_right_indices = move(current_right_indices);
+        best_left_indices = std::move(current_left_indices);
+        best_right_indices = std::move(current_right_indices);
         best_feature = feature;
         best_threshold.assign(left_values.begin(), left_values.end());
         best_sum_left = sum_left;

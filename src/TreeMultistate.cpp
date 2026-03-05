@@ -41,14 +41,14 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     vector<size_t> censoring_contribution(num_unique_event_times * num_states, 0);
     vector<size_t> num_jumps_acc(num_unique_event_times * dim, 0);
 
-    //cout << "Finished initialising before computing quantities" << endl;
+    //Rcout << "Finished initialising before computing quantities" << endl;
 
     // compute the initial rates, the censoring contribution C and the number of jumps across all event times and observations
     for (size_t i : indices) {
-        //cout << "Index " << i << endl;
+        //Rcout << "Index " << i << endl;
         // initial rates I0
         ++num_at_risk[states[i * max_response_length] - 1];
-        //cout << "Updated I0" << endl;
+        //Rcout << "Updated I0" << endl;
 
         // compute the censoring contribution C
         uint8_t censoring_state = censoring_states[i];
@@ -64,15 +64,15 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
                 }
             }
         }
-        //cout << "Computed censoring contribution:" << endl;
+        //Rcout << "Computed censoring contribution:" << endl;
         //printVector(censoring_contribution);
         // compute number of jumps (we assume that at least one event of some kind occurs so that max_response_length > 1)
         size_t j = 1;
         size_t index = i * max_response_length + 1;
-        //cout << "j = " << j << ", index = " << index << endl;
-        //cout << "states[index] = " << static_cast<size_t>(states[index]) << endl;
-        //cout << "Number of elements in response_event_time_ids: " << response_event_time_ids->size() << endl;
-        //cout << "Number of unique event times: " << unique_event_times->size() << endl;
+        //Rcout << "j = " << j << ", index = " << index << endl;
+        //Rcout << "states[index] = " << static_cast<size_t>(states[index]) << endl;
+        //Rcout << "Number of elements in response_event_time_ids: " << response_event_time_ids->size() << endl;
+        //Rcout << "Number of unique event times: " << unique_event_times->size() << endl;
         // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
         while (j < max_response_length && states[index] != 0) {
             size_t id = (*response_event_time_ids)[index];
@@ -90,7 +90,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
             ++j;
             ++index;
         }
-        //cout << "Finished computing jumps for index " << i << endl;
+        //Rcout << "Finished computing jumps for index " << i << endl;
     }
     // compute the cumulative number of jumps
     cumulativeMatrixSums(num_jumps_acc, num_jumps, num_states);
@@ -108,13 +108,13 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     
     // only for debugging
     /*
-    cout << "Number of jumps: " << endl;
+    Rcout << "Number of jumps: " << endl;
     printVector(num_jumps, dim);
-    cout << "Numbers at risk: " << endl;
+    Rcout << "Numbers at risk: " << endl;
     printVector(num_at_risk, num_states);
-    cout << "Computed num_jumps_acc:" << endl;
+    Rcout << "Computed num_jumps_acc:" << endl;
     printVector(num_jumps_acc, dim);
-    cout << "Censoring contribution:" << endl;
+    Rcout << "Censoring contribution:" << endl;
     printVector(censoring_contribution, num_states);
     */
 }
@@ -219,15 +219,15 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
     
     // for debugging
     /*
-    cout << "Numbers of observations in right node " << endl;
+    Rcout << "Numbers of observations in right node " << endl;
     printVector(num_obs_right);
-    cout << "Computed quantities for every possible split. num_at_risk_right:" << endl;
+    Rcout << "Computed quantities for every possible split. num_at_risk_right:" << endl;
     printVector(num_at_risk_right, num_states);
-    //cout << "num_at_risk:" << endl;
+    //Rcout << "num_at_risk:" << endl;
     //printVector(num_at_risk, num_states);
-    //cout << "num_jumps_acc_right:" << endl;
+    //Rcout << "num_jumps_acc_right:" << endl;
     //printVector(num_jumps_acc_right, dim);
-    cout << "num_jumps_right:" << endl;
+    Rcout << "num_jumps_right:" << endl;
     printVector(num_jumps_right, dim);
     */
 }
@@ -318,15 +318,15 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
     
     // for debugging
     
-    cout << "Numbers of observations in right node " << endl;
+    Rcout << "Numbers of observations in right node " << endl;
     printVector(num_obs_right);
-    cout << "Computed quantities for every possible split. num_at_risk_right:" << endl;
+    Rcout << "Computed quantities for every possible split. num_at_risk_right:" << endl;
     printVector(num_at_risk_right, num_states);
-    //cout << "num_at_risk:" << endl;
+    //Rcout << "num_at_risk:" << endl;
     //printVector(num_at_risk, num_states);
-    //cout << "num_jumps_acc_right:" << endl;
+    //Rcout << "num_jumps_acc_right:" << endl;
     //printVector(num_jumps_acc_right, dim);
-    cout << "num_jumps_right:" << endl;
+    Rcout << "num_jumps_right:" << endl;
     printVector(num_jumps_right, dim);
     
 }
@@ -431,7 +431,7 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
         if (splitrule == "approxlogrank") {
             split_val = approxLogRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
         }
-        //cout << "Split value for split " << i << ":" << split_val << endl;
+        //Rcout << "Split value for split " << i << ":" << split_val << endl;
 
         if (split_val > best_split_val) {
             best_split_val = split_val;
@@ -503,8 +503,8 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
 
         if (split_val > best_split_val) {
             best_split_val = split_val;
-            best_left_indices = move(current_left_indices);
-            best_right_indices = move(current_right_indices);
+            best_left_indices = std::move(current_left_indices);
+            best_right_indices = std::move(current_right_indices);
             best_feature = feature;
             best_threshold.assign(left_values.begin(), left_values.end());
         }
@@ -527,13 +527,13 @@ void MultistateTree::makeLeaf(size_t node_index) {
 
 // function to create a split for a multi-state tree. returns true if leaf, otherwise false
 bool MultistateTree::createSplit(size_t node_index) {
-    //cout << "Creating split on node " << node_index << endl;
+    //Rcout << "Creating split on node " << node_index << endl;
     const vector<size_t>& current_node_obs = node_obs[node_index];
 
     // if no split is possible, make the node a leaf
     if (current_node_obs.size() < 2 * min_node_size) {
         if (!honest) {
-            //cout << "Computing multi-state quantities in node (leaf)" << endl;
+            //Rcout << "Computing multi-state quantities in node (leaf)" << endl;
             computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);               // for dishonest trees, use the growing indices
         } else {
             computeMultistateQuantities(holdout_node_obs[node_index], num_jumps, num_at_risk);   // for honest trees, use the holdout set for computing the CHF
@@ -542,7 +542,7 @@ bool MultistateTree::createSplit(size_t node_index) {
         return true;
     }
 
-    //cout << "Computing multi-state quantities in node (not leaf)" << endl;
+    //Rcout << "Computing multi-state quantities in node (not leaf)" << endl;
     computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);   // update parent multi-state info
 
     double best_split_val = -1.0;
@@ -562,7 +562,7 @@ bool MultistateTree::createSplit(size_t node_index) {
         feature_indices[i] = i;
     }
     vector<size_t> sampled_features = sampleIndices(feature_indices, mtry, false, random_number_generator);
-    //cout << "Sampled features: ";
+    //Rcout << "Sampled features: ";
     //printVector(sampled_features);
 
     // now consider each of the sampled features
@@ -577,7 +577,7 @@ bool MultistateTree::createSplit(size_t node_index) {
         }
     }
 
-    //cout << "best_split_val = " << best_split_val << endl;
+    //Rcout << "best_split_val = " << best_split_val << endl;
 
     // if no best split is found, make the node a leaf
     if (best_split_val < 0) {
@@ -673,7 +673,7 @@ void MultistateTree::computeNA(size_t node_index) {
                     na[index + k] = na[index - dim + k];
                     // for debugging only
                     if (num_at_risk[i * num_states + j] == 0 && num_jumps[index + k] > 0) {
-                        cout << "Warning in computeNA: num_at_risk[i * num_states + j] = 0, but num_jumps[index + k] = " << num_jumps[index + k] << endl; 
+                        Rcout << "Warning in computeNA: num_at_risk[i * num_states + j] = 0, but num_jumps[index + k] = " << num_jumps[index + k] << endl; 
                     }
 
                     if (num_at_risk[i * num_states + j] != 0) {
@@ -692,9 +692,9 @@ void MultistateTree::computeNA(size_t node_index) {
             na[index + j] = diag;
         }
     }
-    //cout << "Nelson-Aalen estimator in terminal node:" << endl;
+    //Rcout << "Nelson-Aalen estimator in terminal node:" << endl;
     //printVector(na);
-    this->na.push_back(move(na));
+    this->na.push_back(std::move(na));
 }
 
 // splitting rules for multi-state trees
@@ -722,13 +722,13 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
             
             // temporary for debugging
             if (Y < Y1) {
-                cout << "Warning: Y = " << Y << " < Y1 = " << Y1 << endl; 
+                Rcout << "Warning: Y = " << Y << " < Y1 = " << Y1 << endl; 
             }
             if (d > Y) {
-                cout << "Warning: Number of jumps d = " << d << ", but Y = " << Y << " at event time i = " << i << " and jump (" << static_cast<size_t>(j + 1) << ", " << static_cast<size_t>(k + 1) << ")" << endl;
+                Rcout << "Warning: Number of jumps d = " << d << ", but Y = " << Y << " at event time i = " << i << " and jump (" << static_cast<size_t>(j + 1) << ", " << static_cast<size_t>(k + 1) << ")" << endl;
             }
             if (d1 > Y1) {
-                cout << "Warning: Number of jumps d1 = " << d1 << ", but Y1 = " << Y1 << " at event time i = " << i << " and jump (" << static_cast<size_t>(j + 1) << ", " << static_cast<size_t>(k + 1) << ")" << endl;
+                Rcout << "Warning: Number of jumps d1 = " << d1 << ", but Y1 = " << Y1 << " at event time i = " << i << " and jump (" << static_cast<size_t>(j + 1) << ", " << static_cast<size_t>(k + 1) << ")" << endl;
             }
 
             // prevent division by zero in the log-rank test
@@ -885,7 +885,7 @@ double MultistateTree::conserve(const vector<size_t>& num_jumps, const vector<si
             size_t d1 = num_jumps_daughter[jump_index + i * dim + j * num_states + k];
             num_jumps_daughter_2 = num_jumps[i * dim + j * num_states + k] - d1;
             num_at_risk_daughter_2[i] = num_at_risk[i * num_states + j] - num_at_risk_daughter[at_risk_index + i * num_states + j];
-            cout << "num_at_risk_daughter_2[i] = " << num_at_risk_daughter_2[i] << endl;
+            Rcout << "num_at_risk_daughter_2[i] = " << num_at_risk_daughter_2[i] << endl;
 
             if (d1 > 0) {
                 NAsum1[i] += (double) d1 / num_at_risk_daughter[at_risk_index + i * num_states + j];
@@ -898,13 +898,13 @@ double MultistateTree::conserve(const vector<size_t>& num_jumps, const vector<si
         // now compute the outer sums
         for (size_t i = 0; i < num_unique_event_times - 1; ++i) {
             // in survival, you would not need the abs (maybe this adaptation to multi-states does not even make sense)
-            cout << "num_at_risk_daughter_2[i + 1] = " << num_at_risk_daughter_2[i + 1] << ", NAsum2[i] = " << NAsum1[i] << endl;
+            Rcout << "num_at_risk_daughter_2[i + 1] = " << num_at_risk_daughter_2[i + 1] << ", NAsum2[i] = " << NAsum1[i] << endl;
             sum1_jump += abs(static_cast<int>(num_at_risk_daughter[at_risk_index + i * num_states + j]) - static_cast<int>(num_at_risk_daughter[at_risk_index + (i + 1) * num_states + j])) * num_at_risk_daughter[at_risk_index + (i + 1) * num_states + j] * NAsum1[i];
             sum2_jump += abs(static_cast<int>(num_at_risk_daughter_2[i]) - static_cast<int>(num_at_risk_daughter_2[i + 1])) * num_at_risk_daughter_2[i + 1] * NAsum2[i];
         }
-        cout << "Added to cons: " << (num_at_risk_daughter[at_risk_index + j] * sum1_jump + num_at_risk_daughter_2[0] * sum2_jump) / num_at_risk[j] << endl;
+        Rcout << "Added to cons: " << (num_at_risk_daughter[at_risk_index + j] * sum1_jump + num_at_risk_daughter_2[0] * sum2_jump) / num_at_risk[j] << endl;
         cons += (num_at_risk_daughter[at_risk_index + j] * sum1_jump + num_at_risk_daughter_2[0] * sum2_jump) / num_at_risk[j];
-        cout << "cons = " << cons << endl;
+        Rcout << "cons = " << cons << endl;
 
         // reset NAsum vectors
         //fill(NAsum1.begin(), NAsum1.end(), 0);

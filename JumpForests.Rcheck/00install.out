@@ -1,0 +1,81 @@
+* installing *source* package ‘JumpForests’ ...
+** using staged installation
+** libs
+using C++ compiler: ‘Apple clang version 17.0.0 (clang-1700.6.4.2)’
+using C++17
+using SDK: ‘’
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c Data.cpp -o Data.o
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c Forest.cpp -o Forest.o
+Forest.cpp:48:12: warning: unused variable 'num_obs' [-Wunused-variable]
+   48 |     size_t num_obs = data->getNumberOfObs();
+      |            ^~~~~~~
+Forest.cpp:106:59: warning: left operand of comma operator has no effect [-Wunused-value]
+  106 |             result[i * num_features + j] = feature_matrix[i, j];
+      |                                                           ^
+2 warnings generated.
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c ForestMultistate.cpp -o ForestMultistate.o
+ForestMultistate.cpp:148:12: warning: unused variable 'num_features' [-Wunused-variable]
+  148 |     size_t num_features = new_data.getNumberOfFeatures();
+      |            ^~~~~~~~~~~~
+1 warning generated.
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c ForestRegression.cpp -o ForestRegression.o
+ForestRegression.cpp:126:12: warning: unused variable 'num_features' [-Wunused-variable]
+  126 |     size_t num_features = new_data.getNumberOfFeatures();
+      |            ^~~~~~~~~~~~
+1 warning generated.
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c ForestSurvival.cpp -o ForestSurvival.o
+ForestSurvival.cpp:180:12: warning: unused variable 'num_features' [-Wunused-variable]
+  180 |     size_t num_features = new_data.getNumberOfFeatures();
+      |            ^~~~~~~~~~~~
+1 warning generated.
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c JumpForests.cpp -o JumpForests.o
+JumpForests.cpp:333:1: warning: non-void function does not return a value in all control paths [-Wreturn-type]
+  333 | }
+      | ^
+JumpForests.cpp:460:1: warning: non-void function does not return a value in all control paths [-Wreturn-type]
+  460 | }
+      | ^
+JumpForests.cpp:760:1: warning: non-void function does not return a value in all control paths [-Wreturn-type]
+  760 | }
+      | ^
+JumpForests.cpp:883:1: warning: non-void function does not return a value in all control paths [-Wreturn-type]
+  883 | }
+      | ^
+JumpForests.cpp:890:10: warning: unused variable 'num_obs' [-Wunused-variable]
+  890 |   size_t num_obs = as<size_t>(JFForest["num.obs"]);
+      |          ^~~~~~~
+JumpForests.cpp:947:1: warning: non-void function does not return a value in all control paths [-Wreturn-type]
+  947 | }
+      | ^
+6 warnings generated.
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c RcppExports.cpp -o RcppExports.o
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c Tree.cpp -o Tree.o
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c TreeMultistate.cpp -o TreeMultistate.o
+TreeMultistate.cpp:961:58: warning: object backing the pointer will be destroyed at the end of the full-expression [-Wdangling-gsl]
+  961 |         const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));
+      |                                                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 warning generated.
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c TreeRegression.cpp -o TreeRegression.o
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c TreeSurvival.cpp -o TreeSurvival.o
+TreeSurvival.cpp:14:46: warning: field 'true_event_time_ids' will be initialized after field 'response_event_time_ids' [-Wreorder-ctor]
+   14 |     unique_event_times {unique_event_times}, true_event_time_ids {true_event_time_ids}, response_event_time_ids {response_event_time_ids} {
+      |                                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                                              response_event_time_ids {response_event_time_ids} true_event_time_ids {true_event_time_ids}
+TreeSurvival.cpp:624:58: warning: object backing the pointer will be destroyed at the end of the full-expression [-Wdangling-gsl]
+  624 |         const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));
+      |                                                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c helper.cpp -o helper.o
+clang++ -arch arm64 -std=gnu++17 -I"/Library/Frameworks/R.framework/Resources/include" -DNDEBUG  -I'/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library/Rcpp/include' -I/opt/R/arm64/include    -fPIC  -falign-functions=64 -Wall -g -O2   -c old.cpp -o old.o
+clang++ -arch arm64 -std=gnu++17 -dynamiclib -Wl,-headerpad_max_install_names -undefined dynamic_lookup -L/Library/Frameworks/R.framework/Resources/lib -L/opt/R/arm64/lib -o JumpForests.so Data.o Forest.o ForestMultistate.o ForestRegression.o ForestSurvival.o JumpForests.o RcppExports.o Tree.o TreeMultistate.o TreeRegression.o TreeSurvival.o helper.o old.o -F/Library/Frameworks/R.framework/.. -framework R -Wl,-framework -Wl,CoreFoundation
+installing to /Users/wtz155/Documents/GitHub/JumpForests/JumpForests.Rcheck/00LOCK-JumpForests/00new/JumpForests/libs
+** R
+** byte-compile and prepare package for lazy loading
+** help
+*** installing help indices
+** building package indices
+** testing if installed package can be loaded from temporary location
+** checking absolute paths in shared objects and dynamic libraries
+** testing if installed package can be loaded from final location
+** testing if installed package keeps a record of temporary installation path
+* DONE (JumpForests)

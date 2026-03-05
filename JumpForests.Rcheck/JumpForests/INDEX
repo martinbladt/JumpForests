@@ -1,0 +1,15 @@
+aalen_johansen          Compute the conditional Aalen-Johansen
+                        estimator.
+jfforest                Fit a JumpForests forest
+jfforest.error          Compute forest prediction error
+jfforest.predict        Predict from a fitted forest
+jfforest.vimp           Variable importance for a fitted forest
+jftree                  Fit a JumpForests tree
+jftree.error            Compute tree prediction error
+jftree.predict          Predict from a fitted tree
+JumpForests-package     JumpForests: Adaptive Conditional
+                        Aalen-Johansen Estimation
+prodint                 Calculate the product integral of a matrix
+                        function
+sim_path                Simulate the path of a time-inhomogeneous
+                        (semi-)Markov process until a maximal time

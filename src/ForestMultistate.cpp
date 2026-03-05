@@ -30,13 +30,13 @@ void MultistateForest::grow() {
 
     size_t n_threads = this->nworkers;
     omp_set_num_threads(n_threads);
-    cout << "Growing forest using " << n_threads << " threads" << endl;
+    Rcout << "Growing forest using " << n_threads << " threads" << endl;
 
     // use OpenMP for parallel tree growing
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t i = 0; i < static_cast<size_t>(ntrees); ++i) {
         // give each thread its own random number generator to prevent races
-        cout << "Growing tree " << i << "/" << ntrees << endl;
+        Rcout << "Growing tree " << i << "/" << ntrees << endl;
         mt19937 local_rng(seed + i);
         unique_ptr<MultistateTree> tree;
 
@@ -76,7 +76,7 @@ void MultistateForest::grow() {
         tree->initialise(data, mtry, min_node_size, nsplits, splitrule, honest, dist(local_rng));
         tree->setRNG(local_rng);
         tree->grow();
-        trees[i] = move(tree);
+        trees[i] = std::move(tree);
     }
 
     // compute all quantities of interest from the vector of trees
