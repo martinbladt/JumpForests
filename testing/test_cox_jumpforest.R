@@ -1,6 +1,18 @@
 devtools::load_all()
 library(survival)
 
+plot_dir <- if (dir.exists("Plots")) {
+  "Plots"
+} else if (dir.exists("../Plots")) {
+  "../Plots"
+} else if (dir.exists("../../Plots")) {
+  "../../Plots"
+} else {
+  dir.create("Plots", showWarnings = FALSE)
+  "Plots"
+}
+plot_file <- function(name) file.path(plot_dir, name)
+
 # 1. Setup Parameters
 set.seed(1)
 n <- 1000
@@ -63,10 +75,10 @@ x_vals <- quantile(df$x, probs = c(0.1, 0.5, 0.9))
 jf_pred <- jfforest.predict(jf_fit, new_data = data.frame(x = as.numeric(x_vals)))
 
 # 6. Create the Plot
+pdf(plot_file("coxph_vs_jumpforest_ph.pdf"), width = 6, height = 6)
 plot(NULL, xlim = c(0, max(df$time)), ylim = c(0, 1),
      xlab = "", ylab = "",
      main = "")
-grid(lty = "dotted", col = "gray80")
 
 for (i in seq_along(x_vals)) {
   val <- x_vals[i]
@@ -91,6 +103,7 @@ legend("topright",
        col = c("#ED9912", "gray80", "#377EB8"),
        lty = c(1, 3, 2),
        lwd = 2, bty = "n", cex = 0.8)
+dev.off()
 
 # 8. Non-proportional hazards example (analogous workflow)
 set.seed(1)
@@ -137,10 +150,10 @@ x_vals_np <- quantile(df_np$x, probs = c(0.1, 0.5, 0.9))
 jf_pred_np <- jfforest.predict(jf_fit_np, new_data = data.frame(x = as.numeric(x_vals_np)))
 
 plot_max_np <- as.numeric(quantile(df_np$time, probs = 0.98))
+pdf(plot_file("coxph_vs_jumpforest_nonph.pdf"), width = 6, height = 6)
 plot(NULL, xlim = c(0, plot_max_np), ylim = c(0, 1),
      xlab = "", ylab = "",
      main = "")
-grid(lty = "dotted", col = "gray80")
 
 t_grid_np <- seq(0, plot_max_np, length.out = 120)
 for (i in seq_along(x_vals_np)) {
@@ -165,3 +178,4 @@ legend("topright",
        col = c("#ED9912", "gray80", "#377EB8"),
        lty = c(1, 3, 2),
        lwd = 2, bty = "n", cex = 0.8)
+dev.off()

@@ -136,9 +136,9 @@ if (u_max <= u_min) {
   u_min <- max(0, min(durations, na.rm = TRUE))
   u_max <- min(10, max(durations, na.rm = TRUE))
 }
-u_grid <- seq(u_min, u_max, length.out = 8)
+u_grid <- seq(u_min, u_max, length.out = 30)
 t_max <- min(40, max(cond_forest$unique.event.times))
-t_grid <- seq(10, t_max, length.out = 20)
+t_grid <- seq(10, t_max, length.out = 30)
 z_true <- outer(t_grid, u_grid, P)
 
 rf_surface_pred <- jfforest.predict(cond_forest, data.frame(duration = u_grid))
@@ -168,8 +168,8 @@ persp(
   ticktype = "detailed",
   xlab = "t",
   ylab = "u",
-  zlab = "P(X_t = 2 | U_10 = u), JumpForest",
-  main = "Conditional Surface: JumpForest"
+  zlab = "",
+  main = ""
 )
 dev.off()
 
@@ -187,8 +187,8 @@ persp(
   ticktype = "detailed",
   xlab = "t",
   ylab = "u",
-  zlab = "True - Fitted, JumpForest",
-  main = "Difference Surface: True - JumpForest"
+  zlab = "",
+  main = ""
 )
 dev.off()
 
@@ -224,8 +224,8 @@ if (length(valid_cols) >= 2) {
     ticktype = "detailed",
     xlab = "t",
     ylab = "u",
-    zlab = "P(X_t = 2 | U_10 = u), cAJ",
-    main = "Conditional Surface: cAJ"
+    zlab = "",
+    main = ""
   )
   dev.off()
 
@@ -243,8 +243,8 @@ if (length(valid_cols) >= 2) {
     ticktype = "detailed",
     xlab = "t",
     ylab = "u",
-    zlab = "True - Fitted, cAJ",
-    main = "Difference Surface: True - cAJ"
+    zlab = "",
+    main = ""
   )
   dev.off()
 
