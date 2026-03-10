@@ -36,17 +36,19 @@ void MultistateForest::grow() {
     // use OpenMP for parallel tree growing
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t i = 0; i < static_cast<size_t>(ntrees); ++i) {
-        // give each thread its own random number generator to prevent races
         size_t current;
         #pragma omp atomic capture
         current = ++progress;
         #pragma omp critical
         {
-            Rcout << "\rGrowing tree " << current << "/" << ntrees << std::flush;
+            cout << "Growing tree " << current << "/" << ntrees << endl;
+            //Rcout << "\rGrowing tree " << current << "/" << ntrees << std::flush;
             if (current == static_cast<size_t>(ntrees)) {
-                Rcout << endl;
+                cout << endl;
+                //Rcout << endl;
             }
         }
+        // give each thread its own random number generator to prevent races
         mt19937 local_rng(seed + i);
         unique_ptr<MultistateTree> tree;
 

@@ -52,7 +52,7 @@ for(i in 1:n){
   sim[[i]]$Y <- Y[i]
 }
 
-sum(c == unlist(lapply(sim, FUN = function(z){tail(z$times, 1)}))) / n  #0.28
+sum(c == unlist(lapply(sim, FUN = function(z){tail(z$times, 1)}))) / n  #0.295
 sim[1]
 
 # now test the package
@@ -82,7 +82,7 @@ new_data <- data.frame(X2 = runif(5), X1 = rnorm(5))
 jftree.predict(fitted_tree, new_d)
 
 # fit the forest (takes a couple of minutes)
-fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, splitrule = "logrank")
+fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 1000, min_node_size = 50, splitrule = "logrank", save_predictions = FALSE)
 print_forest(fitted_forest)
 
 jfforest.predict(fitted_forest)[[1]]
@@ -133,6 +133,8 @@ plot(v10, v11, type = "l", lty = 2, xlab = "", ylab = "", main = "Hazard (cAJ)",
 lines(v10, 2/x1*log(1+x1*v10), col = "red")
 lines(v20, v21, lty = 2, col = "blue")
 lines(v20, 2/x2*log(1+x2*v20), col = "blue")
+lines(v30, v31, lty = 2, col = "darkgreen")
+lines(v30, 2/x3*log(1+x3*v30), col = "darkgreen")
 
 # occupation probability for state 2 (cAJ)
 plot(v10, p1, type = "l", lty = 2, xlab = "", ylab = "", main = "Probability (cAJ)", col = "red")
@@ -145,6 +147,8 @@ plot(times, v11_forest, type = "l", lty = 2, xlab = "", ylab = "", main = "Hazar
 lines(times, 2/x1*log(1+x1*times), col = "red")
 lines(times, v21_forest, lty = 2, col = "blue")
 lines(times, 2/x2*log(1+x2*times), col = "blue")
+lines(times, v31_forest, lty = 2, col = "darkgreen")
+lines(times, 2/x3*log(1+x3*times), col = "darkgreen")
 
 # plot the predictions from the random forest
 

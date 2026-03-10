@@ -47,9 +47,11 @@ for (i in seq_len(n)) {
   )
 }
 
+# subsamples the observations that are in state 2 at time 10
 landmark <- sim[unlist(lapply(sim, function(z) {
   any(z$times <= 10 & c(z$times[-1], Inf) > 10 & z$states == 2)
 }))]
+# computes the duration at time 10 in state 2
 landmark <- lapply(landmark, function(z) {
   duration <- 10 - z$times[z$times <= 10 & c(z$times[-1], Inf) > 10 & z$states == 2]
   list(times = z$times, states = as.integer(z$states), X = duration)
@@ -97,7 +99,7 @@ cond_forest <- jfforest(
   mtry = 1,
   min_node_size = 150,
   nsplits = 10,
-  ntrees = 5000,
+  ntrees = 1000,  # originally 5000
   splitrule = "logrank",
   seed = 2026,
   nworkers = 0,

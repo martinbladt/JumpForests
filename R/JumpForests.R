@@ -13,12 +13,14 @@
 #' @param nsplits Number of split points per feature.
 #' @param honest Whether to use honest splitting.
 #' @param seed Optional random seed.
+#' @param num_event_times Maximum number of event times to use (only relevant for survival and multi-states)
 #'
 #' @return A fitted tree object as a list.
 #' @export
 #'
 # the main function for fitting trees (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
-jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10, honest = FALSE, seed = NULL) {
+jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
+                   honest = FALSE, seed = NULL, num_event_times = 0) {
   lhs <- as.character(formula[[2]])
   # if seed is not set, generate a random one
   if (is.null(seed)) {
@@ -109,7 +111,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 
     JFCppTree(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
               response_indices, feature_indices, processed_data$categorical,
-              processed_data$unique_values, seed)
+              processed_data$unique_values, seed, num_event_times)
   }
   # if the left hand side is "MM", multi-state
   else if (lhs[1] == "MM") {
@@ -247,6 +249,7 @@ jftree.error <- function(tree_list, new_data = NULL) {
 #' @param seed Optional random seed.
 #' @param nworkers Number of worker threads.
 #' @param save_predictions Logical, whether to compute and store in-sample/OOB predictions at fit time for multi-state forests.
+#' @param num_event_times Maximum number of event times to use (only relevant for survival and multi-states)
 #'
 #' @return A fitted forest object as a list.
 #' @export
@@ -254,7 +257,7 @@ jftree.error <- function(tree_list, new_data = NULL) {
 # the main function for fitting forests (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
 jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
                      ntrees = NULL, honest = FALSE, swr = FALSE, sample_rate = NULL, double_bootstrap = FALSE, 
-                     seed = NULL, nworkers = 0, save_predictions = TRUE) {
+                     seed = NULL, nworkers = 0, save_predictions = TRUE, num_event_times = 0) {
   lhs <- as.character(formula[[2]])
 
   # if seed is not set, generate a random one
@@ -355,7 +358,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
 
     JFCppForest(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
               sample_rate, response_indices, feature_indices, processed_data$categorical,
-              processed_data$unique_values, seed, nworkers)
+              processed_data$unique_values, seed, nworkers, num_event_times)
   }
   # if the left hand side is "MM(...)", multi-state
   else if (lhs[1] == "MM") {
@@ -393,7 +396,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
 
     JFCppForestMM(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
                   nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, processed_data$categorical,
-                  processed_data$unique, seed, nworkers, save_predictions);
+                  processed_data$unique, seed, nworkers, save_predictions, num_event_times);
 
   } else {
     stop("Type of tree not recognised from the formula.")
@@ -714,6 +717,6 @@ fit_survival_tree <- function(data, mtry, min_node_size, nsplits,
   stop("fit_survival_tree() is no longer exposed. Use jftree(..., splitrule = 'logrank') instead.")
 }
 
-test_unique_event_times <- function(unique_event_times, prop_to_remove) {
-  testUniqueEventTimesThinning(unique_event_times, prop_to_remove)
+test_unique_event_times <- function(unique_event_times, num_event_times) {
+  testUniqueEventTimesThinning(unique_event_times, num_event_times)
 }

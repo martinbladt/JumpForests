@@ -18,9 +18,9 @@ tree_type:
 //--------------------------------------------------------------------------------------
 
 // [[Rcpp::export]]
-List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, bool honest,
-    NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical,
-    NumericVector unique, unsigned int seed) {
+List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, 
+               bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
+               unsigned int seed, size_t num_event_times = 0) {
   
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp = as<vector<size_t>>(response_indices);
@@ -95,6 +95,12 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
     vector<double> times = as<vector<double>>(df[response_indices_cpp[0]]);
     vector<double> ind = as<vector<double>>(df[response_indices_cpp[1]]);
     vector<double> unique_event_times = uniqueValues(times);
+
+    // if the user has specified a number of event times, thin the vector of unique event times
+    if (num_event_times > 0) {
+      unique_event_times = thinUniqueEventTimes(unique_event_times, num_event_times);
+    }
+
     vector<size_t> response_event_time_ids = computeResponseEventTimeIDs(unique_event_times, times);
     vector<size_t> true_event_time_ids = computeTrueEventTimeIDs(unique_event_times, response_event_time_ids, ind);
 
@@ -142,7 +148,8 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
 // [[Rcpp::export]]
 List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
-  unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed) {
+                 unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
+                 unsigned int seed, size_t num_event_times = 0) {
 
   // convert the input to C++ vectors
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -173,6 +180,11 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   // determine the (sorted) unique event times
   vector<double> unique_event_times = uniqueEventTimesMultistate(data->getTimes(), data->getStates());
+
+  // if the user has specified a number of event times, thin the vector of unique event times
+  if (num_event_times > 0) {
+    unique_event_times = thinUniqueEventTimes(unique_event_times, num_event_times);
+  }
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
 
   // create and grow the multi-state tree
@@ -465,7 +477,7 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
 // [[Rcpp::export]]
 List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule,
     unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector response_indices, NumericVector feature_indices, 
-    LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers) {
+    LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, size_t num_event_times = 0) {
 
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp = as<vector<size_t>>(response_indices);
@@ -532,6 +544,12 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
     vector<double> times = as<vector<double>>(df[response_indices_cpp[0]]);
     vector<double> ind = as<vector<double>>(df[response_indices_cpp[1]]);
     vector<double> unique_event_times = uniqueValues(times);
+
+    // if the user has specified a number of event times, thin the vector of unique event times
+    if (num_event_times > 0) {
+      unique_event_times = thinUniqueEventTimes(unique_event_times, num_event_times);
+    }
+
     vector<size_t> response_event_time_ids = computeResponseEventTimeIDs(unique_event_times, times);
     vector<size_t> true_event_time_ids = computeTrueEventTimeIDs(unique_event_times, response_event_time_ids, ind);
 
@@ -568,7 +586,7 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 // [[Rcpp::export]]
 List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
   unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector feature_indices, 
-  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions) {
+  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times = 0) {
   
   // convert the input to C++ vectors
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -597,6 +615,12 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
 
   // determine the (sorted) unique event times and the corresponding response IDs
   vector<double> unique_event_times = uniqueEventTimesMultistate(data->getTimes(), data->getStates());
+
+  // if the user has specified a number of event times, thin the vector of unique event times
+  if (num_event_times > 0) {
+    unique_event_times = thinUniqueEventTimes(unique_event_times, num_event_times);
+  }
+  
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
 
   // check validity of splitrule argument (just logrank for now)
@@ -1218,13 +1242,17 @@ void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_
 }
 
 // [[Rcpp::export]]
-void testUniqueEventTimesThinning(const NumericVector& unique_event_times, double prop_to_remove) {
+List testUniqueEventTimesThinning(const NumericVector& unique_event_times, size_t num_event_times) {
   vector<double> unique_event_times_cpp = as<vector<double>>(unique_event_times);
-  vector<double> result = thinUniqueEventTimes(unique_event_times_cpp, prop_to_remove);
-  Rcout << "Original vector of length " << unique_event_times.size() << ":" << endl;
-  printVector(unique_event_times_cpp);
-  Rcout << "Thinned vector of length " << result.size() << ":" << endl;
-  printVector(result);
+  vector<double> thinned_unique_event_times = thinUniqueEventTimes(unique_event_times_cpp, num_event_times);
+  List result = List::create(
+    Named("thinned_event_times") = thinned_unique_event_times
+  );
+  return result;
+  //Rcout << "Original vector of length " << unique_event_times.size() << ":" << endl;
+  //printVector(unique_event_times_cpp);
+  //Rcout << "Thinned vector of length " << result.size() << ":" << endl;
+  //printVector(result);
 }
 
 // for testing OpenMP

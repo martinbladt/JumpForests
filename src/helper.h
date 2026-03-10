@@ -38,7 +38,7 @@ struct Gap {
 
 // helper functions for growing trees
 vector<double> uniqueValues(vector<double> input);
-vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, double proportion_to_remove);
+vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, size_t target_size);
 vector<vector<double>> compute2Partitions(const vector<double>& feature_values);
 vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, bool with_replacement, mt19937 rng);
 

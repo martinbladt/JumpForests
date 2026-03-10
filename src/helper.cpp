@@ -15,17 +15,25 @@ vector<double> uniqueValues(vector<double> input) {
 }
 
 // used to thin out the UniqueEventTimes for survival and multi-states by a proportion to be removed (implemented by Gemini)
-vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, double proportion_to_remove) {
+vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, size_t target_size = 0) {
     size_t n = unique_event_times.size();
-    if (n < 2 || proportion_to_remove <= 0) return unique_event_times;
+    if (target_size >= n) return unique_event_times;
 
-    size_t target_size = static_cast<size_t>(n * (1.0 - proportion_to_remove));
-    if (target_size < 1) target_size = 1;
+    /*
+    if (target_size == 0 && proportion_to_remove > 0 && proportion_to_remove <= 1) {
+        target_size = static_cast<size_t>(n * (1.0 - proportion_to_remove));
+    } else {
+        cout << "Error, non-valid choice of target size or proportion to remove. Leaving vector unchanged." << endl;
+        return unique_event_times;
+    }
+    //size_t target_size = static_cast<size_t>(n * (1.0 - proportion_to_remove));
+    //if (target_size < 1) target_size = 1;
+    */
 
     vector<Node> nodes(n);
     priority_queue<Gap, std::vector<Gap>, std::greater<Gap>> pq;
 
-    // 1. Initialize nodes and initial gaps
+    // initialise nodes and initial gaps
     for (size_t i = 0; i < n; ++i) {
         nodes[i].time = unique_event_times[i];
         nodes[i].prev = (i == 0) ? -1 : (int)i - 1;
@@ -39,7 +47,7 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, do
 
     size_t current_count = n;
 
-    // 2. Main loop: Merge until target size is reached
+    // merge until target size is reached
     while (current_count > target_size && !pq.empty()) {
         Gap top = pq.top();
         pq.pop();
@@ -47,17 +55,16 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, do
         Node& left = nodes[top.left_idx];
         Node& right = nodes[top.right_idx];
 
-        // Lazy deletion check: if the nodes were updated/removed since this gap was queued, skip
+        // if the nodes were updated/removed since this gap was queued, skip
         if (!left.active || !right.active || left.version != top.left_ver || right.version != top.right_ver) {
             continue;
         }
 
-        // --- MERGE STEP ---
-        // 1. Update left node to the average
+        // update left node to the average
         left.time = (left.time + right.time) / 2.0;
         left.version++;
 
-        // 2. Remove right node from the chain
+        // remove right node from the chain
         right.active = false;
         int r_next_idx = right.next;
         left.next = r_next_idx;
@@ -67,7 +74,7 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, do
             nodes[r_next_idx].version++;
         }
 
-        // 3. Update the left node's previous neighbor to increment version 
+        // update the left node's previous neighbor to increment version 
         // (because its gap with 'left' has changed)
         if (left.prev != -1) {
             nodes[left.prev].version++;
@@ -76,7 +83,7 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, do
                      nodes[left.prev].version, left.version});
         }
 
-        // 4. Push the new gap formed to the right
+        // push the new gap formed to the right
         if (left.next != -1) {
             pq.push({nodes[left.next].time - left.time, 
                      top.left_idx, left.next, 
@@ -86,7 +93,7 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, do
         current_count--;
     }
 
-    // 3. Collect remaining points
+    // collect remaining points
     std::vector<double> result;
     result.reserve(current_count);
     for (const auto& node : nodes) {
