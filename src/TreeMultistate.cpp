@@ -102,6 +102,10 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1)), static_cast<size_t>(num_states));
         for (size_t k = 0; k < num_states; ++k) {
             // key decomposition
+            // for debugging thinning
+            //if ((int) num_at_risk[k] - (int) censoring_contribution[j * num_states + k] + (int) jump_contributions[k] < 0) {
+            //    cout << "Warning: Key decomposition negative, causing underflow in num_at_risk" << endl;
+            //}
             num_at_risk[j * num_states + k] = num_at_risk[k] - censoring_contribution[j * num_states + k] + jump_contributions[k];
         }
     }
@@ -175,7 +179,7 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
                         }
                     }
                 }
-                // compute the number of jumps
+                // compute the number of jumps (the problem has to lie in the computation of the jumps since the accumulated jumps are too many)
                 size_t j = 1;
                 size_t index = i * max_response_length + 1;
                 while(j < max_response_length && states[index] != 0) {
@@ -212,6 +216,15 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
             for (size_t k = 0; k < num_states; ++k) {
                 // key decomposition
                 size_t split_stride = s * num_unique_event_times * num_states;
+                // for debugging
+                int addition = (int) num_at_risk_right[split_stride + k] - (int) censoring_contribution_right[split_stride + j * num_states + k] + (int) jump_contributions[k];
+                if (addition < 0) {
+                    cout << "Warning: Key decomposition negative, causing underflow in num_at_risk_right" << endl;  // here is the bug when thinning
+                    cout << "Addition = " << addition << endl;
+                    cout << "num_at_risk_0 = " << num_at_risk_right[split_stride + k] << endl;
+                    cout << "Censoring contribution = " << censoring_contribution_right[split_stride + j * num_states + k] << endl;
+                    cout << "Jump contribution = " << jump_contributions[k] << endl;
+                }
                 num_at_risk_right[split_stride + j * num_states + k] = num_at_risk_right[split_stride + k] - censoring_contribution_right[split_stride + j * num_states + k] + jump_contributions[k];
             }
         }
@@ -981,7 +994,7 @@ vector<double> MultistateTree::computePredictions(const Data& new_data) {
 // computes the vector of unique event times for multi-state data, excluding censoring times
 vector<double> uniqueEventTimesMultistate(const vector<double>& times, const vector<uint8_t>& states) {
     vector<double> result;
-    result.push_back(0);
+    result.push_back(0);    // 0 is always included
 
     // start by picking out the times that are not only censoring times
     // since 0 is the first time of every observation, we can also skip 0
@@ -1013,15 +1026,19 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
 
         // use binary search to find lower bound
         auto it = lower_bound(unique_event_times.begin(), unique_event_times.end(), times[i]);
-        response_event_time_ids.push_back(static_cast<size_t>(distance(unique_event_times.begin(), it)));
+        size_t idx = static_cast<size_t>(distance(unique_event_times.begin(), it));
+        if (idx >= unique_event_times.size()) {
+            idx = unique_event_times.size() - 1;
+        }
+        response_event_time_ids.push_back(idx);
     }
     return response_event_time_ids;
 }
 
 vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states) {
     vector<double> aj = vector<double>(na.size(), 0);
-    size_t dim = num_states * num_states;                       // number of entries in each matrix
-    size_t num_jumps = na.size() / dim;   // num_unique_event_times
+    size_t dim = num_states * num_states;   // number of entries in each matrix
+    size_t num_jumps = na.size() / dim;     // num_unique_event_times
     // initial value is the identity matrix
     for (size_t j = 0; j < num_states; ++j) {
         aj[j * num_states + j] = 1;

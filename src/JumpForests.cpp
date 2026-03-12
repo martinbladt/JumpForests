@@ -636,11 +636,11 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
 
   // specific to multi-states
   NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
-  XPtr<MultistateForest> multistate_forest(forest, true);
-  // compute total number of jumps? maybe in Data?
   result["tree.type"] = "Multi-state";
   result["num.trees"] = ntrees;
   result["unique.event.times"] = unique_event_times_R;
+  XPtr<MultistateForest> multistate_forest(forest, true);
+  // compute total number of jumps? maybe in Data?
   result["Forest"] = multistate_forest;           // add the forest as a pointer, only to be used for prediction
 
   if (save_predictions) {

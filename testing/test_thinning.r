@@ -51,12 +51,14 @@ landmark <- lapply(landmark, function(z) {
 event_times <- sort(unique(unlist(lapply(landmark, function(z) z$times))))
 length(event_times) # 1981
 
-# testing the thinning functions
+# testing the thinning functions (for n = 5000)
 thinned <- test_unique_event_times(event_times, 209)
 thinned$thinned_event_times
 tail(thinned$thinned_event_times)
 tail(event_times)
-# at 209 thinned times, the final event time is not the same anymore (which may be problematic?)
+head(thinned$thinned_event_times)
+head(event_times)
+# at 209 thinned times, the final event time is not the same anymore when using averages
 
 # testing in the semi-Markov model from test_semiMarkov.R
 plot_dir <- if (dir.exists("Plots")) {
@@ -112,7 +114,7 @@ cond_forest <- jfforest(
 )
 print_forest(cond_forest)
 
-# 1740 unique event times (takes approximately 29 seconds on my machine)
+# 1740 unique event times (takes approximately 56 seconds on my machine)
 length(cond_forest$unique.event.times)
 
 cond_forest_thinned <- jfforest(
@@ -127,21 +129,35 @@ cond_forest_thinned <- jfforest(
   seed = 2026,
   nworkers = 0,
   save_predictions = FALSE,
-  num_event_times = 600
+  num_event_times = 50
 )
 print_forest(cond_forest_thinned)
-# num_event_times = 1000: 17 seconds
-# num_event_times = 700: 12 seconds
-# num_event_times = 600: 11 seconds
-# num_event_times = 500: something goes wrong, investigate the thinning functions
+# num_event_times = 1000: 31 seconds
+# num_event_times = 500: 16 seconds
+# num_event_times = 250: 10 seconds
+# num_event_times = 150: 6 seconds (the effect of thinning becomes a little bit clear)
+# num_event_times = 100: 5 seconds (the effect of thinning becomes somewhat clear)
+# num_event_times = 50: 3 seconds (the effect of thinning becomes clear)
+# num_event_times = 10: <2 seconds (very degraded, but also only for illustration)
 
 cond_forest$unique.event.times
-cond_forest_thinned$unique.event.times
+#cond_forest$response.event.time.ids
+#unlist(lapply(landmark, function(z) z$times))
+#length(unlist(lapply(landmark, function(z) z$times)))
+#length(cond_forest$response.event.time.ids)
 
-# write out the tails before fitting the forest
+cond_forest_thinned$unique.event.times
+#cond_forest_thinned$response.event.time.ids
+#unlist(lapply(landmark, function(z) z$times))
+#length(unlist(lapply(landmark, function(z) z$times)))
+#length(cond_forest_thinned$response.event.time.ids)
+
 tail(cond_forest$unique.event.times)
 tail(cond_forest_thinned$unique.event.times)
+head(cond_forest$unique.event.times)
+head(cond_forest_thinned$unique.event.times)
 
+# compare the thinned and non-thinned forests
 cond_pred <- jfforest.predict(cond_forest, data.frame(duration = c(u1, u2)))
 cond_pred_thinned <- jfforest.predict(cond_forest_thinned, data.frame(duration = c(u1, u2)))
 p_rf_u1 <- extract_prob(cond_pred[[1]], from = 2, to = 2)
@@ -149,7 +165,7 @@ p_rf_u2 <- extract_prob(cond_pred[[2]], from = 2, to = 2)
 p_rf_u1_thinned <- extract_prob(cond_pred_thinned[[1]], from = 2, to = 2)
 p_rf_u2_thinned <- extract_prob(cond_pred_thinned[[2]], from = 2, to = 2)
 
-pdf(plot_file("p2_conditional_jumpforest_thinning.pdf"), width = 6, height = 6)
+pdf(plot_file("p2_conditional_jumpforest_thinned50.pdf"), width = 6, height = 6)
 plot(seq(10, 40, 0.1), P(seq(10, 40, 0.1), u1), type = "l", lty = 1, xlab = "", ylab = "",
      col = "#e74c3c", xlim = c(10, 40), lwd = 2)  # true, u = u1
 lines(seq(10, 40, 0.1), P(seq(10, 40, 0.1), u2), lwd = 2, col = "#3498DB")  # true, u = u2
@@ -165,7 +181,7 @@ legend("topright",
        bty = "n",
        cex = 0.9,
        inset = c(0.05, 0.05))
-title("JumpForest w. and w.o. thinning (1740 vs. 600 event times)")
+title("JumpForest w. and w.o. thinning (1740 vs. 50 event times)")
 dev.off()
 
 #nolint_end

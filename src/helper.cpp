@@ -60,8 +60,10 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, si
             continue;
         }
 
-        // update left node to the average
+        // update left node to the average (old)
         left.time = (left.time + right.time) / 2.0;
+        // update left node to the largest time (for testing so far)
+        //left.time = right.time;
         left.version++;
 
         // remove right node from the chain
@@ -101,6 +103,10 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, si
             result.push_back(node.time);
         }
     }
+
+    // temporary to ensure 0 is always included
+    result[0] = 0;
+    
     result.shrink_to_fit();
     return result;
 }
