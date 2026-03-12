@@ -527,6 +527,7 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
 void MultistateTree::makeLeaf(size_t node_index) {
     // compute the matrices of Nelson--Aalen estimators
     computeNA(node_index);
+    computeInitialDist(node_index);
 
     // update tree info
     feature_IDs.push_back(0);
@@ -647,6 +648,7 @@ bool MultistateTree::createSplit(size_t node_index) {
     feature_IDs.push_back(best_feature);
     thresholds.push_back(best_threshold);
     na.push_back(vector<double>());
+    init_dist.push_back(vector<double>());
 
     // for honest trees, update the holdout indices
     if (honest) {
@@ -655,6 +657,17 @@ bool MultistateTree::createSplit(size_t node_index) {
     }
 
     return false;
+}
+
+// computes the initial distribution in a node
+void MultistateTree::computeInitialDist(size_t node_index) {
+    uint8_t num_states = data->getNumberOfStates();
+    vector<double> init_dist(num_states, 0);
+    double num_obs = node_obs[node_index].size();
+    for (size_t j = 0; j < num_states; ++j) {
+        init_dist[j] = (double) num_at_risk[j] / num_obs;
+    }
+    this->init_dist.push_back(std::move(init_dist));
 }
 
 // computes the matrix of Nelson--Aalen estimators in node node_index
@@ -978,6 +991,19 @@ vector<double> MultistateTree::computePredictions(const Data& new_data) {
                     predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
                 }
             }
+        }
+    }
+    return predictions;
+}
+
+vector<double> MultistateTree::computePredictedInitialDistributions(const Data& new_data) {
+    uint8_t num_states = data->getNumberOfStates();
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_states);
+    for (size_t i = 0; i < num_obs; ++i) {
+        const vector<double>& pred = predictInitDist(new_data.get_x_row(i));
+        for (size_t j = 0; j < num_states; ++j) {
+            predictions[i * num_states + j] = pred[j];
         }
     }
     return predictions;

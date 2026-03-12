@@ -38,7 +38,7 @@ lambda <- function(t, x){
 
 set.seed(2026)
 
-n <- 1000
+n <- 100
 X <- runif(n)   # signal
 Y <- rnorm(n)   # noise
 c <- runif(n, 0, 5)
@@ -79,10 +79,10 @@ fitted_tree <- jftree(MM ~ X1, data = sim, feature_data = test_data, nsplits = 1
 
 jftree.predict(fitted_tree)
 new_data <- data.frame(X2 = runif(5), X1 = rnorm(5))
-jftree.predict(fitted_tree, new_d)
+jftree.predict(fitted_tree, new_data)
 
 # fit the forest (takes a couple of minutes)
-fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 1000, min_node_size = 50, splitrule = "logrank", save_predictions = FALSE)
+fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 1000, min_node_size = 20, splitrule = "logrank", save_predictions = TRUE)
 print_forest(fitted_forest)
 
 jfforest.predict(fitted_forest)[[1]]
@@ -94,7 +94,7 @@ x2 <- 0.6
 x3 <- 0.8
 
 new_data <- data.frame(X1 = c(x1, x2, x3), X2 = c(0, 0, 0))
-forest_fit <- jfforest.predict(fitted_forest, new_data)
+forest_fit <- jfforest.predict(fitted_forest, new_data, )
 
 fit1 <- aalen_johansen(sim, x = x1)
 fit2 <- aalen_johansen(sim, x = x2)

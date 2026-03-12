@@ -167,7 +167,7 @@ p_rf_u2_thinned <- extract_prob(cond_pred_thinned[[2]], from = 2, to = 2)
 
 pdf(plot_file("p2_conditional_jumpforest_thinned50.pdf"), width = 6, height = 6)
 plot(seq(10, 40, 0.1), P(seq(10, 40, 0.1), u1), type = "l", lty = 1, xlab = "", ylab = "",
-     col = "#e74c3c", xlim = c(10, 40), lwd = 2)  # true, u = u1
+     col = "#e74c3c", xlim = c(10, 40), lwd = 2)                            # true, u = u1
 lines(seq(10, 40, 0.1), P(seq(10, 40, 0.1), u2), lwd = 2, col = "#3498DB")  # true, u = u2
 lines(cond_forest$unique.event.times, p_rf_u1, lwd = 2, col = "#27AE60")    # forest w.o. thinning, u = u1
 lines(cond_forest$unique.event.times, p_rf_u2, lwd = 2, col = "#F39C12")    # forest w.o. thinning, u = u2

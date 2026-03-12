@@ -24,21 +24,28 @@ public:
   const size_t getNumUniqueEventTimes() const {
     return num_unique_event_times;
   }
-
   const vector<vector<double>> getNA() const {
     return na;
+  }
+  const vector<vector<double>> getInitDist() const {
+    return init_dist;
   }
   // for computing predictions after the forest is grown
   // first vector is a flattened 2D array with in-bag predictions, the other with oob predictions
   pair<vector<double>, vector<double>> computePredictions();
+  // for computing initial distributions after the forest is grown, again flattened vectors
+  pair<vector<double>, vector<double>> computePredictedInitialDistributions();
   // computing predictions on a new dataset (output is a flattened array)
   vector<double> computePredictions(const Data& new_data);
+  // computes the initial distribution on a new dataset (output is a flattened array)
+  vector<double> computePredictedInitialDistributions(const Data& new_data);
 private:
   // quantities of interest specific to multi-state forests
   const vector<double> unique_event_times;      // vector of ordered unique event times for all observations across all jumps
   const vector<size_t> response_event_time_ids; // the indices of unique_event_times corresponding to the response times
   size_t num_unique_event_times;                // number of unique event times
   vector<vector<double>> na;                    // the Nelson--Aalen estimator at the unique event times for the forest (vector of flattened matrices)
+  vector<vector<double>> init_dist;             // the estimated initial distribution for the forest
 };
 
 #endif // FORESTMULTISTATE_H

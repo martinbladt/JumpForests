@@ -18,12 +18,20 @@ public:
   const vector<vector<double>> getNA() const {
     return na;
   }
+  const vector<vector<double>> getInitDist() const {
+    return init_dist;
+  }
 
   // prediction for multi-state trees
   ValueType predict(const vector<double>& x) override {
     return na[predictionLeafID(x)];
   }
+  vector<double> predictInitDist(const vector<double>& x) {
+    return init_dist[predictionLeafID(x)];
+  }
+
   vector<double> computePredictions(const Data& new_data) override;
+  vector<double> computePredictedInitialDistributions(const Data& new_data);
   // VIMP prediction for multi-state trees (to be investigated)
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng);
 
@@ -33,6 +41,7 @@ private:
   shared_ptr<vector<size_t>> response_event_time_ids;   // the indices of unique_event_times corresponding to the response times (flattened array)
   vector<vector<double>> na;                            // the Nelson--Aalen estimator in each terminal node with jumps at the unique_event_times,
                                                         // each vector being a flattened array of length num_states^2
+  vector<vector<double>> init_dist;                     // estimated initial distribution in each node
 
   // temporary quantities used in growing multi-state trees
   /*
@@ -47,6 +56,7 @@ private:
   void computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& at_risk, vector<size_t>& jumps); // computes the number at risk and the number of jumps at the unique_event_times
   void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
   bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
+  void computeInitialDist(size_t node_index);                     // computes the initial distribution in a terminal node
   void computeNA(size_t node_index);                              // computes the Nelson--Aalen estimator in a terminal node
   void computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final);

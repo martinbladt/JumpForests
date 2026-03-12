@@ -13,8 +13,8 @@ JFCppTreePredict <- function(JFTree, df, feature_indices, categorical, unique) {
     .Call(`_JumpForests_JFCppTreePredict`, JFTree, df, feature_indices, categorical, unique)
 }
 
-JFCppTreePredictMM <- function(JFTree, df, feature_indices, categorical, unique) {
-    .Call(`_JumpForests_JFCppTreePredictMM`, JFTree, df, feature_indices, categorical, unique)
+JFCppTreePredictMM <- function(JFTree, df, feature_indices, categorical, unique, compute_initial) {
+    .Call(`_JumpForests_JFCppTreePredictMM`, JFTree, df, feature_indices, categorical, unique, compute_initial)
 }
 
 JFCppTreeError <- function(JFTree, df, feature_indices, categorical, unique, response_indices) {
@@ -33,8 +33,8 @@ JFCppForestPredict <- function(JFForest, df, feature_indices, categorical, uniqu
     .Call(`_JumpForests_JFCppForestPredict`, JFForest, df, feature_indices, categorical, unique)
 }
 
-JFCppForestPredictMM <- function(JFForest, df, feature_indices, categorical, unique) {
-    .Call(`_JumpForests_JFCppForestPredictMM`, JFForest, df, feature_indices, categorical, unique)
+JFCppForestPredictMM <- function(JFForest, df, feature_indices, categorical, unique, compute_initial) {
+    .Call(`_JumpForests_JFCppForestPredictMM`, JFForest, df, feature_indices, categorical, unique, compute_initial)
 }
 
 JFCppForestError <- function(JFForest, df, feature_indices, categorical, unique, response_indices) {

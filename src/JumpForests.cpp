@@ -283,20 +283,35 @@ void JFCppTreePredict(List& JFTree) {
     MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
     size_t num_states = tree->getData()->getNumberOfStates();
     size_t num_unique_event_times = tree->getNumberOfUniqueEventTimes();
-    List predictions(num_obs);  // each prediction is a list of matrices
+    const vector<size_t>& leaf_ids = tree->getPredictionNodeIDs();
+    const vector<vector<double>>& na = tree->getNA();
+    const vector<vector<double>>& init = tree->getInitDist();
+
+    List predictions(num_obs);        // each prediction is a list of matrices
+    List predictions_init(num_obs);   // each predicted initial distribution is a vector
 
     // we saved the corresponding terminal node ID for every observation
     for (size_t i = 0; i < num_obs; ++i) {
       List rpred(num_unique_event_times);
-      vector<double> pred = tree->getNA()[tree->getPredictionNodeIDs()[i]];
+
+      vector<double> pred = na[leaf_ids[i]];
       for (size_t j = 0; j < num_unique_event_times; ++j) {
         auto start_it = pred.begin() + (j * num_states * num_states);
         NumericMatrix pred_time(num_states, num_states, start_it);
         rpred[j] = transpose(pred_time);
       }
+      // save Nelson-Aalen estimator
       predictions[i] = rpred;
+
+      // save initial distribution
+      NumericVector rpred_init(num_states);
+      for (size_t j = 0; j < num_states; ++j) {
+        rpred_init[j] = init[leaf_ids[i]][j];
+      }
+      predictions_init[i] = rpred_init;
     }
     JFTree["predictions"] = predictions;
+    JFTree["init"] = predictions_init;
   }
 }
 
@@ -345,10 +360,13 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
 }
 
 // function to predict on a new dataset for multi-states
+// if compute_initial = false (default), simply return a list of the predictions on the new data df
+// if compute_initial = true, return a list of two lists, one containing predictions on the new data
+// and the other containing predicted initial distributions
 
 // [[Rcpp::export]]
 List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, 
-                                 LogicalVector categorical, NumericVector unique) {
+                                 LogicalVector categorical, NumericVector unique, bool compute_initial) {
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp;  // need an empty vector for the response indices
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -363,7 +381,8 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
   size_t num_states = tree->getData()->getNumberOfStates();
   size_t num_unique_event_times = tree->getNumberOfUniqueEventTimes();
   size_t num_obs = new_data.getNumberOfObs();
-  List predictions(num_obs);  // each prediction is a list of matrices
+  List predictions(num_obs);      // each prediction is a list of matrices
+  List predictions_init(num_obs); // each predicted initial distribution is a vector
 
   for (size_t i = 0; i < num_obs; ++i) {
       List rpred(num_unique_event_times);
@@ -373,8 +392,25 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
         NumericMatrix pred_time(num_states, num_states, start_it);
         rpred[j] = transpose(pred_time);
       }
+      // save Nelson-Aalen estimator
       predictions[i] = rpred;
-  }
+
+      // if compute_initial == true, compute and save initial distribution
+      if (compute_initial) {
+        vector<double> pred_init = tree->predictInitDist(new_data.get_x_row(i));
+        NumericVector rpred_init(num_states);
+        for (size_t j = 0; j < num_states; ++j) {
+          rpred_init[j] = pred_init[j];
+        }
+        predictions_init[i] = rpred_init;
+      }
+    }
+    if (compute_initial) {
+      List result = List::create(
+        Named("predictions") = predictions,
+        Named("initial") = predictions_init
+      );
+    }
     return predictions;
 }
 
@@ -714,12 +750,16 @@ void JFCppForestPredict(List& JFForest) {
     // compute predictions via multi-threading
     MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
     const pair<vector<double>, vector<double>>& predictions_cpp = forest->computePredictions();
+    const pair<vector<double>, vector<double>>& predictions_init_cpp = forest->computePredictedInitialDistributions();
+
     size_t num_unique_event_times = forest->getNumUniqueEventTimes();
     size_t num_obs = JFForest["num.obs"];
     uint8_t num_states = forest->getData()->getNumberOfStates();
     uint8_t dim = num_states * num_states;
-    List predictions(num_obs);      // each prediction is a list of matrices
-    List predictions_oob(num_obs);  
+    List predictions(num_obs);        // each prediction is a list of matrices
+    List predictions_oob(num_obs);
+    List predictions_init(num_obs);   // each predicted initial distribution is a vector
+    List predictions_init_oob(num_obs);
 
     for (size_t i = 0; i < num_obs; ++i) {
       List rpred(num_unique_event_times);                     // list of NumericMatrix for a single prediction
@@ -736,12 +776,26 @@ void JFCppForestPredict(List& JFForest) {
         rpred[t] = pred_time;
         rpred_oob[t] = pred_time_oob;
       }
+      // save predicted Nelson-Aalen estimators
       predictions[i] = rpred;
       predictions_oob[i] = rpred_oob;
+
+      NumericVector rpred_init(num_states);
+      NumericVector rpred_init_oob(num_states);
+
+      // save predicted initial distributions
+      for (size_t j = 0; j < num_states; ++j) {
+        rpred_init[j] = predictions_init_cpp.first[i * num_states + j];
+        rpred_init_oob[j] = predictions_init_cpp.second[i * num_states + j];
+      }
+      predictions_init[i] = rpred_init;
+      predictions_init_oob[i] = rpred_init_oob;
     }
     // save predictions
     JFForest["predictions"] = predictions;
     JFForest["oob.predictions"] = predictions_oob;
+    JFForest["init"] = predictions_init;
+    JFForest["oob.init"] = predictions_init_oob;
   }
 }
 
@@ -788,9 +842,13 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
   }
 }
 
+// if compute_initial = false (default), simply return a list of the predictions on the new data df
+// if compute_initial = true, return a list of two lists, one containing predictions on the new data
+// and the other containing predicted initial distributions
+
 // [[Rcpp::export]]
 List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices,
-                          LogicalVector categorical, NumericVector unique) {
+                          LogicalVector categorical, NumericVector unique, bool compute_initial) {
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp;  // need an empty vector for the response indices
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -805,8 +863,10 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
   size_t num_unique_event_times = forest->getNumUniqueEventTimes();
   uint8_t num_states = forest->getData()->getNumberOfStates();
   uint8_t dim = num_states * num_states;
-  List predictions(num_obs);
+  List predictions(num_obs);      // each prediction is a list of matrices
+  List predictions_init(num_obs); // each predicted initial distribution is a vector
   const vector<double>& predictions_cpp = forest->computePredictions(new_data);
+  const vector<double>& predictions_init_cpp = forest->computePredictedInitialDistributions(new_data);
   for (size_t i = 0; i < num_obs; ++i) {
     List rpred(num_unique_event_times);
     for (size_t t = 0; t < num_unique_event_times; ++t) {
@@ -818,8 +878,27 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
       }
       rpred[t] = pred_time;
     }
+    // save Nelson-Aalen estimator
     predictions[i] = rpred;
+
+    // if compute_initial == true, compute and save initial distribution
+    if (compute_initial) {
+      NumericVector rpred_init(num_states);
+      for (size_t j = 0; j < num_states; ++j) {
+        rpred_init[j] = predictions_init_cpp[i * num_states + j];
+      }
+      predictions_init[i] = rpred_init;
+    }
   }
+
+  if (compute_initial) {
+    List result = List::create(
+      Named("predictions") = predictions,
+      Named("initial") = predictions_init
+    );
+    return result;
+  }
+
   return predictions;
 }
 
@@ -916,7 +995,7 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
 double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name, int feature_seed, CharacterVector method) {
   string type = as<string>(JFForest["tree.type"]);
   string method_cpp = as<string>(method);
-  size_t num_obs = as<size_t>(JFForest["num.obs"]);
+  //size_t num_obs = as<size_t>(JFForest["num.obs"]);
 
   if (type == "Regression") {
 
@@ -1028,16 +1107,16 @@ void df_test(DataFrame data, NumericVector response_indices, NumericVector featu
   Rcout << "Number of observations: " << test.getNumberOfObs() << endl;
   if (response_indices_cpp.size() > 0) {
     Rcout << endl << "The response vector is: ";
-    for (int i = 0; i < test.getNumberOfObs(); ++i) {
+    for (size_t i = 0; i < test.getNumberOfObs(); ++i) {
       Rcout << test.get_y(i, 0) << ", ";
     }
   }
   Rcout << endl << "The number of unique values of the features are: ";
-  for (int i  = 0; i < test.getUniqueValues().size(); ++i) {
+  for (size_t i  = 0; i < test.getUniqueValues().size(); ++i) {
     Rcout << test.getUniqueValues()[i] << ", ";
   }
   Rcout << endl << "The categorical indicators are: ";
-  for (int i = 0; i < test.getCategorical().size(); ++i) {
+  for (size_t i = 0; i < test.getCategorical().size(); ++i) {
     Rcout << test.getCategorical()[i] << ", ";
   }
   Rcout << endl << "The variable names are: ";
@@ -1045,7 +1124,7 @@ void df_test(DataFrame data, NumericVector response_indices, NumericVector featu
     Rcout << name << ", ";
   }
   Rcout << endl << "The feature values are: " << endl;
-  for (int i = 0; i < test.getNumberOfObs(); ++i) {
+  for (size_t i = 0; i < test.getNumberOfObs(); ++i) {
     printVector(test.get_x_row(i));
   }
 }

@@ -73,8 +73,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // JFCppTreePredictMM
-List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
-RcppExport SEXP _JumpForests_JFCppTreePredictMM(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial);
+RcppExport SEXP _JumpForests_JFCppTreePredictMM(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -83,7 +83,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
     Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppTreePredictMM(JFTree, df, feature_indices, categorical, unique));
+    Rcpp::traits::input_parameter< bool >::type compute_initial(compute_initialSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppTreePredictMM(JFTree, df, feature_indices, categorical, unique, compute_initial));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -175,8 +176,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // JFCppForestPredictMM
-List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
-RcppExport SEXP _JumpForests_JFCppForestPredictMM(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial);
+RcppExport SEXP _JumpForests_JFCppForestPredictMM(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -185,7 +186,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
     Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppForestPredictMM(JFForest, df, feature_indices, categorical, unique));
+    Rcpp::traits::input_parameter< bool >::type compute_initial(compute_initialSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestPredictMM(JFForest, df, feature_indices, categorical, unique, compute_initial));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -400,12 +402,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppTree", (DL_FUNC) &_JumpForests_JFCppTree, 13},
     {"_JumpForests_JFCppTreeMM", (DL_FUNC) &_JumpForests_JFCppTreeMM, 14},
     {"_JumpForests_JFCppTreePredict", (DL_FUNC) &_JumpForests_JFCppTreePredict, 5},
-    {"_JumpForests_JFCppTreePredictMM", (DL_FUNC) &_JumpForests_JFCppTreePredictMM, 5},
+    {"_JumpForests_JFCppTreePredictMM", (DL_FUNC) &_JumpForests_JFCppTreePredictMM, 6},
     {"_JumpForests_JFCppTreeError", (DL_FUNC) &_JumpForests_JFCppTreeError, 6},
     {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 17},
     {"_JumpForests_JFCppForestMM", (DL_FUNC) &_JumpForests_JFCppForestMM, 19},
     {"_JumpForests_JFCppForestPredict", (DL_FUNC) &_JumpForests_JFCppForestPredict, 5},
-    {"_JumpForests_JFCppForestPredictMM", (DL_FUNC) &_JumpForests_JFCppForestPredictMM, 5},
+    {"_JumpForests_JFCppForestPredictMM", (DL_FUNC) &_JumpForests_JFCppForestPredictMM, 6},
     {"_JumpForests_JFCppForestError", (DL_FUNC) &_JumpForests_JFCppForestError, 6},
     {"_JumpForests_JFCppForestVIMPFeature", (DL_FUNC) &_JumpForests_JFCppForestVIMPFeature, 4},
     {"_JumpForests_JFCppForestVIMP", (DL_FUNC) &_JumpForests_JFCppForestVIMP, 3},

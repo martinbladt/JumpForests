@@ -107,7 +107,7 @@ vector<double> MultistateForest::predict(const vector<double>& x) {
         vector<double> prediction = get<vector<double>>(tree->predict(x));
         sum_vectors(result, prediction);
     }
-    for (int i = 0; i < num_unique_event_times * dim; ++i) {
+    for (size_t i = 0; i < num_unique_event_times * dim; ++i) {
         result[i] = result[i]/ntrees;
     }
     return result;
@@ -156,8 +156,49 @@ pair<vector<double>, vector<double>> MultistateForest::computePredictions() {
     return {predictions, oob_predictions};
 }
 
+pair<vector<double>, vector<double>> MultistateForest::computePredictedInitialDistributions() {
+    size_t num_obs = data->getNumberOfObs();
+    uint8_t num_states = data->getNumberOfStates();
+    vector<double> predictions(num_obs * num_states);
+    vector<double> oob_predictions(num_obs * num_states);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_states, 0);
+        vector<double> oob_pred(num_states, 0);
+        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
+            
+            if (oob_indices[j][i]) {
+                ++num_oob_trees;
+                vector<double> tree_pred = tree->predictInitDist(data->get_x_row(i));
+                sum_vectors(pred, tree_pred);
+                sum_vectors(oob_pred, tree_pred);
+            }
+            // no need to predict from scratch for in-bag observations since we save the terminal node ID during fitting
+            else {
+                vector<double> tree_pred = tree->getInitDist()[tree->getPredictionNodeIDs()[i]];
+                sum_vectors(pred, tree_pred);
+            }
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_states; ++k) {
+            pred[k] /= ntrees;
+            if (num_oob_trees > 0) {
+                oob_pred[k] /= num_oob_trees;
+            }
+            predictions[i * num_states + k] = pred[k];
+            oob_predictions[i * num_states + k] = oob_pred[k];
+        }
+    }
+    return {predictions, oob_predictions};
+}
+
 vector<double> MultistateForest::computePredictions(const Data& new_data) {
-    size_t num_features = new_data.getNumberOfFeatures();
     size_t num_obs = new_data.getNumberOfObs();
     uint8_t num_states = data->getNumberOfStates();
     uint8_t dim = num_states * num_states;
@@ -178,6 +219,31 @@ vector<double> MultistateForest::computePredictions(const Data& new_data) {
         for (size_t k = 0; k < num_unique_event_times * dim; ++k) {
             pred[k] /= ntrees;
             predictions[i * num_unique_event_times * dim + k] = pred[k];
+        }
+    }
+    return predictions;
+}
+
+vector<double> MultistateForest::computePredictedInitialDistributions(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    uint8_t num_states = data->getNumberOfStates();
+    vector<double> predictions(num_obs * num_states);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_states, 0);
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
+            vector<double> tree_pred = tree->predictInitDist(new_data.get_x_row(i));
+            sum_vectors(pred, tree_pred);
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_states; ++k) {
+            pred[k] /= ntrees;
+            predictions[i * num_states + k] = pred[k];
         }
     }
     return predictions;

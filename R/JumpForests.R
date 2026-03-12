@@ -162,12 +162,13 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 #'
 #' @param tree_list A fitted tree object from [jftree()].
 #' @param new_data Optional new data.
+#' @param compute_initial Should the initial distribution also be estimated? (only valid for multi-state trees)
 #'
 #' @return Predictions.
 #' @export
 #'
 # the main function for predicting with trees
-jftree.predict <- function(tree_list, new_data = NULL) {
+jftree.predict <- function(tree_list, new_data = NULL, compute_initial = FALSE) {
   # if data is not supplied, return predictions based on training data
   if (is.null(new_data)) {
     return(tree_list$predictions)
@@ -185,7 +186,7 @@ jftree.predict <- function(tree_list, new_data = NULL) {
                           processed_data$categorical, processed_data$unique_values))
   } else {
     return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices,
-                          processed_data$categorical, processed_data$unique_values))
+                          processed_data$categorical, processed_data$unique_values, compute_initial))
   }
 }
 
@@ -407,12 +408,13 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
 #'
 #' @param forest_list A fitted forest object from [jfforest()].
 #' @param new_data Optional new data.
+#' @param compute_initial Should the initial distribution also be estimated? (only valid for multi-state trees)
 #'
 #' @return Predictions.
 #' @export
 #'
 # the main function for predicting with forests
-jfforest.predict <- function(forest_list, new_data = NULL) {
+jfforest.predict <- function(forest_list, new_data = NULL, compute_initial = FALSE) {
   # if data is not supplied, return predictions based on data
   if (is.null(new_data)) {
     return(forest_list$predictions)
@@ -431,7 +433,7 @@ jfforest.predict <- function(forest_list, new_data = NULL) {
                             processed_data$categorical, processed_data$unique_values))
     } else {
       return(JFCppForestPredictMM(forest_list, processed_data$data, feature_indices,
-                            processed_data$categorical, processed_data$unique_values))
+                            processed_data$categorical, processed_data$unique_values, compute_initial))
     }
   } else {
     cat("Error: If new_data is supplied, it must be a data.frame with the same names as the original dataset \n")
