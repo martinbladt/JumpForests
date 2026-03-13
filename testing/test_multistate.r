@@ -74,18 +74,21 @@ sim[1]
 # implement as an option
 
 test_data <- data.frame(X1 = X, X2 = Y)
-fitted_tree <- jftree(MM ~ X1, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20)
+fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20)
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
 
 jftree.predict(fitted_tree)
 new_data <- data.frame(X2 = runif(5), X1 = rnorm(5))
-jftree.predict(fitted_tree, new_data)
+jftree.predict(fitted_tree, new_data, compute_initial = TRUE)
+occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]])
 
 # fit the forest (takes a couple of minutes)
-fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 1000, min_node_size = 20, splitrule = "logrank", save_predictions = TRUE)
+fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 1000, min_node_size = 20, splitrule = "logrank", save_predictions = FALSE)
 print_forest(fitted_forest)
 
-jfforest.predict(fitted_forest)[[1]]
+jfforest.predict(fitted_forest)
+jfforest.predict(fitted_forest, new_data, compute_initial = TRUE)
+occupation_prob(init = fitted_forest$init[[1]], na = fitted_forest$predictions[[1]])
 #new_data <- data.frame(X2 = runif(1), X1 = rnorm(1))
 #new_data <- test_data[1,]
 
@@ -94,7 +97,7 @@ x2 <- 0.6
 x3 <- 0.8
 
 new_data <- data.frame(X1 = c(x1, x2, x3), X2 = c(0, 0, 0))
-forest_fit <- jfforest.predict(fitted_forest, new_data, )
+forest_fit <- jfforest.predict(fitted_forest, new_data, compute_initial = TRUE)
 
 fit1 <- aalen_johansen(sim, x = x1)
 fit2 <- aalen_johansen(sim, x = x2)

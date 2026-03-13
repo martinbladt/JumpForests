@@ -160,6 +160,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// JFCppForestPredictTraining
+void JFCppForestPredictTraining(List& JFForest);
+RcppExport SEXP _JumpForests_JFCppForestPredictTraining(SEXP JFForestSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List& >::type JFForest(JFForestSEXP);
+    JFCppForestPredictTraining(JFForest);
+    return R_NilValue;
+END_RCPP
+}
 // JFCppForestPredict
 NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
 RcppExport SEXP _JumpForests_JFCppForestPredict(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
@@ -406,6 +416,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppTreeError", (DL_FUNC) &_JumpForests_JFCppTreeError, 6},
     {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 17},
     {"_JumpForests_JFCppForestMM", (DL_FUNC) &_JumpForests_JFCppForestMM, 19},
+    {"_JumpForests_JFCppForestPredictTraining", (DL_FUNC) &_JumpForests_JFCppForestPredictTraining, 1},
     {"_JumpForests_JFCppForestPredict", (DL_FUNC) &_JumpForests_JFCppForestPredict, 5},
     {"_JumpForests_JFCppForestPredictMM", (DL_FUNC) &_JumpForests_JFCppForestPredictMM, 6},
     {"_JumpForests_JFCppForestError", (DL_FUNC) &_JumpForests_JFCppForestError, 6},

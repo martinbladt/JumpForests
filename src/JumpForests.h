@@ -45,6 +45,7 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
 
 // predicting with forests
 void JFCppForestPredict(List& JFForest);
+void JFCppForestPredictTraining(List& JFForest);
 //NumericVector JFCppForestPredictSingle(const List& JFForest, const NumericVector& x);
 NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique);

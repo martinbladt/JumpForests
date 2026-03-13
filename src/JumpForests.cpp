@@ -34,7 +34,7 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
   // use all indices since we grow a single tree
   vector<size_t> subset_indices_cpp;
-  for (int i = 0; i < data->getNumberOfObs(); ++i) {
+  for (size_t i = 0; i < data->getNumberOfObs(); ++i) {
     subset_indices_cpp.push_back(i);
   }
 
@@ -410,6 +410,7 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
         Named("predictions") = predictions,
         Named("initial") = predictions_init
       );
+      return result;
     }
     return predictions;
 }
@@ -685,6 +686,8 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
   } else {
     result["predictions"] = R_NilValue;
     result["oob.predictions"] = R_NilValue;
+    result["init"] = R_NilValue;
+    result["oob.init"] = R_NilValue;
   }
 
   result["avg.num.nodes"] = forest->getAvgNumberOfNodes();
@@ -800,6 +803,11 @@ void JFCppForestPredict(List& JFForest) {
 }
 
 // [[Rcpp::export]]
+void JFCppForestPredictTraining(List& JFForest) {
+  JFCppForestPredict(JFForest);
+}
+
+// [[Rcpp::export]]
 NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique) {
   // convert the input to C++ vectors
@@ -866,7 +874,12 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
   List predictions(num_obs);      // each prediction is a list of matrices
   List predictions_init(num_obs); // each predicted initial distribution is a vector
   const vector<double>& predictions_cpp = forest->computePredictions(new_data);
-  const vector<double>& predictions_init_cpp = forest->computePredictedInitialDistributions(new_data);
+  vector<double> predictions_init_cpp;
+
+  if (compute_initial) {
+    predictions_init_cpp = forest->computePredictedInitialDistributions(new_data);
+  }
+
   for (size_t i = 0; i < num_obs; ++i) {
     List rpred(num_unique_event_times);
     for (size_t t = 0; t < num_unique_event_times; ++t) {
@@ -898,7 +911,6 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
     );
     return result;
   }
-
   return predictions;
 }
 

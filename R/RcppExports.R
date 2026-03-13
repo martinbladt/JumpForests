@@ -29,6 +29,10 @@ JFCppForestMM <- function(jump_data, max_response_length, num_states, df_feature
     .Call(`_JumpForests_JFCppForestMM`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
 }
 
+JFCppForestPredictTraining <- function(JFForest) {
+    invisible(.Call(`_JumpForests_JFCppForestPredictTraining`, JFForest))
+}
+
 JFCppForestPredict <- function(JFForest, df, feature_indices, categorical, unique) {
     .Call(`_JumpForests_JFCppForestPredict`, JFForest, df, feature_indices, categorical, unique)
 }

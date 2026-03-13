@@ -171,12 +171,18 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 jftree.predict <- function(tree_list, new_data = NULL, compute_initial = FALSE) {
   # if data is not supplied, return predictions based on training data
   if (is.null(new_data)) {
-    return(tree_list$predictions)
+    if (tree_list$tree.type != "Multi-state") {
+      return(tree_list$predictions)
+    } else {
+      return(list("predictions" = tree_list$predictions, "init" = tree_list$init))
+    }
   }
   # if new data is supplied, start by preprocessing the data and
   # extracting relevant columns
   covariates <- tree_list$feature.names
-  new_data <- new_data[, covariates]  # ensures the columns have the same order as the original dataset
+  if (ncol(new_data) > 1) {
+      new_data <- new_data[, covariates]  # ensures the columns have the same order as the original dataset
+    }
   feature_indices <- which(names(new_data) %in% covariates) - 1
   processed_data <- preprocess_data(new_data)
 
@@ -415,10 +421,26 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
 #'
 # the main function for predicting with forests
 jfforest.predict <- function(forest_list, new_data = NULL, compute_initial = FALSE) {
-  # if data is not supplied, return predictions based on data
-  if (is.null(new_data)) {
-    return(forest_list$predictions)
+  # if new data is not supplied and predictions are already computed, return predictions based on training data
+  if (is.null(new_data) & !is.null(forest_list$predictions)) {
+    if (forest_list$tree.type != "Multi-state") {
+      return(forest_list$predictions)
+    } else {
+      return(list("predictions" = forest_list$predictions, "init" = forest_list$init))
+    }
   }
+  # if new data is not supplied and predictions are not computed, compute the predictions based on the training data (in-bag and oob)
+  if (is.null(new_data) & is.null(forest_list$predictions)) {
+    cat("Computing predictions...")
+    JFCppForestPredictTraining(forest_list) # computes predictions from scratch
+    if (forest_list$tree.type != "Multi-state") {
+      return(forest_list$predictions)
+    } else {
+      return(list("predictions" = forest_list$predictions, "init" = forest_list$init))
+    }
+  }
+
+  # when new data is supplied
   if (inherits(new_data, "data.frame")) {
     # if new data is supplied, start by preprocessing the data and
     # extracting relevant columns
@@ -688,6 +710,13 @@ aj <- function(na, a0 = NULL) {
     res[[i]] <- res[[i - 1]] + as.vector(res[[i - 1]] %*% Delta) - res[[i - 1]] * rowSums((Delta))
   }
   res
+}
+
+# function for computing occupation probabilities
+# init is a vector of initial probabilities, a vector
+# na is the Nelson-Aalen estimator, a list of matrices
+occupation_prob <- function(init, na) {
+  lapply(aj(na), function(z) init %*% z)
 }
 
 # function for testing the methods in Data.cpp
