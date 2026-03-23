@@ -1,3 +1,4 @@
+#nolint start: line_length_linter
 devtools::load_all()
 library(Rcpp)
 library(randomForestSRC)
@@ -90,8 +91,12 @@ data(veteran, package = "randomForestSRC")
 veteran$trt <- as.factor(veteran$trt)
 veteran$celltype <- as.factor(veteran$celltype)
 veteran$prior <- as.factor(veteran$prior)
-veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2025)
+veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2025, min_node_size = 10)
 print_tree(veteran_tree)
+head(jftree.predict(veteran_tree))
+jftree.predict(veteran_tree, new_data = veteran)
+jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)
+jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)
 
 #preprocess_data(veteran)
 head(veteran)
@@ -103,6 +108,7 @@ veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10,
 
 print_forest(veteran_forest)
 veteran_forest_SRC
+veteran_forest_ranger
 
 #head(veteran_forest$unique.event.times)
 #head(veteran_forest_SRC$time.interest)
@@ -159,6 +165,7 @@ colMeans(VIMP_ranger)
 
 retinopathy <- retinopathy[, -1]
 head(retinopathy)
+retinopathy_tree <- jftree(Surv(futime, status) ~ ., data = retinopathy)
 
 retinopathy_forest <- jfforest(Surv(futime, status) ~ ., data = retinopathy, splitrule = "logrank", seed = 2025)
 (retinopathy_forest_SRC <- rfsrc(Surv(futime, status) ~ ., data = retinopathy, seed = 2025, samptype = "swr"))
@@ -344,3 +351,5 @@ head(peakVO2_forest_SRC$predicted.oob)
 #sample_test <- function(k) {
 #    silly_sampler(k)
 #}
+
+#nolint_end

@@ -168,13 +168,13 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 #' @export
 #'
 # the main function for predicting with trees
-jftree.predict <- function(tree_list, new_data = NULL, compute_initial = FALSE) {
+jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE, compute_initial = FALSE) {
   # if data is not supplied, return predictions based on training data
   if (is.null(new_data)) {
-    if (tree_list$tree.type != "Multi-state") {
-      return(tree_list$predictions)
-    } else {
+    if (tree_list$tree.type == "Multi-state") {
       return(list("predictions" = tree_list$predictions, "init" = tree_list$init))
+    } else {
+      return(tree_list$predictions)
     }
   }
   # if new data is supplied, start by preprocessing the data and
@@ -188,8 +188,13 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_initial = FALSE) 
 
   # may need to be adapted when more types of trees are implemented
   if (tree_list$tree.type != "Multi-state") {
-    return(JFCppTreePredict(tree_list, processed_data$data, feature_indices,
+    if (compute_censoring) {
+      return(JFCppTreePredictCensoring(tree_list, processed_data$data, feature_indices,
                           processed_data$categorical, processed_data$unique_values))
+    } else {
+      return(JFCppTreePredict(tree_list, processed_data$data, feature_indices,
+                          processed_data$categorical, processed_data$unique_values))
+    }
   } else {
     return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices,
                           processed_data$categorical, processed_data$unique_values, compute_initial))
@@ -324,10 +329,11 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     }
     JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
               sample_rate, response_indices, feature_indices, processed_data$categorical,
-              processed_data$unique_values, seed, nworkers)
+              processed_data$unique_values, seed, nworkers, save_predictions)
   }
   # if left hand side is "Surv(time, status)", survival
   else if (lhs[1] == "Surv") {
+    processed_data <- preprocess_data(data)
     # time is always assumed to be the first argument
     response_indices <- which(names(data) %in% as.character(formula[[2]])[2:3])
     if (length(unique(data[, response_indices[1]])) == 2) {
@@ -365,7 +371,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
 
     JFCppForest(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
               sample_rate, response_indices, feature_indices, processed_data$categorical,
-              processed_data$unique_values, seed, nworkers, num_event_times)
+              processed_data$unique_values, seed, nworkers, save_predictions, num_event_times)
   }
   # if the left hand side is "MM(...)", multi-state
   else if (lhs[1] == "MM") {

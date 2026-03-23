@@ -16,7 +16,8 @@ struct ObsInfo {
 class SurvivalTree : public Tree {
 public:
   SurvivalTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids,
-               shared_ptr<vector<size_t>> true_event_time_ids, const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices = {});
+               shared_ptr<vector<size_t>> true_event_time_ids, const vector<size_t>& subset_indices, bool save_predictions, 
+               const vector<size_t>& estimation_indices = {});
 
   //void grow();  // grows the survival tree
 
@@ -30,12 +31,17 @@ public:
   const vector<vector<double>> getCHF() const {
     return chf;
   }
+  const vector<vector<double>> getKMCensoring() const {
+    return KM_censoring;
+  }
 
   // prediction for survival trees
   ValueType predict(const vector<double>& x) override {
     return chf[predictionLeafID(x)];
   }
+  vector<double> predictCensoring(const vector<double>& x);
   vector<double> computePredictions(const Data& new_data) override;
+  pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
   // VIMP prediction for survival trees
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng) {
     return chf[predictionLeafIDVIMP(x, feature, rng)];
@@ -52,8 +58,10 @@ private:
   shared_ptr<vector<size_t>> response_event_time_ids;
   //const vector<size_t> true_event_time_ids;     // the indices of unique_event_times for uncensored times
   shared_ptr<vector<size_t>> true_event_time_ids;
+  bool save_predictions;
   vector<vector<double>> chf;               // the cumulative hazard at the unique_event_times
-  //const vector<size_t> subset_indices;      // indices for the data (bootstrap) (unnecessary!)
+  vector<vector<double>> KM_censoring;      // the Kaplan-Meier estimate at the unique_event_times for the censoring distribution
+  //const vector<size_t> subset_indices;    // indices for the data (bootstrap) (unnecessary!)
 
   // temporary quantities used in growing survival trees
   vector<size_t> num_deaths;                // the number of deaths at each event time in current node
@@ -73,6 +81,7 @@ private:
   void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
   bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
   void computeChf(size_t node_index);                             // computes the cumulative hazard in a terminal node
+  void computeCensoringKM(size_t node_index);                     // computes the KM estimator for the censoring distribution in a terminal node
   //void updateSurvivalStats(vector<size_t>& deaths, vector<size_t>& at_risk, const ObsInfo& obs, int sign);
   void computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_deaths_right, size_t nsplits_final);
@@ -112,7 +121,7 @@ vector<size_t> computeTrueEventTimeIDs(const vector<double>& unique_event_times,
 vector<double> computeOutcomes(const NumericMatrix& predictions); // for error computation
 vector<double> computeOutcomes(const vector<double>& predictions, size_t num_unique_event_times);
 vector<double> computeUniqueEventTimes(const vector<double>& times, const vector<size_t>& ind);
-vector<double> KaplanMeyer(const vector<double>& na);
+vector<double> KaplanMeier(const vector<double>& na);
 double computeConcordanceIndex(const vector<double>& outcomes, const vector<double>& times, const vector<double>& ind);
 
 #endif // TREE_SURVIVAL_H

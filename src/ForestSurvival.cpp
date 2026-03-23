@@ -3,9 +3,10 @@
 // constructor for survival forests
 //--------------------------------------------------------------------------------------
 
-SurvivalForest::SurvivalForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<size_t>& true_event_time_ids) :
+SurvivalForest::SurvivalForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<size_t>& true_event_time_ids, bool save_predictions) :
     unique_event_times {unique_event_times}, response_event_time_ids {response_event_time_ids}, true_event_time_ids {true_event_time_ids} {
         this->num_unique_event_times = unique_event_times.size();
+        this->save_predictions = save_predictions;
 }
 
 // functions for growing survival forests
@@ -48,7 +49,7 @@ void SurvivalForest::grow() {
             size_t subsample_size = floor(sample_rate * n);
             bootstrap_indices = sampleIndices(global_indices, subsample_size, swr, local_rng);
             oob_indices[i] = computeOOBIndices(bootstrap_indices, n);
-            tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, true_event_time_ids, bootstrap_indices);
+            tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, true_event_time_ids, bootstrap_indices, save_predictions);
         } 
         // for honest trees, we differ between double and single bootstrap
         else {
@@ -59,7 +60,7 @@ void SurvivalForest::grow() {
                 size_t holdout_size = floor(sample_rate * partition.second.size());
                 vector<size_t> grow = sampleIndices(partition.first, grow_size, swr, local_rng);
                 vector<size_t> holdout = sampleIndices(partition.second, holdout_size, swr, local_rng);
-                tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, true_event_time_ids, grow, holdout);
+                tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, true_event_time_ids, grow, save_predictions, holdout);
                 oob_indices[i] = computeOOBIndicesDouble(grow, holdout, n);
 
             } else {
@@ -67,7 +68,7 @@ void SurvivalForest::grow() {
                 size_t subsample_size = floor(sample_rate * n);
                 auto global_bootstrap_indices = sampleIndices(global_indices, subsample_size, swr, local_rng);
                 pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(global_bootstrap_indices, local_rng);
-                tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, true_event_time_ids, partition.first, partition.second);
+                tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, true_event_time_ids, partition.first, save_predictions, partition.second);
                 oob_indices[i] = computeOOBIndices(bootstrap_indices, n);
             }
         }

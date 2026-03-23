@@ -21,6 +21,8 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 void JFCppTreePredict(List& JFTree);
 //List JFCppTreePredict(const List& JFTree, DataFrame df);
 NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector feature_indices, 
+                               LogicalVector categorical, NumericVector unique, bool compute_censoring);
+List JFCppTreePredictCensoring(const List& JFTree, DataFrame df, NumericVector feature_indices, 
                                LogicalVector categorical, NumericVector unique);
 List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, 
                                  LogicalVector categorical, NumericVector unique);

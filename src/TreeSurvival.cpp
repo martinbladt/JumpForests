@@ -10,8 +10,8 @@ Functions for survival trees
 //--------------------------------------------------------------------------------------
 
 // the final argument is only used for honest trees
-SurvivalTree::SurvivalTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, shared_ptr<vector<size_t>> true_event_time_ids, const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices) :
-    unique_event_times {unique_event_times}, true_event_time_ids {true_event_time_ids}, response_event_time_ids {response_event_time_ids} {
+SurvivalTree::SurvivalTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, shared_ptr<vector<size_t>> true_event_time_ids, const vector<size_t>& subset_indices, bool save_predictions, const vector<size_t>& estimation_indices) :
+    unique_event_times {unique_event_times}, true_event_time_ids {true_event_time_ids}, response_event_time_ids {response_event_time_ids}, save_predictions {save_predictions} {
         this->node_obs.push_back(subset_indices);
         this->holdout_node_obs.push_back(estimation_indices);
         this->num_unique_event_times = unique_event_times->size();
@@ -329,6 +329,11 @@ void SurvivalTree::makeLeaf(size_t node_index) {
     // compute the chf
     computeChf(node_index);
 
+    // if we save predictions, we also compute the KM estimator of the censoring distribution
+    if (save_predictions) {
+        computeCensoringKM(node_index);
+    }
+
     // update tree info
     feature_IDs.push_back(0);
     thresholds.push_back({});
@@ -441,6 +446,9 @@ bool SurvivalTree::createSplit(size_t node_index) {
     feature_IDs.push_back(best_feature);
     thresholds.push_back(best_threshold);
     chf.push_back(vector<double>());
+    if (save_predictions) {
+        KM_censoring.push_back(vector<double>());
+    }
 
     // for honest trees, update the holdout indices
     if (honest) {
@@ -466,6 +474,26 @@ void SurvivalTree::computeChf(size_t node_index) {
         }
     }
     this->chf.push_back(std::move(chf));
+}
+
+// computes the Kaplan-Meier estimator for the censoring distribution in node node_index
+void SurvivalTree::computeCensoringKM(size_t node_index) {
+    vector<double>KM_censoring = vector<double>(num_unique_event_times, 1);
+    
+    // now compute the Kaplan-Meier estimator
+    double num_censored;
+    for (size_t i = 1; i < num_unique_event_times; ++i) {
+        if (num_at_risk[i] - num_deaths[i] > 0) {
+            num_censored = num_at_risk[i] - num_at_risk[i + 1] - num_deaths[i];
+            KM_censoring[i] = KM_censoring[i - 1] * (1 - double(num_censored) / double(num_at_risk[i] - num_deaths[i]));    // may be other ways of handling ties
+        } else {
+            KM_censoring[i] = KM_censoring[i - 1];
+        }
+    }
+    // for debugging
+    cout << "KM: ";
+    printVector(KM_censoring);
+    this->KM_censoring.push_back(std::move(KM_censoring));
 }
 
 /*
@@ -617,9 +645,11 @@ double SurvivalTree::approxLogRank(const vector<size_t>& num_deaths, const vecto
 // prediction for survival trees
 //--------------------------------------------------------------------------------------
 
+// compute a flattened vector of predictions
 vector<double> SurvivalTree::computePredictions(const Data& new_data) {
     size_t num_obs = new_data.getNumberOfObs();
     vector<double> predictions(num_obs * num_unique_event_times);
+
     for (size_t i = 0; i < num_obs; ++i) {
         const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));
         for (size_t j = 0; j < num_unique_event_times; ++j) {
@@ -627,6 +657,24 @@ vector<double> SurvivalTree::computePredictions(const Data& new_data) {
         }
     }
     return predictions;
+}
+
+// computes a pair of flattened vectors, the first predictions and the second the censoring KM estimators
+pair<vector<double>, vector<double>> SurvivalTree::computePredictionsCensoring(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times);
+    vector<double> censoring(num_obs * num_unique_event_times);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
+        const vector<double>& pred = chf[leaf_id];
+        const vector<double>& cens = KM_censoring[leaf_id];
+        for (size_t j = 0; j < num_unique_event_times; ++j) {
+            predictions[i * num_unique_event_times + j] = pred[j];
+            censoring[i * num_unique_event_times + j] = cens[j];
+        }
+    }
+    return {predictions, censoring};
 }
 
 // error estimation for survival trees

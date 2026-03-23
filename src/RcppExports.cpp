@@ -72,6 +72,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// JFCppTreePredictCensoring
+List JFCppTreePredictCensoring(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
+RcppExport SEXP _JumpForests_JFCppTreePredictCensoring(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFTree(JFTreeSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppTreePredictCensoring(JFTree, df, feature_indices, categorical, unique));
+    return rcpp_result_gen;
+END_RCPP
+}
 // JFCppTreePredictMM
 List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial);
 RcppExport SEXP _JumpForests_JFCppTreePredictMM(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP) {
@@ -105,8 +120,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // JFCppForest
-List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, size_t num_event_times);
-RcppExport SEXP _JumpForests_JFCppForest(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP num_event_timesSEXP) {
+List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
+RcppExport SEXP _JumpForests_JFCppForest(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP save_predictionsSEXP, SEXP num_event_timesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -126,8 +141,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type nworkers(nworkersSEXP);
+    Rcpp::traits::input_parameter< bool >::type save_predictions(save_predictionsSEXP);
     Rcpp::traits::input_parameter< size_t >::type num_event_times(num_event_timesSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppForest(tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, response_indices, feature_indices, categorical, unique, seed, nworkers, num_event_times));
+    rcpp_result_gen = Rcpp::wrap(JFCppForest(tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -412,9 +428,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppTree", (DL_FUNC) &_JumpForests_JFCppTree, 13},
     {"_JumpForests_JFCppTreeMM", (DL_FUNC) &_JumpForests_JFCppTreeMM, 14},
     {"_JumpForests_JFCppTreePredict", (DL_FUNC) &_JumpForests_JFCppTreePredict, 5},
+    {"_JumpForests_JFCppTreePredictCensoring", (DL_FUNC) &_JumpForests_JFCppTreePredictCensoring, 5},
     {"_JumpForests_JFCppTreePredictMM", (DL_FUNC) &_JumpForests_JFCppTreePredictMM, 6},
     {"_JumpForests_JFCppTreeError", (DL_FUNC) &_JumpForests_JFCppTreeError, 6},
-    {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 17},
+    {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 18},
     {"_JumpForests_JFCppForestMM", (DL_FUNC) &_JumpForests_JFCppForestMM, 19},
     {"_JumpForests_JFCppForestPredictTraining", (DL_FUNC) &_JumpForests_JFCppForestPredictTraining, 1},
     {"_JumpForests_JFCppForestPredict", (DL_FUNC) &_JumpForests_JFCppForestPredict, 5},

@@ -6,7 +6,7 @@
 
 class SurvivalForest : public Forest {
 public:
-  SurvivalForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<size_t>& true_event_time_ids);
+  SurvivalForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<size_t>& true_event_time_ids, bool save_predictions);
   
   // grows a survival forest with multi-threading
   void grow();
@@ -41,6 +41,7 @@ public:
 private:
   // the trees in the forest
   //vector<unique_ptr<SurvivalTree>> trees;
+  bool save_predictions;
 
   // quantities of interest specific to survival forests
   const vector<double> unique_event_times;      // vector of ordered unique event times for all data

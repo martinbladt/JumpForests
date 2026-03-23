@@ -38,7 +38,7 @@ lambda <- function(t, x){
 
 set.seed(2026)
 
-n <- 100
+n <- 1000
 X <- runif(n)   # signal
 Y <- rnorm(n)   # noise
 c <- runif(n, 0, 5)
@@ -83,7 +83,7 @@ jftree.predict(fitted_tree, new_data, compute_initial = TRUE)
 occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]])
 
 # fit the forest (takes a couple of minutes)
-fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 1000, min_node_size = 20, splitrule = "logrank", save_predictions = FALSE)
+fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 1000, min_node_size = 100, splitrule = "logrank", save_predictions = FALSE, honest = TRUE)
 print_forest(fitted_forest)
 
 jfforest.predict(fitted_forest)
