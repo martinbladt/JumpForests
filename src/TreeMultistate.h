@@ -44,11 +44,6 @@ private:
   vector<vector<double>> init_dist;                     // estimated initial distribution in each node
 
   // temporary quantities used in growing multi-state trees
-  /*
-    possible changes: 
-        1) add the C_j and use Martin's transpose trick
-        2) change the inner vector<size_t> of num_jumps to an actual matrix
-  */
   vector<size_t> num_jumps;                     // number of jumps at each unique event time (flattened matrix)
   vector<size_t> num_at_risk;                   // number of individuals residing in each state at each unique event time
 

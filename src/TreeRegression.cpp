@@ -29,6 +29,65 @@ double RegressionTree::computeSum(const vector<size_t>& indices) {
 void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
                                          vector<double>& best_threshold, double& best_sum_left) {
   const vector<size_t>& current_node_obs = node_obs[node_index];
+  size_t num_obs_parent = current_node_obs.size();
+  double parent_sum = computeSum(current_node_obs); // sum_node[node_index];
+
+  // samples split points
+  vector<double> split_points;
+  size_t nsplits_final = sampleSplitPoints(split_points, current_node_obs, feature);
+
+  // no possible splits
+  if (nsplits_final == 0) {
+    return;
+  }
+
+  // do initial sweep to compute number of observations and sums of responses in right node
+  num_obs_right.assign(nsplits_final, 0);
+  sums_right.assign(nsplits_final, 0);
+  for (size_t i : current_node_obs) {
+    double feature_val = data->get_x(i, feature);
+    double response_val = data->get_y(i);
+    for (size_t s = 0; s < nsplits_final; ++s) {
+      if (feature_val > split_points[s]) {
+          // add one to the number of observations in right node for split s
+          ++num_obs_right[s];
+          sums_right[s] += response_val;
+      } else {
+        break;
+      }
+    }
+  }  
+  // now find the best split
+  for (size_t s = 0; s < nsplits_final; ++s) {
+    // if one of the daughter nodes are too small, skip the computation for that split
+    size_t num_obs_left = num_obs_parent - num_obs_right[s];
+    if (num_obs_right[s] < min_node_size || num_obs_left < min_node_size) {
+      continue;
+    }
+    
+    // should extend to general splitting rules here
+    double sum_left = parent_sum - sums_right[s];
+    double decrease = sums_right[s] * sums_right[s] / (double) num_obs_right[s] + sum_left * sum_left / (double) num_obs_left;
+
+    if (decrease > best_split_val) {
+      best_split_val = decrease;
+      best_feature = feature;
+      best_sum_left = sum_left;
+      // use average of split points unless it is the final split value
+      if (s == nsplits_final - 1) {
+        best_threshold = {split_points[s]};
+      } else {
+        best_threshold = {(split_points[s] + split_points[s + 1]) / 2.0};
+      }
+    }
+  }
+}
+
+/* old version
+
+void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
+                                         vector<double>& best_threshold, double& best_sum_left) {
+  const vector<size_t>& current_node_obs = node_obs[node_index];
   double parent_sum = sum_node[node_index];
 
   // samples split points
@@ -53,6 +112,7 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
   // now compute the decrease of impurity for each split
   size_t n_left = 0;
   double sum_left = 0;
+  double sum_squared_left = 0;
 
   for (size_t i = 0; i < nsplits_final; ++i) {
     // skip the split if identical to the previous one (or if no observations)
@@ -74,11 +134,13 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
       continue;
     }
 
+    // this is completely nonsensical, do it from scratch
     double sum_right = parent_sum - sum_left;
     double decrease = sum_left * sum_left / (double) n_left + sum_right * sum_right / (double) n_right;
+    double split_val = parent_sum * parent_sum / (double) node_sizes[node_index] - decrease;
 
-    if (decrease > best_split_val) {
-      best_split_val = decrease;
+    if (split_val > best_split_val) {
+      best_split_val = split_val;
       best_feature = feature;
       best_sum_left = sum_left;
       // use average of split points unless it is the final split value
@@ -91,6 +153,9 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
   }
 }
 
+*/
+
+// the impurity calculation is non-sensical, redo from scratch
 void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
                            vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices, double& best_sum_left) {
   const vector<double>& feature_values = uniqueValues(data->getValues(node_obs[node_index], feature));
@@ -132,7 +197,6 @@ void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, dou
     // here we have to compute the means in one of the daughters from scratch
     double sum_left = computeSum(current_left_indices);
     double sum_right = parent_sum - sum_left;
-
     double decrease = sum_left * sum_left / (double) n_left + sum_right * sum_right / (double) n_right;
 
     if (decrease > best_split_val) {
@@ -278,6 +342,8 @@ bool RegressionTree::createSplit(size_t node_index) {
 
 // splitting rules for regression trees
 //--------------------------------------------------------------------------------------
+
+
 
 
 // prediction for regression trees

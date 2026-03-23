@@ -147,6 +147,8 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
             if (feature_val > split_points[s]) {
                 // add one to the number of observations in right node for split s
                 ++num_obs_right[s];
+            } else {
+                break;
             }
         }
     }
@@ -418,7 +420,6 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
 
     // now determine the best split
     for (size_t i = 0; i < nsplits_final; ++i) {
-        
         // if a node is too small, skip the split
         size_t num_obs_left = current_node_obs.size() - num_obs_right[i];
         if (num_obs_left < min_node_size || num_obs_right[i] < min_node_size) {
@@ -426,7 +427,6 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
         }
 
         double split_val;
-        //split_val = logRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);     // temporary until more splitting rules are implemented
 
         // choose splitrule
         if (splitrule == "logrank") {

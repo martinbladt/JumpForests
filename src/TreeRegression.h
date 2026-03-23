@@ -23,9 +23,9 @@ private:
   vector<double> means;     // the means in each terminal node
 
   // temporary quantities used in growing regression trees
-  vector<size_t> number_obs_split;    // number of observations at the splitting points
-  vector<double> sums_split;          // sums of responses at the splitting points
-  vector<double> sum_node;            // sums of responses in each node
+  vector<size_t> num_obs_right;    // number of observations at the splitting points in the right node
+  vector<double> sums_right;       // sums of responses at the splitting points in the right node
+  vector<double> sum_node;         // sums of responses in each node
 
   // growing regression trees
   double computeSum(const vector<size_t>& indices);
@@ -38,8 +38,8 @@ private:
   // frees memory from temporary quantities used in growing the tree
   void cleanUpTree() override {
     vector<vector<size_t>>().swap(node_obs);
-    vector<size_t>().swap(number_obs_split);
-    vector<double>().swap(sums_split);
+    vector<size_t>().swap(num_obs_right);
+    vector<double>().swap(sums_right);
     vector<double>().swap(sum_node);
   }
 };
