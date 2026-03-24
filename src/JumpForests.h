@@ -29,7 +29,7 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
 
 // error computation with trees
 void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response);
-void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vector<double>& ind);
+void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids);
 //double JFCppErrorSurvival(const NumericMatrix& predictions, NumericVector times, NumericVector ind);
 double JFCppErrorSurvival(const NumericMatrix& predictions, const vector<double>& times, const vector<double>& ind);
 List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indices,

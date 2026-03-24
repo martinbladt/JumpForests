@@ -491,8 +491,8 @@ void SurvivalTree::computeCensoringKM(size_t node_index) {
         }
     }
     // for debugging
-    cout << "KM: ";
-    printVector(KM_censoring);
+    //cout << "KM: ";
+    //printVector(KM_censoring);
     this->KM_censoring.push_back(std::move(KM_censoring));
 }
 
@@ -677,6 +677,21 @@ pair<vector<double>, vector<double>> SurvivalTree::computePredictionsCensoring(c
     return {predictions, censoring};
 }
 
+// computes the Kaplan-Meier estimator given a NumericMatrix of Nelson-Aalen estimators
+NumericMatrix KaplanMeier(const NumericMatrix& na) {
+  size_t num_obs = na.nrow();
+  size_t num_unique_event_times = na.ncol();
+  NumericMatrix km(num_obs, num_unique_event_times);
+  km.fill(1.0);
+
+  for (size_t i = 0; i < num_obs; ++i) {
+    for (size_t j = 1; j < num_unique_event_times; ++j) {
+      km(i, j) = km(i, j - 1) * (1 - (na(i, j) - na(i, j - 1)));
+    }
+  }
+  return km;
+}
+
 // error estimation for survival trees
 //--------------------------------------------------------------------------------------
 
@@ -707,6 +722,64 @@ vector<double> computeOutcomes(const vector<double>& predictions, size_t num_uni
         outcomes[i] = sum;
     }
     return outcomes;
+}
+
+// computes the IPCW weights for each observation and event time (useful if one wants to extend to other error metrics)
+vector<double> computeIPCW(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids, const NumericMatrix& KM_cens) {
+    size_t num_obs = times.size();
+    size_t num_unique_event_times = unique_event_times.size();
+    vector<double> weights(num_obs * num_unique_event_times, 0);    // result is a flattened vector
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t index = unique_event_time_ids[i];
+        for (size_t j = 0; j < num_unique_event_times; ++j) {
+            if (times[i] <= unique_event_times[j] && ind[i] == 1) {
+               if (KM_cens[index] > 0) {
+                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, index));   // possibly index - 1 here, check!
+               }
+            }
+            else if (times[i] > unique_event_times[j]) {
+                if (KM_cens[j] > 0) {
+                    weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, j));
+                }
+            }
+            // the third case (censored before the event time) has weight zero
+        }
+    }
+    return weights;
+}
+
+// computes a vector of the Brier score using given IPCW weights
+vector<double> computeBrierScore(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const NumericMatrix& KM_pred) {
+    size_t num_obs = times.size();
+    size_t num_unique_event_times = unique_event_times.size();
+    vector<double> brier(num_unique_event_times, 0);
+
+    for (size_t j = 0; j < num_unique_event_times; ++j) {
+        for (size_t i = 0; i < num_obs; ++i) {
+            if (times[i] <= unique_event_times[j]) {
+                brier[j] += KM_pred(i, j) * KM_pred(i, j) * weights[i * num_unique_event_times + j];
+            } else if (times[i] > unique_event_times[j]) {
+                brier[j] += (1 - KM_pred(i, j)) * (1 - KM_pred(i, j)) * weights[i * num_unique_event_times + j];
+            }
+        }
+    }
+    // for debugging
+    cout << "Brier scores:" << endl;
+    printVector(brier);
+    return brier;
+}
+
+// computes the integrated Brier Score (IBS) and the normalised IBS (using the trapezoidal rule)
+pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& unique_event_times) {
+    size_t num_unique_event_times = unique_event_times.size();
+    double ibs = 0;     // IBS
+
+    // apply trapezoidal rule
+    for (size_t j = 1; j < num_unique_event_times; ++j) {
+        ibs += (bs[j] + bs[j - 1]) * (unique_event_times[j] - unique_event_times[j - 1]) / 2;
+    }
+    return {ibs, ibs / unique_event_times.back()};
 }
 
 // miscellaneous functions related to survival

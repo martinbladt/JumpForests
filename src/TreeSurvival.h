@@ -120,8 +120,12 @@ vector<size_t> computeResponseEventTimeIDs(const vector<double>& unique_event_ti
 vector<size_t> computeTrueEventTimeIDs(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& ind);
 vector<double> computeOutcomes(const NumericMatrix& predictions); // for error computation
 vector<double> computeOutcomes(const vector<double>& predictions, size_t num_unique_event_times);
+vector<double> computeIPCW(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids, const NumericMatrix& KM_cens);
+vector<double> computeBrierScore(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const NumericMatrix& KM_pred);
+pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& unique_event_times);
 vector<double> computeUniqueEventTimes(const vector<double>& times, const vector<size_t>& ind);
 vector<double> KaplanMeier(const vector<double>& na);
+NumericMatrix KaplanMeier(const NumericMatrix& na);
 double computeConcordanceIndex(const vector<double>& outcomes, const vector<double>& times, const vector<double>& ind);
 
 #endif // TREE_SURVIVAL_H

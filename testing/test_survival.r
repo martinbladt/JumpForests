@@ -91,12 +91,28 @@ data(veteran, package = "randomForestSRC")
 veteran$trt <- as.factor(veteran$trt)
 veteran$celltype <- as.factor(veteran$celltype)
 veteran$prior <- as.factor(veteran$prior)
-veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2025, min_node_size = 10)
+veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2025, min_node_size = 15)
 print_tree(veteran_tree)
-head(jftree.predict(veteran_tree))
+jftree.predict(veteran_tree)
 jftree.predict(veteran_tree, new_data = veteran)
 jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)
-jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)
+jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)$censoring
+
+jftree.error(veteran_tree)
+jftree.error(veteran_tree, new_data = veteran)
+
+veteran_tree$ibs
+veteran_tree$ibs.normalised
+
+# if you want the predicted Kaplan-Meier estimators
+km(veteran_tree$predictions[1,])
+
+# possible issue: for survival, we removed the event times with only censorings. If we want to revert back to this, will it
+# create issues for estimating the KM estimator for censoring?
+
+length(km(veteran_tree$predictions[1,]))
+length(veteran_tree$censoring[1,])
+length(veteran_tree$unique.event.times)
 
 #preprocess_data(veteran)
 head(veteran)
