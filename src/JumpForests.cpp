@@ -716,7 +716,7 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
     if (save_predictions) {
       Rcout << "Computing forest predictions" << endl;
       JFCppForestPredict(result);
-      JFCppForestErrorSurvival(result, times, ind); // compute and save error result
+      JFCppForestErrorSurvival(result, times, ind, unique_event_times, response_event_time_ids); // compute and save error result
     } else {
       result["predictions"] = R_NilValue;
       result["oob.predictions"] = R_NilValue;
@@ -1102,10 +1102,18 @@ List JFCppForestErrorRegression(const vector<double>& predictions, const vector<
 
 // Survival
 
-void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const vector<double>& ind) {
+void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids) {
+  // first compute Harrell's C-index
   const vector<double>& outcomes = computeOutcomes(JFForest["oob.predictions"]);
   JFForest["outcomes.oob"] = outcomes;
   JFForest["oob.error"] = 1 - computeConcordanceIndex(outcomes, times, ind);
+
+  // now compute Brier score
+  vector<double> IPCW_weights = computeIPCW(times, ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"]);
+  vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, KaplanMeier(JFForest["oob.predictions"]));  // mistake here for some reason
+  pair<double, double> ibs = computeIBS(brier, unique_event_times);
+  JFForest["ibs"] = ibs.first;
+  JFForest["ibs.normalised"] = ibs.second;
 }
 
 // Multi-state
@@ -1138,19 +1146,35 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
   }
   if (type == "Survival") {
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
-    size_t num_unique_event_times = forest->getEventTimes().size();
-    NumericMatrix predictions(num_obs, num_unique_event_times);
-    const vector<double>& predictions_cpp = forest->computePredictions(new_data);
-    for (size_t i = 0; i < num_obs; ++i) {
-      copy(predictions_cpp.begin() + i * num_unique_event_times, predictions_cpp.begin() + (i + 1) * num_unique_event_times, predictions.row(i).begin());
+    vector<double> unique_event_times = forest->getEventTimes();
+    size_t num_unique_event_times = unique_event_times.size();
+
+    // check if predictions are saved, if not, the censoring KM estimators have to be computed in every leaf
+    if (!forest->predictionsSaved()) {
+      forest->computePredictionsCensoring();
     }
+    pair<vector<double>, vector<double>> predictions = forest->computePredictionsCensoring(new_data);
 
     // truncate the predictions to only include non-censored times
     //predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
+
+    // fetch data
     const vector<double>& times = new_data.get_y_col(0);
     const vector<double>& ind = new_data.get_y_col(1);
-    return List::create(Named("error") = JFCppErrorSurvival(predictions, times, ind));
-    
+
+    // compute Harrell's C-index error
+    const vector<double>& outcomes = computeOutcomes(predictions.first, num_unique_event_times);
+    List result List::create(Named("C.error") = 1 - computeConcordanceIndex(outcomes, times, ind));
+
+    // compute the Brier score
+    vector<size_t> response_event_time_ids_new_data = computeResponseEventTimeIDs(unique_event_times, times);   // have to compute the ids from scratch
+    vector<double> IPCW_weights = computeIPCWCpp(times, ind, unique_event_times, response_event_time_ids_new_data, predictions.second);
+    vector<double> km_pred = KaplanMeier(predictions.first, times.size());
+    vector<double> brier = computeBrierScoreCpp(times, IPCW_weights, unique_event_times, km_pred);
+    pair<double, double> ibs = computeIBS(brier, unique_event_times);
+    result["IBS.error"] = ibs.first;
+    result["normalised.IBS.error"] = ibs.second;
+    return result;
   }
   if (type == "Multi-state") {
 
