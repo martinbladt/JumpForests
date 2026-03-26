@@ -135,6 +135,7 @@ vector<double> SurvivalForest::predict(const vector<double>& x) {
     return result;
 }
 
+// computes predictions, both in-bag and out-of-bag
 pair<vector<double>, vector<double>> SurvivalForest::computePredictions() {
     size_t num_obs = data->getNumberOfObs();
     vector<double> predictions(num_obs * num_unique_event_times);
@@ -177,8 +178,40 @@ pair<vector<double>, vector<double>> SurvivalForest::computePredictions() {
     return {predictions, oob_predictions};
 }
 
+// computes out-of-bag censoring predictions
+vector<double> SurvivalForest::computePredictionsCensoringOOB() {
+    size_t num_obs = data->getNumberOfObs();
+    vector<double> oob_censoring(num_obs * num_unique_event_times);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> oob_cens(num_unique_event_times, 0);
+        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+            vector<vector<double>> tree_cens = tree->getKMCensoring();
+            
+            if (oob_indices[j][i]) {
+                ++num_oob_trees;
+                size_t leaf_id = tree->predictionLeafID(data->get_x_row(i));
+                vector<double> tree_cens_obs = tree_cens[leaf_id];
+                sum_vectors(oob_cens, tree_cens_obs);
+            }
+        }
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            if (num_oob_trees > 0) {
+                oob_cens[k] /= num_oob_trees;
+            }
+            oob_censoring[i * num_unique_event_times + k] = oob_cens[k];
+        }
+    }
+    return oob_censoring;
+}
+
 vector<double> SurvivalForest::computePredictions(const Data& new_data) {
-    size_t num_features = new_data.getNumberOfFeatures();
     size_t num_obs = new_data.getNumberOfObs();
     vector<double> predictions(num_obs * num_unique_event_times);
 
@@ -201,6 +234,88 @@ vector<double> SurvivalForest::computePredictions(const Data& new_data) {
     }
     return predictions;
 }
+
+// computes a pair of flattened vectors, the first predictions and the second the censoring KM estimators
+// (when censoring KM estimators are already saved during fitting)
+pair<vector<double>, vector<double>> SurvivalForest::computePredictionsCensoring(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times);
+    vector<double> censoring(num_obs * num_unique_event_times);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_unique_event_times, 0);
+        vector<double> cens(num_unique_event_times, 0);
+
+        for (size_t j = 0; j < ntrees; ++j) {
+            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+            const vector<vector<double>>& tree_predictions = tree->getCHF();
+            const vector<vector<double>>& tree_censoring = tree->getKMCensoring();
+
+             // fetch predictions from the tree
+            size_t leaf_id = tree->predictionLeafID(new_data.get_x_row(i));
+            vector<double> tree_pred = tree_predictions[leaf_id];               // important: will this still work with const? speedup potential? test!
+            vector<double> tree_cens = tree_censoring[leaf_id];
+
+            // compute the sum of all predictions for observation i
+            sum_vectors(pred, tree_pred);
+            sum_vectors(cens, tree_cens);
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            pred[k] /= ntrees;
+            cens[k] /= ntrees;
+            predictions[i * num_unique_event_times + k] = pred[k];
+            censoring[i * num_unique_event_times + k] = cens[k];
+        }
+    }
+    return {predictions, censoring};
+}
+
+// for populating the leaves with the censoring KM estimators if these have not already been saved during fitting
+void SurvivalForest::computePredictionsCensoring() {
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t j = 0; j < ntrees; ++j) {
+        // fetch tree and group all the observations by leaves
+        SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+        const vector<size_t>& leafIDs = tree->getPredictionNodeIDs();
+        size_t num_leaves =  tree->getNumberOfTerminalNodes();
+        const vector<vector<size_t>>& leaf_groups = groupByLeaf(leafIDs, num_leaves);
+
+        // compute the numbers at risk and the number of deaths in each leaf and the corresponding KM estimator for the survival distribution
+        tree->resizeKM();   // to ensure that the vector of Kaplan-Meier estimators for censoring is sufficiently large
+        for (size_t k = 0; k < num_leaves; ++k) {
+            tree->computeCensoringKMExternal(leaf_groups[k], leafIDs[leaf_groups[k][0]]);
+        }
+    }
+    // so that predictions are not needlessly recomputed later
+    save_predictions = true;
+}
+
+/*
+// computes a pair of flattened vectors, the first predictions and the second the censoring KM estimators
+pair<vector<double>, vector<double>> SurvivalForest::computePredictionsExternal(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times);
+    vector<double> censoring(num_obs * num_unique_event_times);
+
+    for (size_t j = 0; j < ntrees; ++j) {
+        SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+        const vector<double>& tree_predictions = tree->getCHF();
+
+        // determine the leaf that each observation belongs to
+        vector<size_t> leaf_ids(num_obs);
+        for (size_t i = 0; i < num_obs; ++i) {
+            leaf_ids[i] = tree->predictionLeafID[new_data.get_x_row(i)];
+        }
+        
+        // now group the observations by leaf, compute the survial quantities and 
+        const vector<vector<size_t>>& leaf_obs = groupByLeaf(leaf_ids, tree->getNumberOfTerminalNodes());
+
+    }
+}
+*/
 
 double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
     /*

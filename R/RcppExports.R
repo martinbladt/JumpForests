@@ -41,6 +41,10 @@ JFCppForestPredict <- function(JFForest, df, feature_indices, categorical, uniqu
     .Call(`_JumpForests_JFCppForestPredict`, JFForest, df, feature_indices, categorical, unique)
 }
 
+JFCppForestPredictCensoring <- function(JFForest, df, feature_indices, categorical, unique) {
+    .Call(`_JumpForests_JFCppForestPredictCensoring`, JFForest, df, feature_indices, categorical, unique)
+}
+
 JFCppForestPredictMM <- function(JFForest, df, feature_indices, categorical, unique, compute_initial) {
     .Call(`_JumpForests_JFCppForestPredictMM`, JFForest, df, feature_indices, categorical, unique, compute_initial)
 }

@@ -27,6 +27,9 @@ public:
   const vector<size_t> getTrueEventTimeIDs() const {
     return *true_event_time_ids;
   }
+  const vector<size_t> getResponseEventTimeIDs() const {
+    return *response_event_time_ids;
+  }
 
   const vector<vector<double>> getCHF() const {
     return chf;
@@ -39,15 +42,19 @@ public:
   ValueType predict(const vector<double>& x) override {
     return chf[predictionLeafID(x)];
   }
-  vector<double> predictCensoring(const vector<double>& x);
+
   vector<double> computePredictions(const Data& new_data) override;
   pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
+  void computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index);
   // VIMP prediction for survival trees
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng) {
     return chf[predictionLeafIDVIMP(x, feature, rng)];
   }
 
-  //ValueType predict(Data* data) override;
+  // when the censoring Kaplan-Meier estimators have to be populated after fitting
+  void resizeKM() {
+    KM_censoring.resize(num_nodes);
+  }
 
 private:
   // quantities of interest to survival trees
@@ -81,7 +88,7 @@ private:
   void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
   bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
   void computeChf(size_t node_index);                             // computes the cumulative hazard in a terminal node
-  void computeCensoringKM(size_t node_index);                     // computes the KM estimator for the censoring distribution in a terminal node
+  void computeCensoringKM();                                      // computes the KM estimator for the censoring distribution in a terminal node
   //void updateSurvivalStats(vector<size_t>& deaths, vector<size_t>& at_risk, const ObsInfo& obs, int sign);
   void computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_deaths_right, size_t nsplits_final);
@@ -111,6 +118,7 @@ private:
   // frees memory from temporary quantities used in growing the tree
   void cleanUpTree() override {
     vector<vector<size_t>>().swap(node_obs);
+    vector<vector<size_t>>().swap(holdout_node_obs);
     vector<size_t>().swap(num_deaths);
     vector<size_t>().swap(num_at_risk);
   }
@@ -122,9 +130,11 @@ vector<double> computeOutcomes(const NumericMatrix& predictions); // for error c
 vector<double> computeOutcomes(const vector<double>& predictions, size_t num_unique_event_times);
 vector<double> computeIPCW(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids, const NumericMatrix& KM_cens);
 vector<double> computeBrierScore(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const NumericMatrix& KM_pred);
+vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids, const vector<double>& KM_cens);
+vector<double> computeBrierScoreCpp(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const vector<double>& KM_pred);
 pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& unique_event_times);
 vector<double> computeUniqueEventTimes(const vector<double>& times, const vector<size_t>& ind);
-vector<double> KaplanMeier(const vector<double>& na);
+vector<double> KaplanMeier(const vector<double>& na, size_t num_estimators = 0);
 NumericMatrix KaplanMeier(const NumericMatrix& na);
 double computeConcordanceIndex(const vector<double>& outcomes, const vector<double>& times, const vector<double>& ind);
 

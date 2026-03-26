@@ -537,6 +537,11 @@ void MultistateTree::makeLeaf(size_t node_index) {
     for (size_t i : node_obs[node_index]) {
         prediction_node_IDs[i] = node_index;
     }
+    if (honest) {
+        for (size_t i : holdout_node_obs[node_index]) {
+            prediction_node_IDs[i] = node_index;
+        }
+    }
 }
 
 // function to create a split for a multi-state tree. returns true if leaf, otherwise false

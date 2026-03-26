@@ -401,6 +401,25 @@ pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indi
     return {grow, holdout};
 }
 
+// returns a vector of vectors, each of which contain the observation numbers belonging to the same leaf
+vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_leaves) {
+    vector<vector<size_t>> result(num_leaves);
+    vector<size_t> counts(num_leaves, 0);
+    for (size_t id : leaf_ids) {
+        counts[id]++;
+    }
+    // to use memory efficiently and reduce the number of resizings
+    for (size_t i = 0; i < num_leaves; ++i) {
+        result[i].reserve(counts[i]);
+    }
+
+    // finally, determine the vectors
+    for (size_t i = 0; i < leaf_ids.size(); ++i) {
+        result[leaf_ids[i]].push_back(i);
+    }
+    return result;
+}
+
 // for selecting specific columns from a NumericMatrix (used to filter)
 NumericMatrix selectColumns(const NumericMatrix& matrix, const vector<size_t>& cols) {
     size_t n_rows = matrix.nrow();

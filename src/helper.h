@@ -70,6 +70,7 @@ void printVector(const vector<bool>& vec);
 vector<bool> computeOOBIndices(const vector<size_t>& indices, size_t n);
 vector<bool> computeOOBIndicesDouble(const vector<size_t>& grow, const vector<size_t>& holdout, size_t n);
 pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indices, mt19937 rng);
+vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_leaves);
 
 // helper functions for Rcpp
 NumericMatrix selectColumns(const NumericMatrix& matrix, const vector<size_t>& cols);

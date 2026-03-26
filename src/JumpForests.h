@@ -51,6 +51,8 @@ void JFCppForestPredictTraining(List& JFForest);
 //NumericVector JFCppForestPredictSingle(const List& JFForest, const NumericVector& x);
 NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique);
+List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVector feature_indices,
+                                 LogicalVector categorical, NumericVector unique);
 List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices,
                           LogicalVector categorical, NumericVector unique);
 

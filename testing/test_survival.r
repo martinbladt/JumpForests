@@ -91,11 +91,11 @@ data(veteran, package = "randomForestSRC")
 veteran$trt <- as.factor(veteran$trt)
 veteran$celltype <- as.factor(veteran$celltype)
 veteran$prior <- as.factor(veteran$prior)
-veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2025, min_node_size = 15)
+veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2025, min_node_size = 10, honest = TRUE)
 print_tree(veteran_tree)
 jftree.predict(veteran_tree)
 jftree.predict(veteran_tree, new_data = veteran)
-jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)
+jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)$predictions
 jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)$censoring
 
 jftree.error(veteran_tree)
@@ -118,7 +118,7 @@ length(veteran_tree$unique.event.times)
 head(veteran)
 test_data_functions(veteran, c(3, 4), c(2, 1, 8, 6, 5, 7))
 
-veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = FALSE)
+veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = FALSE, save_predictions = TRUE)
 (veteran_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = veteran, seed = 2025, samptype = "swr"))
 (veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation"))
 
@@ -140,6 +140,10 @@ head(veteran_forest_SRC$predicted.oob)
 head(veteran_forest$oob.predictions)
 head(veteran_forest_SRC$chf.oob)
 #head(veteran_forest_ranger$chf)
+
+jfforest.predict(veteran_forest)
+jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$predictions
+jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$censoring
 
 # VIMP
 jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "permute")

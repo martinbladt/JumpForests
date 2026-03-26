@@ -331,7 +331,7 @@ void SurvivalTree::makeLeaf(size_t node_index) {
 
     // if we save predictions, we also compute the KM estimator of the censoring distribution
     if (save_predictions) {
-        computeCensoringKM(node_index);
+        computeCensoringKM();
     }
 
     // update tree info
@@ -341,6 +341,11 @@ void SurvivalTree::makeLeaf(size_t node_index) {
     // since we are in a terminal node, we save the indices for the observations
     for (size_t i : node_obs[node_index]) {
         prediction_node_IDs[i] = node_index;
+    }
+    if (honest) {
+        for (size_t i : holdout_node_obs[node_index]) {
+            prediction_node_IDs[i] = node_index;
+        }
     }
 }
 
@@ -477,7 +482,7 @@ void SurvivalTree::computeChf(size_t node_index) {
 }
 
 // computes the Kaplan-Meier estimator for the censoring distribution in node node_index
-void SurvivalTree::computeCensoringKM(size_t node_index) {
+void SurvivalTree::computeCensoringKM() {
     vector<double>KM_censoring = vector<double>(num_unique_event_times, 1);
     
     // now compute the Kaplan-Meier estimator
@@ -485,7 +490,7 @@ void SurvivalTree::computeCensoringKM(size_t node_index) {
     for (size_t i = 1; i < num_unique_event_times; ++i) {
         if (num_at_risk[i] - num_deaths[i] > 0) {
             num_censored = num_at_risk[i] - num_at_risk[i + 1] - num_deaths[i];
-            KM_censoring[i] = KM_censoring[i - 1] * (1 - double(num_censored) / double(num_at_risk[i] - num_deaths[i]));    // may be other ways of handling ties
+            KM_censoring[i] = KM_censoring[i - 1] * (1 - num_censored / double(num_at_risk[i] - num_deaths[i]));    // may be other ways of handling ties
         } else {
             KM_censoring[i] = KM_censoring[i - 1];
         }
@@ -494,6 +499,26 @@ void SurvivalTree::computeCensoringKM(size_t node_index) {
     //cout << "KM: ";
     //printVector(KM_censoring);
     this->KM_censoring.push_back(std::move(KM_censoring));
+}
+
+// computes the Kaplan-Meier estimator for the censoring distribution in the node given by node_index based on the training data given by indices
+void SurvivalTree::computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index) {
+    vector<size_t> num_at_risk(num_unique_event_times);
+    vector<size_t> num_deaths(num_unique_event_times);
+    computeSurvivalQuantities(indices, num_deaths, num_at_risk);
+    vector<double>KM_censoring = vector<double>(num_unique_event_times, 1);
+    
+    // now compute the Kaplan-Meier estimator
+    double num_censored;
+    for (size_t i = 1; i < num_unique_event_times; ++i) {
+        if (num_at_risk[i] - num_deaths[i] > 0) {
+            num_censored = num_at_risk[i] - num_at_risk[i + 1] - num_deaths[i];
+            KM_censoring[i] = KM_censoring[i - 1] * (1 - num_censored / double(num_at_risk[i] - num_deaths[i]));    // may be other ways of handling ties
+        } else {
+            KM_censoring[i] = KM_censoring[i - 1];
+        }
+    }
+    this->KM_censoring[node_index] = std::move(KM_censoring);
 }
 
 /*
@@ -734,12 +759,12 @@ vector<double> computeIPCW(const vector<double>& times, const vector<double>& in
         size_t index = unique_event_time_ids[i];
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             if (times[i] <= unique_event_times[j] && ind[i] == 1) {
-               if (KM_cens[index] > 0) {
+               if (KM_cens(i, index) > 0) {
                  weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, index));   // possibly index - 1 here, check!
                }
             }
             else if (times[i] > unique_event_times[j]) {
-                if (KM_cens[j] > 0) {
+                if (KM_cens(i, j) > 0) {
                     weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, j));
                 }
             }
@@ -765,8 +790,57 @@ vector<double> computeBrierScore(const vector<double>& times, const vector<doubl
         }
     }
     // for debugging
-    cout << "Brier scores:" << endl;
-    printVector(brier);
+    //cout << "Brier scores:" << endl;
+    //printVector(brier);
+    return brier;
+}
+
+// the following functions are identical except that they accept KM_cens and KM_pred as flattened arrays instead of NumericMatrices
+
+// computes the IPCW weights for each observation and event time (useful if one wants to extend to other error metrics)
+vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids, const vector<double>& KM_cens) {
+    size_t num_obs = times.size();
+    size_t num_unique_event_times = unique_event_times.size();
+    vector<double> weights(num_obs * num_unique_event_times, 0);    // result is a flattened vector
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t index = unique_event_time_ids[i];
+        for (size_t j = 0; j < num_unique_event_times; ++j) {
+            if (times[i] <= unique_event_times[j] && ind[i] == 1) {
+               if (KM_cens[i * num_unique_event_times + index] > 0) {
+                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens[i * num_unique_event_times + index]);   // possibly index - 1 here, check!
+               }
+            }
+            else if (times[i] > unique_event_times[j]) {
+                if (KM_cens[i * num_unique_event_times + j] > 0) {
+                    weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens[i * num_unique_event_times + j]);
+                }
+            }
+            // the third case (censored before the event time) has weight zero
+        }
+    }
+    return weights;
+}
+
+// computes a vector of the Brier score using given IPCW weights
+vector<double> computeBrierScoreCpp(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const vector<double>& KM_pred) {
+    size_t num_obs = times.size();
+    size_t num_unique_event_times = unique_event_times.size();
+    vector<double> brier(num_unique_event_times, 0);
+
+    for (size_t j = 0; j < num_unique_event_times; ++j) {
+        for (size_t i = 0; i < num_obs; ++i) {
+            size_t index = i * num_unique_event_times + j;
+            if (times[i] <= unique_event_times[j]) {
+                brier[j] += KM_pred[index] * KM_pred[index] * weights[index];
+            } else if (times[i] > unique_event_times[j]) {
+                brier[j] += (1 - KM_pred[index]) * (1 - KM_pred[index]) * weights[index];
+            }
+        }
+    }
+    // for debugging
+    //cout << "Brier scores:" << endl;
+    //printVector(brier);
     return brier;
 }
 
@@ -842,14 +916,22 @@ vector<double> computeUniqueEventTimes(const vector<double>& times, const vector
 }
 
 // computes the Kaplan-Meier estimator given a Nelson-Aalen estimator
-vector<double> KaplanMeier(const vector<double>& na) {
-    vector<double> KM = vector<double>(na.size() + 1, 1);
-    KM[0] = 1;
+// if the Nelson-Aalen estimator is a flattened vector, provide the number of estimators in num_estimators
+vector<double> KaplanMeier(const vector<double>& na, size_t num_estimators) {
+    size_t stride_length = na.size() / num_estimators;
+    vector<double> KM = vector<double>(na.size(), 1);
+
+    for (size_t i = 0; i < num_estimators; ++i) {
+        for (size_t j = 1; j < stride_length; ++j) {
+            size_t index = i * stride_length + j;
+            KM[index] = KM[index - 1] * (1 - (na[index] - na[index - 1]));
+        }
+    }
 
     // compute using the recursion given by the product integral
-    for (size_t i = 1; i < na.size() + 1; ++i) {
-        KM[i] = KM[i - 1] * (1 - (na[i] - na[i - 1]));
-    }
+    //for (size_t i = 1; i < na.size(); ++i) {
+    //    KM[i] = KM[i - 1] * (1 - (na[i] - na[i - 1]));
+    //}
     return KM;
 }
 

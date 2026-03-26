@@ -162,6 +162,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 #'
 #' @param tree_list A fitted tree object from [jftree()].
 #' @param new_data Optional new data.
+#' @param compute_censoring Should the censoring distribution be estimated? (only valid for survival and multi-state trees)
 #' @param compute_initial Should the initial distribution also be estimated? (only valid for multi-state trees)
 #'
 #' @return Predictions.
@@ -177,27 +178,33 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
       return(tree_list$predictions)
     }
   }
-  # if new data is supplied, start by preprocessing the data and
-  # extracting relevant columns
-  covariates <- tree_list$feature.names
-  if (ncol(new_data) > 1) {
-      new_data <- new_data[, covariates]  # ensures the columns have the same order as the original dataset
-    }
-  feature_indices <- which(names(new_data) %in% covariates) - 1
-  processed_data <- preprocess_data(new_data)
 
-  # may need to be adapted when more types of trees are implemented
-  if (tree_list$tree.type != "Multi-state") {
-    if (compute_censoring) {
-      return(JFCppTreePredictCensoring(tree_list, processed_data$data, feature_indices,
-                          processed_data$categorical, processed_data$unique_values))
+  # when new data is supplied
+  if (inherits(new_data, "data.frame")) {
+    # if new data is supplied, start by preprocessing the data and
+    # extracting relevant columns
+    covariates <- tree_list$feature.names
+    if (ncol(new_data) > 1) {
+        new_data <- new_data[, covariates]  # ensures the columns have the same order as the original dataset
+      }
+    feature_indices <- which(names(new_data) %in% covariates) - 1
+    processed_data <- preprocess_data(new_data)
+
+    # may need to be adapted when more types of trees are implemented
+    if (tree_list$tree.type != "Multi-state") {
+      if (compute_censoring) {
+        return(JFCppTreePredictCensoring(tree_list, processed_data$data, feature_indices,
+                            processed_data$categorical, processed_data$unique_values))
+      } else {
+        return(JFCppTreePredict(tree_list, processed_data$data, feature_indices,
+                            processed_data$categorical, processed_data$unique_values))
+      }
     } else {
-      return(JFCppTreePredict(tree_list, processed_data$data, feature_indices,
-                          processed_data$categorical, processed_data$unique_values))
+      return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices,
+                            processed_data$categorical, processed_data$unique_values, compute_initial))
     }
   } else {
-    return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices,
-                          processed_data$categorical, processed_data$unique_values, compute_initial))
+    cat("Error: If new_data is supplied, it must be a data.frame with the same names as the original dataset \n")
   }
 }
 
@@ -219,7 +226,7 @@ jftree.error <- function(tree_list, new_data = NULL) {
 
     }
     if (tree_list$tree.type == "Survival") {
-      return(list("C.error" = tree_list$error))
+      return(list("C.error" = tree_list$C.error, "IBS.error" = tree_list$ibs, "normalised.IBS.error" = tree_list$ibs.normalised))
     }
     if (tree_list$tree.type == "Multi-state") {
 
@@ -420,13 +427,14 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
 #'
 #' @param forest_list A fitted forest object from [jfforest()].
 #' @param new_data Optional new data.
+#' @param compute_censoring Should the censoring distribution also be estimated (only valid for survival and multi-state trees)
 #' @param compute_initial Should the initial distribution also be estimated? (only valid for multi-state trees)
 #'
 #' @return Predictions.
 #' @export
 #'
 # the main function for predicting with forests
-jfforest.predict <- function(forest_list, new_data = NULL, compute_initial = FALSE) {
+jfforest.predict <- function(forest_list, new_data = NULL, compute_censoring = FALSE, compute_initial = FALSE) {
   # if new data is not supplied and predictions are already computed, return predictions based on training data
   if (is.null(new_data) & !is.null(forest_list$predictions)) {
     if (forest_list$tree.type != "Multi-state") {
@@ -457,8 +465,13 @@ jfforest.predict <- function(forest_list, new_data = NULL, compute_initial = FAL
     feature_indices <- which(names(new_data) %in% covariates) - 1
     processed_data <- preprocess_data(new_data)
     if (forest_list$tree.type != "Multi-state") {
-      return(JFCppForestPredict(forest_list, processed_data$data, feature_indices,
+      if (compute_censoring) {
+        return(JFCppForestPredictCensoring(forest_list, processed_data$data, feature_indices,
                             processed_data$categorical, processed_data$unique_values))
+      } else {
+        return(JFCppForestPredict(forest_list, processed_data$data, feature_indices,
+                            processed_data$categorical, processed_data$unique_values))
+      }
     } else {
       return(JFCppForestPredictMM(forest_list, processed_data$data, feature_indices,
                             processed_data$categorical, processed_data$unique_values, compute_initial))

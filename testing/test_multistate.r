@@ -74,7 +74,7 @@ sim[1]
 # implement as an option
 
 test_data <- data.frame(X1 = X, X2 = Y)
-fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20)
+fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 100, honest = TRUE)
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
 
 jftree.predict(fitted_tree)

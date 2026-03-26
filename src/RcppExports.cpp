@@ -201,6 +201,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// JFCppForestPredictCensoring
+List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
+RcppExport SEXP _JumpForests_JFCppForestPredictCensoring(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFForest(JFForestSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestPredictCensoring(JFForest, df, feature_indices, categorical, unique));
+    return rcpp_result_gen;
+END_RCPP
+}
 // JFCppForestPredictMM
 List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial);
 RcppExport SEXP _JumpForests_JFCppForestPredictMM(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP) {
@@ -435,6 +450,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppForestMM", (DL_FUNC) &_JumpForests_JFCppForestMM, 19},
     {"_JumpForests_JFCppForestPredictTraining", (DL_FUNC) &_JumpForests_JFCppForestPredictTraining, 1},
     {"_JumpForests_JFCppForestPredict", (DL_FUNC) &_JumpForests_JFCppForestPredict, 5},
+    {"_JumpForests_JFCppForestPredictCensoring", (DL_FUNC) &_JumpForests_JFCppForestPredictCensoring, 5},
     {"_JumpForests_JFCppForestPredictMM", (DL_FUNC) &_JumpForests_JFCppForestPredictMM, 6},
     {"_JumpForests_JFCppForestError", (DL_FUNC) &_JumpForests_JFCppForestError, 6},
     {"_JumpForests_JFCppForestVIMPFeature", (DL_FUNC) &_JumpForests_JFCppForestVIMPFeature, 4},
