@@ -99,7 +99,7 @@ jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)$predi
 jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)$censoring
 
 jftree.error(veteran_tree)
-jftree.error(veteran_tree, new_data = veteran)
+jftree.error(veteran_tree, new_data = veteran)  # just yields training error
 
 veteran_tree$ibs
 veteran_tree$ibs.normalised
@@ -141,9 +141,26 @@ head(veteran_forest$oob.predictions)
 head(veteran_forest_SRC$chf.oob)
 #head(veteran_forest_ranger$chf)
 
-jfforest.predict(veteran_forest)
+jfforest.predict(veteran_forest)  # works fine when save_predictions = TRUE, but gets segfault otherwise
+jfforest.predict(veteran_forest, new_data = veteran)
 jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$predictions
 jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$censoring
+
+jfforest.error(veteran_forest)
+jfforest.error(veteran_forest, new_data = veteran)
+
+# observation: on new data, the IBS is very comparable to a single tree (but here we also use the training data)
+# some numerical instability when computing the OOB Brier score error
+
+min(veteran_forest$censoring.oob) # approx. 0.58 that's fine?
+which(veteran_forest$censoring.oob == min(veteran_forest$censoring.oob))
+veteran_forest$censoring.oob[44,]
+veteran_tree$censoring[44,]
+
+censoring_predictions <- jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$censoring
+min(censoring_predictions) # 0.6510716 (only slightly higher)
+which(censoring_predictions == min(censoring_predictions))
+censoring_predictions[95,]
 
 # VIMP
 jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "permute")
@@ -196,6 +213,9 @@ retinopathy_forest_SRC
 
 jfforest.predict(retinopathy_forest, retinopathy)[1:5, ]
 length(unique(retinopathy$futime[retinopathy$status == 1]))
+
+jfforest.error(retinopathy_forest)
+jfforest.error(retinopathy_forest, new_data = retinopathy)  # training error
 
 head(retinopathy_forest$outcomes.oob)
 head(retinopathy_forest_SRC$predicted.oob)

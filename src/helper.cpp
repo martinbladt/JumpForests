@@ -402,15 +402,17 @@ pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indi
 }
 
 // returns a vector of vectors, each of which contain the observation numbers belonging to the same leaf
-vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_leaves) {
-    vector<vector<size_t>> result(num_leaves);
-    vector<size_t> counts(num_leaves, 0);
+vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_nodes) {
+    vector<vector<size_t>> result(num_nodes);
+    vector<size_t> counts(num_nodes, 0);
     for (size_t id : leaf_ids) {
         counts[id]++;
     }
     // to use memory efficiently and reduce the number of resizings
-    for (size_t i = 0; i < num_leaves; ++i) {
-        result[i].reserve(counts[i]);
+    for (size_t i = 0; i < num_nodes; ++i) {
+        if (counts[i] > 0) {
+            result[i].reserve(counts[i]);
+        }
     }
 
     // finally, determine the vectors

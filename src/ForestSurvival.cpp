@@ -275,19 +275,23 @@ pair<vector<double>, vector<double>> SurvivalForest::computePredictionsCensoring
 
 // for populating the leaves with the censoring KM estimators if these have not already been saved during fitting
 void SurvivalForest::computePredictionsCensoring() {
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    //#pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t j = 0; j < ntrees; ++j) {
         // fetch tree and group all the observations by leaves
         SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
-        const vector<size_t>& leafIDs = tree->getPredictionNodeIDs();
-        size_t num_leaves =  tree->getNumberOfTerminalNodes();
-        const vector<vector<size_t>>& leaf_groups = groupByLeaf(leafIDs, num_leaves);
+        vector<size_t> leafIDs = tree->getPredictionNodeIDs();
+        size_t num_nodes =  tree->getNumberOfNodes();
+        vector<vector<size_t>> leaf_groups = groupByLeaf(leafIDs, num_nodes);
+        cout << "Computed leaf groups in tree " << j << endl;
 
         // compute the numbers at risk and the number of deaths in each leaf and the corresponding KM estimator for the survival distribution
-        tree->resizeKM();   // to ensure that the vector of Kaplan-Meier estimators for censoring is sufficiently large
-        for (size_t k = 0; k < num_leaves; ++k) {
+        tree->resizeKM();   // to ensure that the vector of Kaplan-Meier estimators for censoring is sufficiently large and initialised
+        for (size_t k = 0; k < leaf_groups.size(); ++k) {
+            cout << "Leaf group " << k << " = ";
+            printVector(leaf_groups[k]);
             tree->computeCensoringKMExternal(leaf_groups[k], leafIDs[leaf_groups[k][0]]);
         }
+        cout << "Computed the KM estimator in tree " << j << endl;
     }
     // so that predictions are not needlessly recomputed later
     save_predictions = true;

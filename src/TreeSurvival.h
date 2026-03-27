@@ -53,7 +53,7 @@ public:
 
   // when the censoring Kaplan-Meier estimators have to be populated after fitting
   void resizeKM() {
-    KM_censoring.resize(num_nodes);
+    KM_censoring.assign(num_nodes, vector<double>());
   }
 
 private:

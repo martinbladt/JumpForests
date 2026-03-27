@@ -503,22 +503,24 @@ void SurvivalTree::computeCensoringKM() {
 
 // computes the Kaplan-Meier estimator for the censoring distribution in the node given by node_index based on the training data given by indices
 void SurvivalTree::computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index) {
-    vector<size_t> num_at_risk(num_unique_event_times);
-    vector<size_t> num_deaths(num_unique_event_times);
+    vector<size_t> num_at_risk(num_unique_event_times, 0);
+    vector<size_t> num_deaths(num_unique_event_times, 0);
     computeSurvivalQuantities(indices, num_deaths, num_at_risk);
-    vector<double>KM_censoring = vector<double>(num_unique_event_times, 1);
+    vector<double> KM(num_unique_event_times, 1);
     
     // now compute the Kaplan-Meier estimator
     double num_censored;
     for (size_t i = 1; i < num_unique_event_times; ++i) {
         if (num_at_risk[i] - num_deaths[i] > 0) {
             num_censored = num_at_risk[i] - num_at_risk[i + 1] - num_deaths[i];
-            KM_censoring[i] = KM_censoring[i - 1] * (1 - num_censored / double(num_at_risk[i] - num_deaths[i]));    // may be other ways of handling ties
+            KM[i] = KM[i - 1] * (1 - num_censored / double(num_at_risk[i] - num_deaths[i]));    // may be other ways of handling ties
         } else {
-            KM_censoring[i] = KM_censoring[i - 1];
+            KM[i] = KM[i - 1];
         }
     }
-    this->KM_censoring[node_index] = std::move(KM_censoring);
+    printVector(KM);
+    cout << "Length of KM_censoring:" << this->KM_censoring.size() << endl;
+    this->KM_censoring[node_index] = KM;    // std::move?
 }
 
 /*
@@ -756,11 +758,11 @@ vector<double> computeIPCW(const vector<double>& times, const vector<double>& in
     vector<double> weights(num_obs * num_unique_event_times, 0);    // result is a flattened vector
 
     for (size_t i = 0; i < num_obs; ++i) {
-        size_t index = unique_event_time_ids[i];
+        size_t index_obs = unique_event_time_ids[i];
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             if (times[i] <= unique_event_times[j] && ind[i] == 1) {
-               if (KM_cens(i, index) > 0) {
-                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, index));   // possibly index - 1 here, check!
+               if (KM_cens(i, index_obs) > 0) {
+                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, index_obs));   // possibly index - 1 here, check!
                }
             }
             else if (times[i] > unique_event_times[j]) {

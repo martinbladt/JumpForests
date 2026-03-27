@@ -499,7 +499,7 @@ jfforest.error <- function(forest_list, new_data = NULL) {
 
     }
     if (forest_list$tree.type == "Survival") {
-      return(list("C.error" = forest_list$oob.error))
+      return(list("C.error" = forest_list$C.error, "IBS.error" = forest_list$ibs, "normalised.IBS.error" = forest_list$ibs.normalised))
     }
     if (forest_list$tree.type == "Multi-state") {
 
@@ -578,7 +578,9 @@ print_tree <- function(tree_list, full = FALSE) {
     if (length(tree_list$unique.event.times) <= 20) {
       cat("Unique event times:", tree_list$unique.event.times, "\n")
     }
-    cat("Training error:",tree_list$error, "\n")
+    cat("Training error (C-index):",tree_list$C.error, "\n")
+    cat("Training error (IBS):", tree_list$ibs, "\n")
+    cat("Training error (normalised IBS):", tree_list$ibs.normalised, "\n")
   }
   if (tree_list$tree.type == "Multi-state") {
     if (length(tree_list$unique.event.times) <= 20) {
@@ -651,7 +653,9 @@ print_forest <- function(forest_list) {
     if (length(forest_list$unique.event.times) <= 20) {
       cat("Unique event times:", forest_list$unique.event.times, "\n")
     }
-    cat("OOB error:", forest_list$oob.error, "\n")
+    cat("OOB error (C-index):", forest_list$C.oob.error, "\n")
+    cat("OOB error (IBS):", forest_list$ibs, "\n")
+    cat("OOB error (normalised IBS):", forest_list$ibs.normalised, "\n")
   }
   if (forest_list$tree.type == "Multi-state") {
     if (length(forest_list$unique.event.times) <= 20) {

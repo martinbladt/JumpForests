@@ -838,7 +838,15 @@ void JFCppForestPredict(List& JFForest) {
     // compute predictions via multi-threading
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
     const pair<vector<double>, vector<double>>& predictions_cpp = forest->computePredictions(); // computes in-bag and out-of-bag predictions
-    const vector<double> censoring_cpp = forest->computePredictionsCensoringOOB();
+    cout << "Done computing predictions (in-bag and out-of-bag)" << endl;
+
+    // if censoring predictions are not saved during fitting, we need to compute these in each node across all trees
+    if (!forest->predictionsSaved()) {
+      forest->computePredictionsCensoring();
+    }
+    cout << "Done populating leaves with KM estimators" << endl;
+    const vector<double>& censoring_cpp = forest->computePredictionsCensoringOOB(); // now able to fetch the predicted censoring KM estimators
+    cout << "Done computing predicted censoring KM estimators" << endl;
     size_t num_unique_event_times = forest->getNumUniqueEventTimes();
     size_t num_obs = JFForest["num.obs"];
     
@@ -955,7 +963,9 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
     size_t num_unique_event_times = forest->getNumUniqueEventTimes();
     NumericMatrix predictions(num_obs, num_unique_event_times);
+    //cout << "Computing predictions" << endl;
     const vector<double>& predictions_cpp = forest->computePredictions(new_data);
+    //cout << "Finished computing predictions" << endl;
     for (size_t i = 0; i < num_obs; ++i) {
       copy(predictions_cpp.begin() + i * num_unique_event_times, predictions_cpp.begin() + (i + 1) * num_unique_event_times, predictions.row(i).begin());
     }
@@ -1106,11 +1116,16 @@ void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const
   // first compute Harrell's C-index
   const vector<double>& outcomes = computeOutcomes(JFForest["oob.predictions"]);
   JFForest["outcomes.oob"] = outcomes;
-  JFForest["oob.error"] = 1 - computeConcordanceIndex(outcomes, times, ind);
+  JFForest["C.error"] = 1 - computeConcordanceIndex(outcomes, times, ind);
 
   // now compute Brier score
   vector<double> IPCW_weights = computeIPCW(times, ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"]);
-  vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, KaplanMeier(JFForest["oob.predictions"]));  // mistake here for some reason
+  //const NumericMatrix& km_pred = KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"]));
+  //cout << "OOB IPCW weights:" << endl;
+  //printVector(IPCW_weights);
+  vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"])));
+  //cout << "OOB Brier scores:" << endl;
+  //printVector(brier);
   pair<double, double> ibs = computeIBS(brier, unique_event_times);
   JFForest["ibs"] = ibs.first;
   JFForest["ibs.normalised"] = ibs.second;
@@ -1164,13 +1179,17 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
 
     // compute Harrell's C-index error
     const vector<double>& outcomes = computeOutcomes(predictions.first, num_unique_event_times);
-    List result List::create(Named("C.error") = 1 - computeConcordanceIndex(outcomes, times, ind));
+    List result = List::create(Named("C.error") = 1 - computeConcordanceIndex(outcomes, times, ind));
 
     // compute the Brier score
     vector<size_t> response_event_time_ids_new_data = computeResponseEventTimeIDs(unique_event_times, times);   // have to compute the ids from scratch
     vector<double> IPCW_weights = computeIPCWCpp(times, ind, unique_event_times, response_event_time_ids_new_data, predictions.second);
+    //cout << "ICPW weights on new data:" << endl;
+    //printVector(IPCW_weights);
     vector<double> km_pred = KaplanMeier(predictions.first, times.size());
     vector<double> brier = computeBrierScoreCpp(times, IPCW_weights, unique_event_times, km_pred);
+    //cout << "Brier scores on new data:" << endl;
+    //printVector(brier);
     pair<double, double> ibs = computeIBS(brier, unique_event_times);
     result["IBS.error"] = ibs.first;
     result["normalised.IBS.error"] = ibs.second;
