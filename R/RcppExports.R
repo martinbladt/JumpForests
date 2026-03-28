@@ -49,6 +49,10 @@ JFCppForestPredictMM <- function(JFForest, df, feature_indices, categorical, uni
     .Call(`_JumpForests_JFCppForestPredictMM`, JFForest, df, feature_indices, categorical, unique, compute_initial)
 }
 
+JFCppForestErrorSurvivalExternal <- function(JFForest) {
+    .Call(`_JumpForests_JFCppForestErrorSurvivalExternal`, JFForest)
+}
+
 JFCppForestError <- function(JFForest, df, feature_indices, categorical, unique, response_indices) {
     .Call(`_JumpForests_JFCppForestError`, JFForest, df, feature_indices, categorical, unique, response_indices)
 }

@@ -24,6 +24,9 @@ public:
   const size_t getNumUniqueEventTimes() const {
     return num_unique_event_times;
   }
+  const vector<size_t> getResponseEventTimeIDs() const {
+    return response_event_time_ids;
+  }
 
   const vector<vector<double>> getCHF() const {
     return chf;

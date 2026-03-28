@@ -518,9 +518,9 @@ void SurvivalTree::computeCensoringKMExternal(const vector<size_t>& indices, siz
             KM[i] = KM[i - 1];
         }
     }
-    printVector(KM);
-    cout << "Length of KM_censoring:" << this->KM_censoring.size() << endl;
-    this->KM_censoring[node_index] = KM;    // std::move?
+    //printVector(KM);
+    //cout << "Length of KM_censoring:" << this->KM_censoring.size() << endl;
+    this->KM_censoring[node_index] = move(KM);
 }
 
 /*

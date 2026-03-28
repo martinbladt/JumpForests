@@ -490,7 +490,7 @@ jfforest.predict <- function(forest_list, new_data = NULL, compute_censoring = F
 #' @export
 #'
 jfforest.error <- function(forest_list, new_data = NULL) {
-  # if data is not supplied, return the error based on training data
+  # if data is not supplied and error metrics are already computed, return the error based on OOB data
   if (is.null(new_data)) {
     if (forest_list$tree.type == "Regression") {
       return(list("mse.error" = forest_list$mse.error, "R2.error" = forest_list$R2.error))
@@ -499,12 +499,21 @@ jfforest.error <- function(forest_list, new_data = NULL) {
 
     }
     if (forest_list$tree.type == "Survival") {
-      return(list("C.error" = forest_list$C.error, "IBS.error" = forest_list$ibs, "normalised.IBS.error" = forest_list$ibs.normalised))
-    }
-    if (forest_list$tree.type == "Multi-state") {
+      # if the errors are already computed and saved, simply return them, otherwise compute them from scratch
+      if (!is.null(forest_list$C.error)) {
+        return(list("C.error" = forest_list$C.error, "IBS.error" = forest_list$ibs, "normalised.IBS.error" = forest_list$ibs.normalised))
+      } else {
+        JFCppForestPredictTraining(forest_list)                  # compute predictions from scratch
+        result <- JFCppForestErrorSurvivalExternal(forest_list)  # use just computed predictions to compute errors
+        return(result)
+        #return(list("C.error" = forest_list$C.error, "IBS.error" = forest_list$ibs, "normalised.IBS.error" = forest_list$ibs.normalised))
+      }
+      }
+      if (forest_list$tree.type == "Multi-state") {
 
+      }
     }
-  }
+    
 
   # if new_data is supplied, compute predictions and error from scratch
   covariates <- forest_list$feature.names
@@ -653,7 +662,7 @@ print_forest <- function(forest_list) {
     if (length(forest_list$unique.event.times) <= 20) {
       cat("Unique event times:", forest_list$unique.event.times, "\n")
     }
-    cat("OOB error (C-index):", forest_list$C.oob.error, "\n")
+    cat("OOB error (C-index):", forest_list$C.error, "\n")
     cat("OOB error (IBS):", forest_list$ibs, "\n")
     cat("OOB error (normalised IBS):", forest_list$ibs.normalised, "\n")
   }

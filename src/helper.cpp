@@ -402,6 +402,21 @@ pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indi
 }
 
 // returns a vector of vectors, each of which contain the observation numbers belonging to the same leaf
+vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_nodes, size_t num_terminal_nodes) {
+    vector<vector<size_t>> result(num_nodes);
+    for (size_t i = 0; i < leaf_ids.size(); ++i) {
+        // if leaf_ids[i] = 0, it means that observation i is OOB for the tree, unless the tree only has a root node
+        if (leaf_ids[i] != 0) {
+            result[leaf_ids[i] - 1].push_back(i);
+        } else if (num_terminal_nodes == 1) {
+            result[0].push_back(i);
+        }
+    }
+    return result;
+}
+
+// old version (not working)
+/*
 vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_nodes) {
     vector<vector<size_t>> result(num_nodes);
     vector<size_t> counts(num_nodes, 0);
@@ -421,6 +436,7 @@ vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_no
     }
     return result;
 }
+*/
 
 // for selecting specific columns from a NumericMatrix (used to filter)
 NumericMatrix selectColumns(const NumericMatrix& matrix, const vector<size_t>& cols) {

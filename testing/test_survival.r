@@ -118,7 +118,7 @@ length(veteran_tree$unique.event.times)
 head(veteran)
 test_data_functions(veteran, c(3, 4), c(2, 1, 8, 6, 5, 7))
 
-veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = FALSE, save_predictions = TRUE)
+veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = FALSE, save_predictions = FALSE)
 (veteran_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = veteran, seed = 2025, samptype = "swr"))
 (veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation"))
 
@@ -141,12 +141,12 @@ head(veteran_forest$oob.predictions)
 head(veteran_forest_SRC$chf.oob)
 #head(veteran_forest_ranger$chf)
 
-jfforest.predict(veteran_forest)  # works fine when save_predictions = TRUE, but gets segfault otherwise
+jfforest.predict(veteran_forest)
 jfforest.predict(veteran_forest, new_data = veteran)
 jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$predictions
 jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$censoring
 
-jfforest.error(veteran_forest)
+jfforest.error(veteran_forest)  # need to compute errors from scratch if save_predictions == FALSE
 jfforest.error(veteran_forest, new_data = veteran)
 
 # observation: on new data, the IBS is very comparable to a single tree (but here we also use the training data)

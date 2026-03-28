@@ -720,8 +720,10 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
     } else {
       result["predictions"] = R_NilValue;
       result["oob.predictions"] = R_NilValue;
-      result["init"] = R_NilValue;
-      result["oob.init"] = R_NilValue;
+      result["censoring.oob"] = R_NilValue;
+      result["C.error"] = R_NilValue;
+      result["ibs"] = R_NilValue;
+      result["ibs.normalised"] = R_NilValue;
     }
 
     result["avg.num.nodes"] = forest->getAvgNumberOfNodes();
@@ -838,15 +840,16 @@ void JFCppForestPredict(List& JFForest) {
     // compute predictions via multi-threading
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
     const pair<vector<double>, vector<double>>& predictions_cpp = forest->computePredictions(); // computes in-bag and out-of-bag predictions
-    cout << "Done computing predictions (in-bag and out-of-bag)" << endl;
+    //cout << "Done computing predictions (in-bag and out-of-bag)" << endl;
 
     // if censoring predictions are not saved during fitting, we need to compute these in each node across all trees
     if (!forest->predictionsSaved()) {
+      cout << "Predictions are not saved, populating leaves with censoring KM estimators" << endl;
       forest->computePredictionsCensoring();
     }
-    cout << "Done populating leaves with KM estimators" << endl;
+    //cout << "Done populating leaves with KM estimators" << endl;
     const vector<double>& censoring_cpp = forest->computePredictionsCensoringOOB(); // now able to fetch the predicted censoring KM estimators
-    cout << "Done computing predicted censoring KM estimators" << endl;
+    //cout << "Done computing predicted censoring KM estimators" << endl;
     size_t num_unique_event_times = forest->getNumUniqueEventTimes();
     size_t num_obs = JFForest["num.obs"];
     
@@ -1129,6 +1132,41 @@ void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const
   pair<double, double> ibs = computeIBS(brier, unique_event_times);
   JFForest["ibs"] = ibs.first;
   JFForest["ibs.normalised"] = ibs.second;
+}
+
+// for computing OOB errors for a survival forest when errors are not already saved, but predictions are computed
+
+// [[Rcpp::export]]
+List JFCppForestErrorSurvivalExternal(List& JFForest) {
+  SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
+  const vector<double>& times = forest->getData()->get_y_col(0);
+  const vector<double>& ind = forest->getData()->get_y_col(1);
+  const vector<double>& unique_event_times = forest->getEventTimes();
+  const vector<size_t>& response_event_time_ids = forest->getResponseEventTimeIDs();
+
+  // first compute Harrell's C-index
+  const vector<double>& outcomes = computeOutcomes(JFForest["oob.predictions"]);
+  JFForest["outcomes.oob"] = outcomes;
+
+  // now compute Brier score
+  vector<double> IPCW_weights = computeIPCW(times, ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"]);
+  //const NumericMatrix& km_pred = KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"]));
+  //cout << "OOB IPCW weights:" << endl;
+  //printVector(IPCW_weights);
+  vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"])));
+  //cout << "OOB Brier scores:" << endl;
+  //printVector(brier);
+  pair<double, double> ibs = computeIBS(brier, unique_event_times);
+  
+  // create and return list of errors
+  double c_error = 1 - computeConcordanceIndex(outcomes, times, ind);
+  List result = List::create(
+    Named("C.error") = c_error,
+    Named("IBS") = ibs.first,
+    Named("IBS.normalised") = ibs.second
+  );
+
+  return result;
 }
 
 // Multi-state

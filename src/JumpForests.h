@@ -60,6 +60,7 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
 void JFCppForestErrorRegression(List& JFForest, const vector<double>& response);
 List JFCppForestErrorRegression(const vector<double>& predictions, const vector<double>& response);
 void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids);
+List JFCppForestErrorSurvivalExternal(List& JFForest);
 List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique, NumericVector response_indices);
 
