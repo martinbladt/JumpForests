@@ -184,6 +184,25 @@ void sum_vectors(vector<double>& result, const vector<double>& add) {
     }
 }
 
+// adds the vector add to the vector result and modifies it (result must be at least as large as add)
+void sum_vectors(vector<size_t>& result, const vector<size_t>& add) {
+    for (size_t i = 0; i < add.size(); ++i) {
+        result[i] += add[i];
+    }
+}
+
+// takes a flattened vector with num_vectors vectors (vec) of the same length and adds these
+vector<size_t> sum_vectors(const vector<size_t>& vec, size_t num_vectors) {
+    size_t stride_length = vec.size() / num_vectors;    // vec.size() = num_vectors * stride_length
+    vector<size_t> result(stride_length);
+    for (size_t i = 0; i < num_vectors; ++i) {
+        for (size_t j = 0; j < stride_length; ++j) {
+            result[j] += vec[i * stride_length + j];
+        }
+    }
+    return result;
+}
+
 // computes the vector of column sums of a flattened d x d matrix (by row)
 vector<int> columnSums(const vector<int>& matrix, size_t d) {
     vector<int> result(d);

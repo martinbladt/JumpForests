@@ -6,7 +6,7 @@
 
 class MultistateForest : public Forest {
 public:
-  MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, uint8_t num_states);
+  MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, uint8_t num_states, bool save_predictions);
 
   // grows a multi-state forest with multi-threading
   void grow();
@@ -30,6 +30,9 @@ public:
   const vector<vector<double>> getInitDist() const {
     return init_dist;
   }
+  bool predictionsSaved() {
+    return save_predictions;
+  }
   // for computing predictions after the forest is grown
   // first vector is a flattened 2D array with in-bag predictions, the other with oob predictions
   pair<vector<double>, vector<double>> computePredictions();
@@ -41,6 +44,7 @@ public:
   vector<double> computePredictedInitialDistributions(const Data& new_data);
 private:
   // quantities of interest specific to multi-state forests
+  bool save_predictions;
   const vector<double> unique_event_times;      // vector of ordered unique event times for all observations across all jumps
   const vector<size_t> response_event_time_ids; // the indices of unique_event_times corresponding to the response times
   size_t num_unique_event_times;                // number of unique event times

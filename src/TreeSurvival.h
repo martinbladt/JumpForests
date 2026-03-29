@@ -58,14 +58,14 @@ public:
 
 private:
   // quantities of interest to survival trees
-  //const vector<double> unique_event_times;  // vector of ordered unique event times for all data
+  //const vector<double> unique_event_times;      // vector of ordered unique event times for all data
   shared_ptr<vector<double>> unique_event_times;
-  size_t num_unique_event_times;            // number of unique event times
-  //vector<size_t> response_event_time_ids;   // the indices of unique_event_times corresponding to the response times
+  size_t num_unique_event_times;                  // number of unique event times
+  //vector<size_t> response_event_time_ids;       // the indices of unique_event_times corresponding to the response times
   shared_ptr<vector<size_t>> response_event_time_ids;
   //const vector<size_t> true_event_time_ids;     // the indices of unique_event_times for uncensored times
   shared_ptr<vector<size_t>> true_event_time_ids;
-  bool save_predictions;
+  bool save_predictions;                    // should predictions (including KM estimators for censoring) be saved
   vector<vector<double>> chf;               // the cumulative hazard at the unique_event_times
   vector<vector<double>> KM_censoring;      // the Kaplan-Meier estimate at the unique_event_times for the censoring distribution
   //const vector<size_t> subset_indices;    // indices for the data (bootstrap) (unnecessary!)

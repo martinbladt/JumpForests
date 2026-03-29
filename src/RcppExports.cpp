@@ -88,8 +88,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // JFCppTreePredictMM
-List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial);
-RcppExport SEXP _JumpForests_JFCppTreePredictMM(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP) {
+List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial, bool compute_censoring);
+RcppExport SEXP _JumpForests_JFCppTreePredictMM(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP, SEXP compute_censoringSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -99,7 +99,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
     Rcpp::traits::input_parameter< bool >::type compute_initial(compute_initialSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppTreePredictMM(JFTree, df, feature_indices, categorical, unique, compute_initial));
+    Rcpp::traits::input_parameter< bool >::type compute_censoring(compute_censoringSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppTreePredictMM(JFTree, df, feature_indices, categorical, unique, compute_initial, compute_censoring));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -455,7 +456,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppTreeMM", (DL_FUNC) &_JumpForests_JFCppTreeMM, 14},
     {"_JumpForests_JFCppTreePredict", (DL_FUNC) &_JumpForests_JFCppTreePredict, 5},
     {"_JumpForests_JFCppTreePredictCensoring", (DL_FUNC) &_JumpForests_JFCppTreePredictCensoring, 5},
-    {"_JumpForests_JFCppTreePredictMM", (DL_FUNC) &_JumpForests_JFCppTreePredictMM, 6},
+    {"_JumpForests_JFCppTreePredictMM", (DL_FUNC) &_JumpForests_JFCppTreePredictMM, 7},
     {"_JumpForests_JFCppTreeError", (DL_FUNC) &_JumpForests_JFCppTreeError, 6},
     {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 18},
     {"_JumpForests_JFCppForestMM", (DL_FUNC) &_JumpForests_JFCppForestMM, 19},

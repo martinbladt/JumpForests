@@ -53,8 +53,8 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
                                  LogicalVector categorical, NumericVector unique);
 List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique);
-List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices,
-                          LogicalVector categorical, NumericVector unique);
+List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical,
+                        NumericVector unique, bool compute_initial, bool compute_censoring);
 
 // error computation with forests
 void JFCppForestErrorRegression(List& JFForest, const vector<double>& response);

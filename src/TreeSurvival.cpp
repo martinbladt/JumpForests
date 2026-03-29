@@ -460,7 +460,6 @@ bool SurvivalTree::createSplit(size_t node_index) {
         holdout_node_obs.push_back(holdout_left_indices);
         holdout_node_obs.push_back(holdout_right_indices);
     }
-
     return false;
 }
 
@@ -483,7 +482,7 @@ void SurvivalTree::computeChf(size_t node_index) {
 
 // computes the Kaplan-Meier estimator for the censoring distribution in node node_index
 void SurvivalTree::computeCensoringKM() {
-    vector<double>KM_censoring = vector<double>(num_unique_event_times, 1);
+    vector<double>KM_censoring(num_unique_event_times, 1);
     
     // now compute the Kaplan-Meier estimator
     double num_censored;

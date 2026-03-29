@@ -17,8 +17,8 @@ JFCppTreePredictCensoring <- function(JFTree, df, feature_indices, categorical, 
     .Call(`_JumpForests_JFCppTreePredictCensoring`, JFTree, df, feature_indices, categorical, unique)
 }
 
-JFCppTreePredictMM <- function(JFTree, df, feature_indices, categorical, unique, compute_initial) {
-    .Call(`_JumpForests_JFCppTreePredictMM`, JFTree, df, feature_indices, categorical, unique, compute_initial)
+JFCppTreePredictMM <- function(JFTree, df, feature_indices, categorical, unique, compute_initial, compute_censoring) {
+    .Call(`_JumpForests_JFCppTreePredictMM`, JFTree, df, feature_indices, categorical, unique, compute_initial, compute_censoring)
 }
 
 JFCppTreeError <- function(JFTree, df, feature_indices, categorical, unique, response_indices) {

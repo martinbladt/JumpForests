@@ -78,9 +78,14 @@ struct Data {
   vector<uint8_t> getStates() const {
     return states;
   }
+  /*
   vector<double> getCensoringTimes() const {
     return censoring_times;
   }
+  */
+ vector<double> getLastObservedTimes() const {
+  return last_observed_times;
+ }
   vector<uint8_t> getCensoringStates() const {
     return censoring_states;
   }
@@ -127,12 +132,13 @@ struct Data {
 
 private:
   // data
-  vector<double> x;                 // the features are saved as a flattened 2D-array (counted by observation number)
-  vector<double> y;                 // ditto for responses (regression, classification and survival)
-  vector<double> times;             // save jump times for each trajectory as flattened 2D-array (only for multi-state data)
-  vector<uint8_t> states;           // save state info for each trajectory as flattened 2D-array (only for multi-state data)
-  vector<double> censoring_times;   // save the censoring times (0: no censoring, only for multi-state data)
-  vector<uint8_t> censoring_states; // save the state of the censoring time (0: no censoring, only for multi-state data)
+  vector<double> x;                   // the features are saved as a flattened 2D-array (counted by observation number)
+  vector<double> y;                   // ditto for responses (regression, classification and survival)
+  vector<double> times;               // jump times for each trajectory as flattened 2D-array (only for multi-state data)
+  vector<uint8_t> states;             // state info for each trajectory as flattened 2D-array (only for multi-state data)
+  //vector<double> censoring_times;   // the censoring times (0: no censoring, only for multi-state data)
+  vector<double> last_observed_times; // the last observed time for each observation
+  vector<uint8_t> censoring_states;   // the state of the censoring time (0: no censoring, only for multi-state data)
 
   // data attributes
   size_t num_obs;                               // number of observations

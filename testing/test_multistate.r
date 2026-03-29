@@ -77,18 +77,19 @@ test_data <- data.frame(X1 = X, X2 = Y)
 fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 100, honest = TRUE)
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
 
-jftree.predict(fitted_tree)
+jftree.predict(fitted_tree)[[1]][1]
 new_data <- data.frame(X2 = runif(5), X1 = rnorm(5))
-jftree.predict(fitted_tree, new_data, compute_initial = TRUE)
+jftree.predict(fitted_tree, new_data, compute_initial = TRUE)   # fix this!
 occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]])
 
-# fit the forest (takes a couple of minutes)
-fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 1000, min_node_size = 100, splitrule = "logrank", save_predictions = FALSE, honest = TRUE)
+# fit the forest (takes a couple of minutes when also saving predictions)
+fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 100, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)
 print_forest(fitted_forest)
 
-jfforest.predict(fitted_forest)
-jfforest.predict(fitted_forest, new_data, compute_initial = TRUE)
+jfforest.predict(fitted_forest)[[1]][1]
 occupation_prob(init = fitted_forest$init[[1]], na = fitted_forest$predictions[[1]])
+predictions_new_data <- jfforest.predict(fitted_forest, new_data, compute_initial = TRUE)
+occupation_prob(init = predictions_new_data$initial[[1]], na = predictions_new_data$predictions[[1]])
 #new_data <- data.frame(X2 = runif(1), X1 = rnorm(1))
 #new_data <- test_data[1,]
 

@@ -129,10 +129,11 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
     this->feature_indices = feature_indices;
     
     // fill the response vectors if response variables are supplied
-    if (jump_data.isNULL() || jump_data.size() != 0) {
+    if (!jump_data.isNULL() || jump_data.size() != 0) {
         times.assign(num_obs * max_response_length, 0);
         states.assign(num_obs * max_response_length, 0);
-        censoring_times.assign(num_obs, 0);
+        last_observed_times.assign(num_obs, 0);
+        //censoring_times.assign(num_obs, 0);
         censoring_states.assign(num_obs, 0);
         for (size_t i = 0; i < num_obs; ++i) {
             List obs = as<List>(jump_data[i]);
@@ -143,13 +144,24 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
                 times[i * max_response_length + j] = obs_times[j];
                 states[i * max_response_length + j] = obs_states[j];
             }
+
+            // save last observed times and the state at the censoring time separately (eases calculations)
+            if (response_length >= 2) {
+                last_observed_times[i] = obs_times[response_length - 1];
+                if (static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]) == static_cast<uint8_t>(INTEGER(obs[1])[response_length - 2])) {
+                    censoring_states[i] = static_cast<uint8_t>(obs_states[response_length - 1]); // static_cast<uint8_t>(obs_states[response_length - 1]);
+                }
+            }
+
             // save censoring times and the corresponding state separately (eases calculations)
+            /*
             if (response_length >= 2) {
                 if (static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]) == static_cast<uint8_t>(INTEGER(obs[1])[response_length - 2])) {
                     censoring_times[i] = obs_times[response_length - 1];
                     censoring_states[i] = static_cast<uint8_t>(obs_states[response_length - 1]); // static_cast<uint8_t>(obs_states[response_length - 1]);
                 }
             }
+            */
         }
         // we should not need response names for multi-states
     }

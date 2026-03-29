@@ -2,8 +2,8 @@
 
 // constructor for multi-state forests
 //--------------------------------------------------------------------------------------
-MultistateForest::MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, uint8_t num_states) : 
-    unique_event_times {unique_event_times}, response_event_time_ids {response_event_time_ids} {
+MultistateForest::MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, uint8_t num_states, bool save_predictions) : 
+    unique_event_times {unique_event_times}, response_event_time_ids {response_event_time_ids}, save_predictions {save_predictions} {
         this->num_unique_event_times = unique_event_times.size();
 }
 
@@ -60,7 +60,7 @@ void MultistateForest::grow() {
             size_t subsample_size = floor(sample_rate * n);
             bootstrap_indices = sampleIndices(global_indices, subsample_size, swr, local_rng);
             oob_indices[i] = computeOOBIndices(bootstrap_indices, n);
-            tree = make_unique<MultistateTree>(unique_event_times, response_event_time_ids, bootstrap_indices, num_states);
+            tree = make_unique<MultistateTree>(unique_event_times, response_event_time_ids, bootstrap_indices, num_states, save_predictions);
         } 
         // for honest trees, we differ between double and single bootstrap
         else {
@@ -71,7 +71,7 @@ void MultistateForest::grow() {
                 size_t holdout_size = floor(sample_rate * partition.second.size());
                 vector<size_t> grow = sampleIndices(partition.first, grow_size, swr, local_rng);
                 vector<size_t> holdout = sampleIndices(partition.second, holdout_size, swr, local_rng);
-                tree = make_unique<MultistateTree>(unique_event_times, response_event_time_ids, grow, num_states, holdout);
+                tree = make_unique<MultistateTree>(unique_event_times, response_event_time_ids, grow, num_states, save_predictions, holdout);
                 oob_indices[i] = computeOOBIndicesDouble(grow, holdout, n);
 
             } else {
@@ -79,7 +79,7 @@ void MultistateForest::grow() {
                 size_t subsample_size = floor(sample_rate * n);
                 auto global_bootstrap_indices = sampleIndices(global_indices, subsample_size, swr, local_rng);
                 pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(global_bootstrap_indices, local_rng);
-                tree = make_unique<MultistateTree>(unique_event_times, response_event_time_ids, partition.first, num_states, partition.second);
+                tree = make_unique<MultistateTree>(unique_event_times, response_event_time_ids, partition.first, num_states, save_predictions, partition.second);
                 oob_indices[i] = computeOOBIndices(bootstrap_indices, n);
             }
         }

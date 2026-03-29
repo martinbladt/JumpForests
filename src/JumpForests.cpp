@@ -209,11 +209,11 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   MultistateTree* tree;
   if (!honest) {
-    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp, num_states); // this creates a memory error, I think
+    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp, num_states, true);
   } else {
     mt19937 rng(seed + 1);
     pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
-    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, partition.first, num_states, partition.second);
+    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, partition.first, num_states, true, partition.second);
     tree->setRNG(rng);
   }
 
@@ -439,12 +439,12 @@ List JFCppTreePredictCensoring(const List& JFTree, DataFrame df, NumericVector f
 
 // function to predict on a new dataset for multi-states
 // if compute_initial = false (default), simply return a list of the predictions on the new data df
-// if compute_initial = true, return a list of two lists, one containing predictions on the new data
-// and the other containing predicted initial distributions
+// if compute_initial = true, add a list containing predicted initial distributions
+// if compute_censoring = true, add a list containing the predicted censoring distributions (KM estimator)
 
 // [[Rcpp::export]]
-List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, 
-                                 LogicalVector categorical, NumericVector unique, bool compute_initial) {
+List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical,
+                        NumericVector unique, bool compute_initial, bool compute_censoring) {
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp;  // need an empty vector for the response indices
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -459,8 +459,25 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
   size_t num_states = tree->getData()->getNumberOfStates();
   size_t num_unique_event_times = tree->getNumberOfUniqueEventTimes();
   size_t num_obs = new_data.getNumberOfObs();
-  List predictions(num_obs);      // each prediction is a list of matrices
-  List predictions_init(num_obs); // each predicted initial distribution is a vector
+  List predictions(num_obs);                        // each prediction is a list of matrices
+  List predictions_init(num_obs);                   // each predicted initial distribution is a vector
+  NumericMatrix(num_obs, num_unique_event_times);   // the censoring KM estimators are saved (if compute_censoring = TRUE) as a matrix like for survival
+  
+  // compute the predictions in C++
+  vector<double> predictions_cpp;
+  vector<double> censoring_cpp;
+  if (compute_censoring) {
+
+  } else {
+    predictions_cpp = tree->computePredictions(new_data);
+  }
+
+  /*
+  Plan:
+  - Change this function to do computations in C++ instead
+  - Add the remaining functions for prediction with and without censoring for multi-states
+  - Add error functions for multi-states (test with and without predictions saved during fitting like for survival)
+  */
 
   for (size_t i = 0; i < num_obs; ++i) {
       List rpred(num_unique_event_times);
@@ -780,7 +797,7 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
   }
 
   // create and grow the multi-state forest
-  MultistateForest* forest = new MultistateForest(unique_event_times, response_event_time_ids, data->getNumberOfStates());
+  MultistateForest* forest = new MultistateForest(unique_event_times, response_event_time_ids, data->getNumberOfStates(), save_predictions);
   forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, seed, nworkers);
   forest->grow();
 
@@ -1551,8 +1568,10 @@ void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_
   printVector(data.getTimes());
   Rcout << "States: ";
   printVector(data.getStates());
-  Rcout << "Censoring times: ";
-  printVector(data.getCensoringTimes());
+  Rcout << "Last observed times: ";
+  printVector(data.getLastObservedTimes());
+  //Rcout << "Censoring times: ";
+  //printVector(data.getCensoringTimes());
   Rcout << "Censoring states: ";
   printVector(data.getCensoringStates());
   Rcout << "Valid jumps: ";

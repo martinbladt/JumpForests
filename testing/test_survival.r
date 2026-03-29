@@ -118,7 +118,7 @@ length(veteran_tree$unique.event.times)
 head(veteran)
 test_data_functions(veteran, c(3, 4), c(2, 1, 8, 6, 5, 7))
 
-veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = FALSE, save_predictions = FALSE)
+veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = TRUE, swr = FALSE, save_predictions = FALSE)
 (veteran_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = veteran, seed = 2025, samptype = "swr"))
 (veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation"))
 
@@ -146,8 +146,8 @@ jfforest.predict(veteran_forest, new_data = veteran)
 jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$predictions
 jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$censoring
 
-jfforest.error(veteran_forest)  # need to compute errors from scratch if save_predictions == FALSE
-jfforest.error(veteran_forest, new_data = veteran)
+jfforest.error(veteran_forest)  # need to compute errors from scratch if save_predictions == FALSE, note that the OOB errors are NOT saved in the forest
+jfforest.error(veteran_forest, new_data = veteran)  # since veteran is the training data, this just yields the training error, at least when honest = FALSE
 
 # observation: on new data, the IBS is very comparable to a single tree (but here we also use the training data)
 # some numerical instability when computing the OOB Brier score error

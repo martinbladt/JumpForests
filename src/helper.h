@@ -46,6 +46,8 @@ vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, boo
 double vector_sum(const vector<double>& vec);
 size_t vector_sum(const vector<size_t>& vec);
 void sum_vectors(vector<double>& result, const vector<double>& add);
+void sum_vectors(vector<size_t>& result, const vector<size_t>& add);
+vector<size_t> sum_vectors(const vector<size_t>& vec, size_t num_vectors);
 
 // flattened matrix operations
 vector<int> columnSums(const vector<int>& matrix, size_t d);
