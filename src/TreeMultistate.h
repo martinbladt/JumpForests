@@ -50,7 +50,7 @@ private:
   shared_ptr<vector<double>> unique_event_times;        // vector of ordered unique event times across (pooled across all jumps)
   size_t num_unique_event_times;                        // number of unique event times
   shared_ptr<vector<size_t>> response_event_time_ids;   // the indices of unique_event_times corresponding to the response times (flattened array)
-  bool save_predictions;                                // should predictions (including KM estimators for censoring) be saved
+  bool save_predictions;                                // should predictions (including KM estimators for censoring) be saved during fitting?
   vector<vector<double>> na;                            // the Nelson--Aalen estimator in each terminal node with jumps at the unique_event_times,
                                                         // each vector being a flattened array of length num_states^2
   vector<vector<double>> KM_censoring;                  // the Kaplan-Meier estimate at the unique_event_times for the censoring distribution 

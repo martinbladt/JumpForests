@@ -675,7 +675,6 @@ double SurvivalTree::approxLogRank(const vector<size_t>& num_deaths, const vecto
 vector<double> SurvivalTree::computePredictions(const Data& new_data) {
     size_t num_obs = new_data.getNumberOfObs();
     vector<double> predictions(num_obs * num_unique_event_times);
-
     for (size_t i = 0; i < num_obs; ++i) {
         const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));
         for (size_t j = 0; j < num_unique_event_times; ++j) {

@@ -65,7 +65,7 @@ private:
   shared_ptr<vector<size_t>> response_event_time_ids;
   //const vector<size_t> true_event_time_ids;     // the indices of unique_event_times for uncensored times
   shared_ptr<vector<size_t>> true_event_time_ids;
-  bool save_predictions;                    // should predictions (including KM estimators for censoring) be saved
+  bool save_predictions;                    // should predictions (including KM estimators for censoring) be saved during fitting?
   vector<vector<double>> chf;               // the cumulative hazard at the unique_event_times
   vector<vector<double>> KM_censoring;      // the Kaplan-Meier estimate at the unique_event_times for the censoring distribution
   //const vector<size_t> subset_indices;    // indices for the data (bootstrap) (unnecessary!)

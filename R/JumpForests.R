@@ -147,7 +147,6 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     max_response_length <- max(sapply(data, function(e) length(e$states)))
     num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
 
-    cat("About to call JFCppTreeMM from R", "\n")
     # data here is jump data, a list of lists, each containing a vector 'times' and a vector 'states'
     JFCppTreeMM(data, max_response_length, num_states, processed_data$data,
                 mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
@@ -200,7 +199,6 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
                             processed_data$categorical, processed_data$unique_values))
       }
     } else {
-      cat("Calling JFCppTreePredictMM")
       return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices, processed_data$categorical,
              processed_data$unique_values, compute_initial, compute_censoring))
     }

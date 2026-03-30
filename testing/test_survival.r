@@ -94,6 +94,7 @@ veteran$prior <- as.factor(veteran$prior)
 veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2025, min_node_size = 10, honest = TRUE)
 print_tree(veteran_tree)
 jftree.predict(veteran_tree)
+jftree.predict(veteran_tree, new_data = data.frame(trt = 4, celltype = 1, karno = 38.288782842, diagtime = 8, age = 88, prior = 0))
 jftree.predict(veteran_tree, new_data = veteran)
 jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)$predictions
 jftree.predict(veteran_tree, new_data = veteran, compute_censoring = TRUE)$censoring

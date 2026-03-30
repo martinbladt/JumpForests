@@ -201,10 +201,10 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   printVector(*response_event_time_ids_ptr);
   */
 
-  // check validity of splitrule argument (just logrank for now)
+  // check validity of splitrule argument
   vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank"};
   if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-    throw runtime_error("Invalid splitrule, please choose between logrank, gehan or taroneware");
+    throw runtime_error("Invalid splitrule, please choose between logrank, gehan, taroneware or approxlogrank");
   }
 
   MultistateTree* tree;
@@ -219,7 +219,6 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
   tree->grow();
-  Rcout << "Finished growing multi-state tree" << endl;
 
   // specific to multi-states
   NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
@@ -312,12 +311,18 @@ void JFCppTreePredict(List& JFTree) {
     size_t num_unique_event_times = tree->getNumberOfUniqueEventTimes();
     const vector<size_t>& leaf_ids = tree->getPredictionNodeIDs();
     const vector<vector<double>>& na = tree->getNA();
+    cout << "Checking NA estimators right after fitting (JFCppTreePredict):" << endl;
+    for (auto NA : na) {
+      if (!NA.empty()) {
+        printVector(NA);
+      }
+    }
     const vector<vector<double>>& init = tree->getInitDist();
     const vector<vector<double>>& cens = tree->getKMCensoring();
 
-    List predictions(num_obs);        // each prediction is a list of matrices
-    List predictions_init(num_obs);   // each predicted initial distribution is a vector
-    NumericMatrix censoring(num_obs, num_unique_event_times);
+    List predictions(num_obs);                                  // each prediction is a list of matrices
+    List predictions_init(num_obs);                             // each predicted initial distribution is a vector
+    NumericMatrix censoring(num_obs, num_unique_event_times);   // a matrix with the KM estimator for observation i along the i'th row
 
     // we saved the corresponding terminal node ID for every observation
     for (size_t i = 0; i < num_obs; ++i) {
@@ -474,17 +479,28 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
   List predictions_init(num_obs);                             // each predicted initial distribution is a vector
   NumericMatrix censoring(num_obs, num_unique_event_times);   // the censoring KM estimators are saved (if compute_censoring = TRUE) as a matrix like for survival
   
+  // for debugging purposes
+  /*
+  vector<vector<double>> na = tree->getNA();                  // for very odd reasons, the NA are somehow destroyed... (this does not occur for any other tree type)
+  cout << "Checking NA estimators before predicting on new data (JFCppTreePredictMM):" << endl;
+  for (auto NA : na) {
+    if (!NA.empty()) {
+      printVector(NA);
+    }
+  }
+  */
+
   // compute the predictions in C++
-  vector<double> predictions_cpp;
+  vector<double> predictions_cpp = tree->computePredictions(new_data);
   vector<double> predictions_init_cpp;
   vector<double> censoring_cpp;
 
   // compute predictions depending on the specified options (w/wo initial distributions and or censoring)
   if (compute_initial && compute_censoring) {
     vector<vector<double>> all_predictions_cpp = tree->computeAllPredictions(new_data);   // ordering: NA, initial distributions and censoring predictions
-    predictions_cpp = std::move(all_predictions_cpp[0]);
-    predictions_init_cpp = std::move(all_predictions_cpp[1]);
-    censoring_cpp = std::move(all_predictions_cpp[2]);
+    predictions_cpp = all_predictions_cpp[0];
+    predictions_init_cpp = all_predictions_cpp[1];
+    censoring_cpp = all_predictions_cpp[2];
   } else if (compute_initial) {
     pair<vector<double>, vector<double>> combined_predictions = tree->computePredictedInitialDistributions(new_data);
     predictions_cpp = std::move(combined_predictions.first);
@@ -495,9 +511,13 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
     censoring_cpp = std::move(combined_predictions.second);
   } else {
     cout << "Computing predictions (no init nor censoring)" << endl;
-    predictions_cpp = tree->computePredictions(new_data);
+    //predictions_cpp = tree->computePredictions(new_data);
   }
-  cout << "predictions_cpp.size() = " << predictions_cpp.size() << endl;
+  cout << "predictions_cpp:" << endl;
+  printVector(predictions_cpp);
+
+  //cout << "predictions_init_cpp:" << endl;
+  //printVector(predictions_init_cpp);
 
   /*
   Plan:
@@ -509,10 +529,10 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
   for (size_t i = 0; i < num_obs; ++i) {
     // save Nelson-Aalen estimator
     List rpred(num_unique_event_times);
-    vector<double> pred = get<vector<double>>(tree->predict(new_data.get_x_row(i)));
+    //const vector<double>& pred = get<vector<double>>(tree->predict(new_data.get_x_row(i)));
     for (size_t j = 0; j < num_unique_event_times; ++j) {
-      //auto start_it = predictions_cpp.begin() + ((i * num_unique_event_times + j) * num_states * num_states);
-      auto start_it = pred.begin() + (j * num_states * num_states);
+      auto start_it = predictions_cpp.begin() + ((i * num_unique_event_times + j) * num_states * num_states);
+      //auto start_it = pred.begin() + (j * num_states * num_states);
       NumericMatrix pred_time(num_states, num_states, start_it);
       rpred[j] = transpose(pred_time);
     }
