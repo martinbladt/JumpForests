@@ -125,6 +125,15 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     Rcout << "Censoring contribution:" << endl;
     printVector(censoring_contribution, num_states);
     */
+
+    // for debugging purposes
+    size_t total_number_at_risk = 0;
+    for (size_t j = 0; j < data->getNumberOfStates(); ++j) {
+        total_number_at_risk += num_at_risk[j];
+    }
+    cout << "Total initial number at risk in computeMultistateQuantities: " << total_number_at_risk << endl;
+    cout << "Total initial number of observations in computeMultistateQuantities: " << indices.size() << endl;
+    // these two always concur here as they should
 }
 
 // version of feb10 (makes pre-sweep and checks for invalid splits before computing quantities)
@@ -534,6 +543,7 @@ void MultistateTree::makeLeaf(size_t node_index) {
     // compute the matrices of Nelson--Aalen estimators and the vector of predicted initial distributions
     computeNA(node_index);
     computeInitialDist(node_index);
+    printVector(init_dist[node_index]);
 
     if (save_predictions) {
         computeCensoringKM();
@@ -567,12 +577,29 @@ bool MultistateTree::createSplit(size_t node_index) {
         } else {
             computeMultistateQuantities(holdout_node_obs[node_index], num_jumps, num_at_risk);   // for honest trees, use the holdout set for computing the CHF
         }
+
+        // for debugging purposes
+        size_t total_number_at_risk = 0;
+        for (size_t j = 0; j < data->getNumberOfStates(); ++j) {
+            total_number_at_risk += num_at_risk[j];
+        }
+        cout << "Total initial number at risk in createSplit (making leaf): " << total_number_at_risk << endl;
+        cout << "Total initial number of observations in createSplit (making leaf): " << current_node_obs.size() << endl;
+
         makeLeaf(node_index);
         return true;
     }
 
     //Rcout << "Computing multi-state quantities in node (not leaf)" << endl;
     computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);   // update parent multi-state info
+
+    // for debugging purposes
+    size_t total_number_at_risk = 0;
+    for (size_t j = 0; j < data->getNumberOfStates(); ++j) {
+        total_number_at_risk += num_at_risk[j];
+    }
+    cout << "Total initial number at risk in createSplit: " << total_number_at_risk << endl;
+    cout << "Total initial number of observations in createSplit: " << current_node_obs.size() << endl;
 
     double best_split_val = -1.0;
     size_t best_feature = 0;
@@ -664,6 +691,9 @@ bool MultistateTree::createSplit(size_t node_index) {
     thresholds.push_back(best_threshold);
     na.push_back(vector<double>());
     init_dist.push_back(vector<double>());
+    if (save_predictions) {
+        KM_censoring.push_back(vector<double>());
+    }
 
     // for honest trees, update the holdout indices
     if (honest) {
@@ -679,9 +709,12 @@ void MultistateTree::computeInitialDist(size_t node_index) {
     uint8_t num_states = data->getNumberOfStates();
     vector<double> init_dist(num_states, 0);
     double num_obs = node_obs[node_index].size();
+    size_t total_num_at_risk = 0;
     for (size_t j = 0; j < num_states; ++j) {
         init_dist[j] = (double) num_at_risk[j] / num_obs;
+        total_num_at_risk += num_at_risk[j];
     }
+    cout << "Total number at risk: " << total_num_at_risk << ", total obs in node: " << num_obs << endl;
     this->init_dist.push_back(std::move(init_dist));
 }
 
@@ -748,8 +781,16 @@ void MultistateTree::computeCensoringKM() {
     //const vector<size_t>& response_event_time_ids = this->response_event_time_ids.get();
     
     // compute total censoring and at risk contributions across states (integrator and 1/integrand of the NA estimator for censoring, respectively)
-    vector<size_t> censoring_contribution_total = sum_vectors(censoring_contribution, num_states);
-    vector<size_t> num_at_risk_total = sum_vectors(num_at_risk, num_states);
+    vector<size_t> censoring_contribution_total = sum_vectors(censoring_contribution, num_unique_event_times);
+    vector<size_t> num_at_risk_total = sum_vectors(num_at_risk, num_unique_event_times);
+    
+    // possibly relevant for future debugging
+    /*
+    cout << "num_at_risk_total has length " << num_at_risk_total.size() << endl;
+    printVector(num_at_risk_total);
+    cout << "censoring_contribution_total has length " << censoring_contribution_total.size() << endl;
+    printVector(censoring_contribution_total);
+    */
 
     // now compute the Kaplan-Meier estimator on the observed last event times
     double jump_size;
@@ -761,6 +802,7 @@ void MultistateTree::computeCensoringKM() {
             KM_censoring[i] = KM_censoring[i - 1];
         }
     }
+    //printVector(KM_censoring);
     this->KM_censoring.push_back(std::move(KM_censoring));
 }
 
@@ -1023,6 +1065,7 @@ double MultistateTree::approxLogRank(const vector<size_t>& num_jumps, const vect
 // compute a flattened vector of predictions (the Nelson-Aalen estimators at each event time)
 vector<double> MultistateTree::computePredictions(const Data& new_data) {
     uint8_t num_states = data->getNumberOfStates();
+    size_t dim = num_states * num_states;
     size_t num_obs = new_data.getNumberOfObs();
     vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
     for (size_t i = 0; i < num_obs; ++i) {
@@ -1030,7 +1073,8 @@ vector<double> MultistateTree::computePredictions(const Data& new_data) {
         for (size_t t = 0; t < num_unique_event_times; ++t) {
             for (size_t j = 0; j < num_states; ++j) {
                 for (size_t k = 0; k < num_states; ++k) {
-                    predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                    //predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
                 }
             }
         }
@@ -1038,23 +1082,39 @@ vector<double> MultistateTree::computePredictions(const Data& new_data) {
     return predictions;
 }
 
-// compute a flattened vector of predictions (the initial distribution at each event time)
-vector<double> MultistateTree::computePredictedInitialDistributions(const Data& new_data) {
+// compute a flattened vector of predictions and of the predicted initial distributions
+pair<vector<double>, vector<double>> MultistateTree::computePredictedInitialDistributions(const Data& new_data) {
     uint8_t num_states = data->getNumberOfStates();
+    size_t dim = num_states * num_states;
     size_t num_obs = new_data.getNumberOfObs();
-    vector<double> predictions(num_obs * num_states);
+    vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
+    vector<double> predictions_init(num_obs * num_states);
     for (size_t i = 0; i < num_obs; ++i) {
-        const vector<double>& pred = predictInitDist(new_data.get_x_row(i));
+        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
+        const vector<double>& pred = na[leaf_id];
+        const vector<double>& init = init_dist[leaf_id];
+        // first save initial distributions
         for (size_t j = 0; j < num_states; ++j) {
-            predictions[i * num_states + j] = pred[j];
+            predictions_init[i * num_states + j] = init[j];
+        }
+
+        // now save the predicted NA-estimators
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            for (size_t j = 0; j < num_states; ++j) {
+                for (size_t k = 0; k < num_states; ++k) {
+                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                    //predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                }
+            }
         }
     }
-    return predictions;
+    return {predictions, predictions_init};
 }
 
 // computes a pair of flattened vectors, the first predictions and the second the censoring KM estimators
 pair<vector<double>, vector<double>> MultistateTree::computePredictionsCensoring(const Data& new_data) {
     uint8_t num_states = data->getNumberOfStates();
+    size_t dim = num_states * num_states;
     size_t num_obs = new_data.getNumberOfObs();
     vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
     vector<double> censoring(num_obs * num_unique_event_times);
@@ -1067,7 +1127,8 @@ pair<vector<double>, vector<double>> MultistateTree::computePredictionsCensoring
             // first save the predicted Nelson-Aalen estimator
             for (size_t j = 0; j < num_states; ++j) {
                 for (size_t k = 0; k < num_states; ++k) {
-                    predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                    //predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
                 }
             }
             // now save the censoring Kaplan-Meier estimator
@@ -1075,6 +1136,39 @@ pair<vector<double>, vector<double>> MultistateTree::computePredictionsCensoring
         }
     }
     return {predictions, censoring};
+}
+
+// computes three flattened vectors of all predictions (NA estimators, initial distributions and censoring KM estimators)
+vector<vector<double>> MultistateTree::computeAllPredictions(const Data& new_data) {
+    uint8_t num_states = data->getNumberOfStates();
+    size_t dim = num_states * num_states;
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
+    vector<double> predictions_init(num_obs * num_unique_event_times * num_states);
+    vector<double> censoring(num_obs * num_unique_event_times);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
+        const vector<double>& pred = na[leaf_id];
+        const vector<double>& cens = KM_censoring[leaf_id];
+        const vector<double>& init = init_dist[leaf_id];
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            // first save predicted NA estimators
+            for (size_t j = 0; j < num_states; ++j) {
+                for (size_t k = 0; k < num_states; ++k) {
+                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                    //predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                }
+            }
+            // save censoring distribution
+            censoring[i * num_unique_event_times + t] = cens[t];
+        }
+        // save initial distribution
+        for (size_t j = 0; j < num_states; ++j) {
+            predictions_init[i * num_states + j] = pred[j];
+        }
+    }
+    return {predictions, predictions_init, censoring};
 }
 
 // error estimation for multi-state trees

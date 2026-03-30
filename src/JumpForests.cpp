@@ -313,15 +313,18 @@ void JFCppTreePredict(List& JFTree) {
     const vector<size_t>& leaf_ids = tree->getPredictionNodeIDs();
     const vector<vector<double>>& na = tree->getNA();
     const vector<vector<double>>& init = tree->getInitDist();
+    const vector<vector<double>>& cens = tree->getKMCensoring();
 
     List predictions(num_obs);        // each prediction is a list of matrices
     List predictions_init(num_obs);   // each predicted initial distribution is a vector
+    NumericMatrix censoring(num_obs, num_unique_event_times);
 
     // we saved the corresponding terminal node ID for every observation
     for (size_t i = 0; i < num_obs; ++i) {
+      size_t leaf_id = leaf_ids[i];
       List rpred(num_unique_event_times);
 
-      vector<double> pred = na[leaf_ids[i]];
+      vector<double> pred = na[leaf_id];
       for (size_t j = 0; j < num_unique_event_times; ++j) {
         auto start_it = pred.begin() + (j * num_states * num_states);
         NumericMatrix pred_time(num_states, num_states, start_it);
@@ -330,15 +333,23 @@ void JFCppTreePredict(List& JFTree) {
       // save Nelson-Aalen estimator
       predictions[i] = rpred;
 
+      // save censoring KM estimator
+      //cout << "num_unique_event_times = " << num_unique_event_times << endl;
+      vector<double> cens_pred = cens[leaf_id];
+      //printVector(cens_pred);
+      NumericVector rcens(cens_pred.begin(), cens_pred.end());
+      censoring.row(i) = rcens;
+
       // save initial distribution
       NumericVector rpred_init(num_states);
       for (size_t j = 0; j < num_states; ++j) {
-        rpred_init[j] = init[leaf_ids[i]][j];
+        rpred_init[j] = init[leaf_id][j];
       }
       predictions_init[i] = rpred_init;
     }
     JFTree["predictions"] = predictions;
     JFTree["init"] = predictions_init;
+    JFTree["censoring"] = censoring;
   }
 }
 
@@ -453,24 +464,40 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
   
   // convert the new data to a suitable Data object (no need to use the multi-state edition for the new data)
   Data new_data = Data(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
-  
+
   // fetch multi-state tree and relevant quantities
   MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
   size_t num_states = tree->getData()->getNumberOfStates();
   size_t num_unique_event_times = tree->getNumberOfUniqueEventTimes();
   size_t num_obs = new_data.getNumberOfObs();
-  List predictions(num_obs);                        // each prediction is a list of matrices
-  List predictions_init(num_obs);                   // each predicted initial distribution is a vector
-  NumericMatrix(num_obs, num_unique_event_times);   // the censoring KM estimators are saved (if compute_censoring = TRUE) as a matrix like for survival
+  List predictions(num_obs);                                  // each prediction is a list of matrices
+  List predictions_init(num_obs);                             // each predicted initial distribution is a vector
+  NumericMatrix censoring(num_obs, num_unique_event_times);   // the censoring KM estimators are saved (if compute_censoring = TRUE) as a matrix like for survival
   
   // compute the predictions in C++
   vector<double> predictions_cpp;
+  vector<double> predictions_init_cpp;
   vector<double> censoring_cpp;
-  if (compute_censoring) {
 
+  // compute predictions depending on the specified options (w/wo initial distributions and or censoring)
+  if (compute_initial && compute_censoring) {
+    vector<vector<double>> all_predictions_cpp = tree->computeAllPredictions(new_data);   // ordering: NA, initial distributions and censoring predictions
+    predictions_cpp = std::move(all_predictions_cpp[0]);
+    predictions_init_cpp = std::move(all_predictions_cpp[1]);
+    censoring_cpp = std::move(all_predictions_cpp[2]);
+  } else if (compute_initial) {
+    pair<vector<double>, vector<double>> combined_predictions = tree->computePredictedInitialDistributions(new_data);
+    predictions_cpp = std::move(combined_predictions.first);
+    predictions_init_cpp = std::move(combined_predictions.second);
+  } else if (compute_censoring) {
+    pair<vector<double>, vector<double>> combined_predictions = tree->computePredictionsCensoring(new_data);
+    predictions_cpp = std::move(combined_predictions.first);
+    censoring_cpp = std::move(combined_predictions.second);
   } else {
+    cout << "Computing predictions (no init nor censoring)" << endl;
     predictions_cpp = tree->computePredictions(new_data);
   }
+  cout << "predictions_cpp.size() = " << predictions_cpp.size() << endl;
 
   /*
   Plan:
@@ -480,34 +507,46 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
   */
 
   for (size_t i = 0; i < num_obs; ++i) {
-      List rpred(num_unique_event_times);
-      vector<double> pred = get<vector<double>>(tree->predict(new_data.get_x_row(i)));
-      for (size_t j = 0; j < num_unique_event_times; ++j) {
-        auto start_it = pred.begin() + (j * num_states * num_states);
-        NumericMatrix pred_time(num_states, num_states, start_it);
-        rpred[j] = transpose(pred_time);
-      }
-      // save Nelson-Aalen estimator
-      predictions[i] = rpred;
+    // save Nelson-Aalen estimator
+    List rpred(num_unique_event_times);
+    vector<double> pred = get<vector<double>>(tree->predict(new_data.get_x_row(i)));
+    for (size_t j = 0; j < num_unique_event_times; ++j) {
+      //auto start_it = predictions_cpp.begin() + ((i * num_unique_event_times + j) * num_states * num_states);
+      auto start_it = pred.begin() + (j * num_states * num_states);
+      NumericMatrix pred_time(num_states, num_states, start_it);
+      rpred[j] = transpose(pred_time);
+    }
+    predictions[i] = rpred;
 
-      // if compute_initial == true, compute and save initial distribution
-      if (compute_initial) {
-        vector<double> pred_init = tree->predictInitDist(new_data.get_x_row(i));
-        NumericVector rpred_init(num_states);
-        for (size_t j = 0; j < num_states; ++j) {
-          rpred_init[j] = pred_init[j];
-        }
-        predictions_init[i] = rpred_init;
-      }
-    }
+    // if compute_initial == true, save initial distribution
     if (compute_initial) {
-      List result = List::create(
-        Named("predictions") = predictions,
-        Named("initial") = predictions_init
-      );
-      return result;
+      NumericVector rpred_init(num_states);
+      //vector<double> pred_init = tree->predictInitDist(new_data.get_x_row(i));
+      for (size_t j = 0; j < num_states; ++j) {
+        rpred_init[j] = predictions_init_cpp[i * num_states + j];
+      }
+      predictions_init[i] = rpred_init;
     }
+    // if compute_censoring == true, save censoring estimators
+    if (compute_censoring) {
+      copy(censoring_cpp.begin() + i * num_unique_event_times, censoring_cpp.begin() + (i + 1) * num_unique_event_times, censoring.row(i).begin());
+    }
+  }
+
+  if (compute_initial || compute_censoring) {
+    List result = List::create(
+      Named("predictions") = predictions
+    );
+    if (compute_initial) {
+      result["predictions.init"] = predictions_init;
+    }
+    if (compute_censoring) {
+      result["censoring"] = censoring;
+    }
+    return result;
+  } else {
     return predictions;
+  }
 }
 
 // error computation for decision trees

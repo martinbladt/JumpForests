@@ -38,7 +38,7 @@ lambda <- function(t, x){
 
 set.seed(2026)
 
-n <- 1000
+n <- 200
 X <- runif(n)   # signal
 Y <- rnorm(n)   # noise
 c <- runif(n, 0, 5)
@@ -74,19 +74,36 @@ sim[1]
 # implement as an option
 
 test_data <- data.frame(X1 = X, X2 = Y)
-fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 100, honest = TRUE)
+
+# the numbers at risk at time 0 should sum to the number of observations in the node but apparently this does not happen?? fix!
+# note: this bug does not occur when we only have one split
+
+# findings so far: 
+# - the total number at risk is always consistent (thankfully), which explains why this bug was not found sooner, it is the total number
+#   of observations in a node that changes when it shouldn't
+# - it is only a problem when making a leaf, indicating that it is probably because one should the length of the HOLDOUT obs instead (try tomorrow)
+# - it is ONLY an honesty issue, explaining why it is not a problem for the forest below
+
+fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20, honest = FALSE)
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
 
-jftree.predict(fitted_tree)[[1]][1]
+jftree.predict(fitted_tree)[[1]][1] # Nelson-Aalen
+jftree.predict(fitted_tree)[[2]][1] # initial distribution (this doesn't sum to one, not an issue for forests, likely an index error somewhere in the background C++ code...)
+lapply(fitted_tree$init, function(z) sum(z))
+fitted_tree$censoring[1,]
 new_data <- data.frame(X2 = runif(5), X1 = rnorm(5))
-jftree.predict(fitted_tree, new_data, compute_initial = TRUE)   # fix this!
+jftree.predict(fitted_tree, new_data, compute_initial = TRUE, compute_censoring = FALSE)
+jftree.predict(fitted_tree, new_data, compute_initial = TRUE, compute_censoring = FALSE)$predictions.init
 occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]])
+lapply(fitted_tree$init, function(z) sum(z))                                                                    # still some strange mistake here, see above
+lapply(occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]]), function(z) sum(z))
 
 # fit the forest (takes a couple of minutes when also saving predictions)
 fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 100, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)
 print_forest(fitted_forest)
 
-jfforest.predict(fitted_forest)[[1]][1]
+jfforest.predict(fitted_forest)[[2]][1:10]
+lapply(jfforest.predict(fitted_forest)[[2]], function(z) sum(z))  # no problem with not summing to one for forests? even when all trees are trivial????
 occupation_prob(init = fitted_forest$init[[1]], na = fitted_forest$predictions[[1]])
 predictions_new_data <- jfforest.predict(fitted_forest, new_data, compute_initial = TRUE)
 occupation_prob(init = predictions_new_data$initial[[1]], na = predictions_new_data$predictions[[1]])

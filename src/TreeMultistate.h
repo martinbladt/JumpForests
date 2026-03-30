@@ -35,8 +35,10 @@ public:
   }
 
   vector<double> computePredictions(const Data& new_data) override;
-  vector<double> computePredictedInitialDistributions(const Data& new_data);
+  //vector<double> computePredictedInitialDistributions(const Data& new_data);
+  pair<vector<double>, vector<double>> computePredictedInitialDistributions(const Data& new_data);
   pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
+  vector<vector<double>> computeAllPredictions(const Data& new_data);
   // VIMP prediction for multi-state trees (to be investigated)
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng);
 

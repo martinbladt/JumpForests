@@ -185,8 +185,8 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
     # extracting relevant columns
     covariates <- tree_list$feature.names
     if (ncol(new_data) > 1) {
-        new_data <- new_data[, covariates]  # ensures the columns have the same order as the original dataset
-      }
+      new_data <- new_data[, covariates]  # ensures the columns have the same order as the original dataset
+    }
     feature_indices <- which(names(new_data) %in% covariates) - 1
     processed_data <- preprocess_data(new_data)
 
@@ -200,8 +200,9 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
                             processed_data$categorical, processed_data$unique_values))
       }
     } else {
-      return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices,
-                            processed_data$categorical, processed_data$unique_values, compute_initial))
+      cat("Calling JFCppTreePredictMM")
+      return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices, processed_data$categorical,
+             processed_data$unique_values, compute_initial, compute_censoring))
     }
   } else {
     cat("Error: If new_data is supplied, it must be a data.frame with the same names as the original dataset \n")
