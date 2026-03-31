@@ -147,7 +147,8 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
 
             // save last observed times and the state at the censoring time separately (eases calculations)
             if (response_length >= 2) {
-                last_observed_times[i] = obs_times[response_length - 1];
+                last_observed_times[i] = i * max_response_length + response_length - 1;
+                //last_observed_times[i] = obs_times[response_length - 1];  // previous definition where we save the time itself and not the index
                 if (static_cast<uint8_t>(INTEGER(obs[1])[response_length - 1]) == static_cast<uint8_t>(INTEGER(obs[1])[response_length - 2])) {
                     censoring_states[i] = static_cast<uint8_t>(obs_states[response_length - 1]); // static_cast<uint8_t>(obs_states[response_length - 1]);
                 }
@@ -211,4 +212,27 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
     this->categorical = categorical_features;
     this->unique_values = unique_values_features;
     this->feature_names = feature_names;
+}
+
+/*
+
+Computes a vector of bools indicating whether observation i at unique event time t is in state j
+Used for computing the Brier and KL scores for multi-state trees and forests only
+
+*/
+vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_time_ids, size_t num_unique_event_times) {
+    vector<bool> result(num_obs * num_unique_event_times * num_states);
+    for (size_t i = 0; i < num_obs; ++i) {
+        for (size_t j = 0; j < num_states; ++j) {
+            // remember that the observations are ordered in flattened vectors of num_obs strides of length max_response_length
+            for (size_t k = 0; k < max_response_length; ++k) {
+                size_t current_obs_index = i * max_response_length + k;
+                // recall that states are always denoted 1, 2, ..., num_states (0 indicates padding )
+                if (states[current_obs_index] == j + 1) {
+                    result[i * num_unique_event_times * num_states + response_event_time_ids[current_obs_index] * num_states + j] = true;
+                }
+            }
+        }
+    }
+    return result;
 }

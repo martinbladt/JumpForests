@@ -128,11 +128,12 @@ vector<size_t> computeResponseEventTimeIDs(const vector<double>& unique_event_ti
 vector<size_t> computeTrueEventTimeIDs(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& ind);
 vector<double> computeOutcomes(const NumericMatrix& predictions); // for error computation
 vector<double> computeOutcomes(const vector<double>& predictions, size_t num_unique_event_times);
-vector<double> computeIPCW(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids, const NumericMatrix& KM_cens);
+vector<double> computeIPCW(const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
+                           const NumericMatrix& KM_cens, const vector<double>& times = {}, const vector<size_t>& last_observed_time_ids = {});
 vector<double> computeBrierScore(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const NumericMatrix& KM_pred);
-vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids, const vector<double>& KM_cens);
+vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& KM_cens, const vector<size_t>& last_observed_time_ids = {});
 vector<double> computeBrierScoreCpp(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const vector<double>& KM_pred);
-pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& unique_event_times);
+pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& unique_event_times, bool multi_state = false);
 vector<double> computeUniqueEventTimes(const vector<double>& times, const vector<size_t>& ind);
 vector<double> KaplanMeier(const vector<double>& na, size_t num_estimators = 0);
 NumericMatrix KaplanMeier(const NumericMatrix& na);

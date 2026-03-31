@@ -9,19 +9,19 @@ require(survival)
 test_omp()
 
 # for testing the data interaction between C++ and R
-test_data <- data.frame(Categorical1 = as.factor(c(1, 2, 1, 1, 2, 1, 2, 1, 2)), # nolint: line_length_linter.
-                        Time = c(0.13, 0.65, 0.15, 2.1, 0.415, 1.1, 2, 0.65, 2.1), # nolint: line_length_linter.
-                        Numerical = c(0.41, 1.31, 0.78, 0.56, 0.61, 0.42, 0.13, 0.34, 0.15), # nolint: line_length_linter.
+test_data <- data.frame(Categorical1 = as.factor(c(1, 2, 1, 1, 2, 1, 2, 1, 2)),
+                        Time = c(0.13, 0.65, 0.15, 2.1, 0.415, 1.1, 2, 0.65, 2.1),
+                        Numerical = c(0.41, 1.31, 0.78, 0.56, 0.61, 0.42, 0.13, 0.34, 0.15),
                         Death = c(0, 1, 1, 1, 0, 1, 0, 1, 1),
-                        Categorical2 = c("Yes", "No", "No", "Maybe", "Yes", "No", "Maybe", "No", "Yes")) # nolint: line_length_linter.
+                        Categorical2 = c("Yes", "No", "No", "Maybe", "Yes", "No", "Maybe", "No", "Yes"))
 new_data <- data.frame(Numerical = c(0.57, 0.13, 0.156, 0.81, 1.2),
                        Categorical1 = as.factor(c(1, 1, 2, 1, 1)),
                        Categorical2 = c("Yes", "Maybe", "Maybe", "No", "Yes"),
                        Time = c(1.2, 0.814, 0.773, 0.11, 1.8),
                        Death = c(0, 1, 1, 1, 1))
-#test_data2 <- data.frame(Time = c(0.13, 0.65, 0.15, 2.1, 0.415, 1.1, 2, 0.65, 2.1), # nolint: line_length_linter.
-#                         Numerical1 = c(0.41, 1.31, 0.78, 0.56, 0.61, 0.42, 0.13, 0.34, 0.15), # nolint: line_length_linter.
-#                         Numerical2 = c(0.271, 0.81, 0.1, 2.1, 0.145, 0.82, 0.91, 0.41, 1.34), #nolint: line_length_linter
+#test_data2 <- data.frame(Time = c(0.13, 0.65, 0.15, 2.1, 0.415, 1.1, 2, 0.65, 2.1),
+#                         Numerical1 = c(0.41, 1.31, 0.78, 0.56, 0.61, 0.42, 0.13, 0.34, 0.15),
+#                         Numerical2 = c(0.271, 0.81, 0.1, 2.1, 0.145, 0.82, 0.91, 0.41, 1.34),
 #                         Death = c(0, 1, 1, 1, 0, 1, 0, 1, 1))
 
 # functions for testing the transcription to a C++ data object
@@ -87,6 +87,7 @@ print_forest(fitted_forest)
 # veteran
 #--------------------------------------------------------------------
 
+devtools::load_all()
 data(veteran, package = "randomForestSRC")
 veteran$trt <- as.factor(veteran$trt)
 veteran$celltype <- as.factor(veteran$celltype)
@@ -119,7 +120,7 @@ length(veteran_tree$unique.event.times)
 head(veteran)
 test_data_functions(veteran, c(3, 4), c(2, 1, 8, 6, 5, 7))
 
-veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = TRUE, swr = FALSE, save_predictions = FALSE)
+veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = FALSE, save_predictions = FALSE)
 (veteran_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = veteran, seed = 2025, samptype = "swr"))
 (veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation"))
 

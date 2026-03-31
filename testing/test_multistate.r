@@ -85,18 +85,17 @@ jftree.predict(fitted_tree)[[2]][1] # initial distribution
 lapply(fitted_tree$init, function(z) sum(z))
 fitted_tree$censoring[1,]
 new_data <- data.frame(X2 = runif(10), X1 = rnorm(10))
-predicted <- jftree.predict(fitted_tree, new_data, compute_initial = FALSE, compute_censoring = TRUE)
+predicted <- jftree.predict(fitted_tree, new_data, compute_initial = TRUE, compute_censoring = TRUE)
+predicted$predictions
 predicted$censoring
-
-# okay, right now there seems to be now issues as long as not both compute_initial and compute_censoring are TRUE... (in this case, init is always (0,0,0))
-# my main problem is that I don't know what fixed the bug? I just added some print statements??? Further testing required...
+predicted$predictions.init
 
 occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]])
 lapply(fitted_tree$init, function(z) sum(z))
 lapply(occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]]), function(z) sum(z))
 
 # fit the forest (takes a couple of minutes when also saving predictions)
-fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 100, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)
+fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 20, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)
 print_forest(fitted_forest)
 
 jfforest.predict(fitted_forest)[[2]][1:10]

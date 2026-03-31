@@ -39,6 +39,9 @@ public:
   pair<vector<double>, vector<double>> computePredictedInitialDistributions(const Data& new_data);
   pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
   vector<vector<double>> computeAllPredictions(const Data& new_data);
+  vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                                   const List& occupation_probs, const vector<double>& state_weights);
+
   // VIMP prediction for multi-state trees (to be investigated)
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng);
 

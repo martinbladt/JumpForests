@@ -311,12 +311,14 @@ void JFCppTreePredict(List& JFTree) {
     size_t num_unique_event_times = tree->getNumberOfUniqueEventTimes();
     const vector<size_t>& leaf_ids = tree->getPredictionNodeIDs();
     const vector<vector<double>>& na = tree->getNA();
+    /*
     cout << "Checking NA estimators right after fitting (JFCppTreePredict):" << endl;
     for (auto NA : na) {
       if (!NA.empty()) {
         printVector(NA);
       }
     }
+    */
     const vector<vector<double>>& init = tree->getInitDist();
     const vector<vector<double>>& cens = tree->getKMCensoring();
 
@@ -491,16 +493,16 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
   */
 
   // compute the predictions in C++
-  vector<double> predictions_cpp = tree->computePredictions(new_data);
+  vector<double> predictions_cpp; // = tree->computePredictions(new_data);
   vector<double> predictions_init_cpp;
   vector<double> censoring_cpp;
 
   // compute predictions depending on the specified options (w/wo initial distributions and or censoring)
   if (compute_initial && compute_censoring) {
     vector<vector<double>> all_predictions_cpp = tree->computeAllPredictions(new_data);   // ordering: NA, initial distributions and censoring predictions
-    predictions_cpp = all_predictions_cpp[0];
-    predictions_init_cpp = all_predictions_cpp[1];
-    censoring_cpp = all_predictions_cpp[2];
+    predictions_cpp = std::move(all_predictions_cpp[0]);
+    predictions_init_cpp = std::move(all_predictions_cpp[1]);
+    censoring_cpp = std::move(all_predictions_cpp[2]);
   } else if (compute_initial) {
     pair<vector<double>, vector<double>> combined_predictions = tree->computePredictedInitialDistributions(new_data);
     predictions_cpp = std::move(combined_predictions.first);
@@ -511,10 +513,10 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
     censoring_cpp = std::move(combined_predictions.second);
   } else {
     cout << "Computing predictions (no init nor censoring)" << endl;
-    //predictions_cpp = tree->computePredictions(new_data);
+    predictions_cpp = tree->computePredictions(new_data);
   }
-  cout << "predictions_cpp:" << endl;
-  printVector(predictions_cpp);
+  //cout << "predictions_cpp:" << endl;
+  //printVector(predictions_cpp);
 
   //cout << "predictions_init_cpp:" << endl;
   //printVector(predictions_init_cpp);
@@ -591,7 +593,7 @@ void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vec
   JFTree["C.error"] = 1 - computeConcordanceIndex(outcomes, times, ind);
 
   // now compute Brier score
-  vector<double> IPCW_weights = computeIPCW(times, ind, unique_event_times, response_event_time_ids, JFTree["censoring"]);
+  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFTree["censoring"], times);
   vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, JFTree["predictions.km"]);
   pair<double, double> ibs = computeIBS(brier, unique_event_times);
   JFTree["ibs"] = ibs.first;
@@ -605,6 +607,26 @@ double JFCppErrorSurvival(const NumericMatrix& predictions, const vector<double>
 }
 
 // Multi-state
+
+// 
+void JFCppTreeErrorMultistate(List& JFTree, const vector<size_t>& last_observed_time_ids, const vector<double>& ind, const vector<double>& unique_event_times,
+                              const vector<size_t>& response_event_time_ids, const vector<double>& state_weights) {
+  /*
+  // first compute the IPCW weights
+  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFTree["censoring"], {}, last_observed_time_ids);
+
+  // compute the status of whether each observation is in each state at the given event times
+  MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
+  vector<bool> states_ind = tree->getData()->computeStateIndicators(response_event_time_ids, unique_event_times.size());
+  // compute occupation probabilities
+  vector<double> brier = computeBrierScoreMM(states_ind, IPCW_weights, unique_event_times, occupation_probs, state_weights);
+  pair<double, double> ibs = computeIBS(brier, unique_event_times, true);
+  
+  
+  JFTree["ibs"] = ibs.first;
+  JFTree["ibs.normalised"] = ibs.second;
+  */
+}
 
 // General function for a new dataset
 
@@ -1198,7 +1220,7 @@ void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const
   JFForest["C.error"] = 1 - computeConcordanceIndex(outcomes, times, ind);
 
   // now compute Brier score
-  vector<double> IPCW_weights = computeIPCW(times, ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"]);
+  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"], times);
   //const NumericMatrix& km_pred = KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"]));
   //cout << "OOB IPCW weights:" << endl;
   //printVector(IPCW_weights);
@@ -1225,7 +1247,7 @@ List JFCppForestErrorSurvivalExternal(List& JFForest) {
   JFForest["outcomes.oob"] = outcomes;
 
   // now compute Brier score
-  vector<double> IPCW_weights = computeIPCW(times, ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"]);
+  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"], times);
   //const NumericMatrix& km_pred = KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"]));
   //cout << "OOB IPCW weights:" << endl;
   //printVector(IPCW_weights);

@@ -32,6 +32,7 @@ void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response);
 void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids);
 //double JFCppErrorSurvival(const NumericMatrix& predictions, NumericVector times, NumericVector ind);
 double JFCppErrorSurvival(const NumericMatrix& predictions, const vector<double>& times, const vector<double>& ind);
+void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& last_observed_times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& state_weights);
 List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique, NumericVector response_indices);
 // growing a forest

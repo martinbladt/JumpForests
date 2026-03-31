@@ -750,13 +750,33 @@ vector<double> computeOutcomes(const vector<double>& predictions, size_t num_uni
 }
 
 // computes the IPCW weights for each observation and event time (useful if one wants to extend to other error metrics)
-vector<double> computeIPCW(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids, const NumericMatrix& KM_cens) {
-    size_t num_obs = times.size();
+vector<double> computeIPCW(const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
+                           const NumericMatrix& KM_cens, const vector<double>& times, const vector<size_t>& last_observed_time_ids) {
+    if (times.empty() && last_observed_time_ids.empty()) {
+        throw("Error: Precisely one of times and last_observed_time_ids must be supplied. The first for survival and the latter for multi-states.");
+    }
+    size_t num_obs;
+    bool multi_state;
+    if (last_observed_time_ids.empty()) {
+        multi_state = false;                        // survival model (times are supplied)
+        num_obs = times.size();
+
+    } else {
+        multi_state = true;                         // multi-state model (last_observed_time_ids are supplied)
+        num_obs = last_observed_time_ids.size();
+    }
     size_t num_unique_event_times = unique_event_times.size();
     vector<double> weights(num_obs * num_unique_event_times, 0);    // result is a flattened vector
 
     for (size_t i = 0; i < num_obs; ++i) {
-        size_t index_obs = unique_event_time_ids[i];
+        // when determining the index for the corresponding unique event time for the given observation,
+        // we need to take the id for the last observed time for a multi-state tree/forest
+        size_t index_obs;
+        if (multi_state) {
+            index_obs = response_event_time_ids[last_observed_time_ids[i]];
+        } else {
+            index_obs = response_event_time_ids[i];
+        }
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             if (times[i] <= unique_event_times[j] && ind[i] == 1) {
                if (KM_cens(i, index_obs) > 0) {
@@ -798,17 +818,31 @@ vector<double> computeBrierScore(const vector<double>& times, const vector<doubl
 // the following functions are identical except that they accept KM_cens and KM_pred as flattened arrays instead of NumericMatrices
 
 // computes the IPCW weights for each observation and event time (useful if one wants to extend to other error metrics)
-vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids, const vector<double>& KM_cens) {
+vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times,
+                              const vector<size_t>& response_event_time_ids, const vector<double>& KM_cens, const vector<size_t>& last_observed_time_ids) {
     size_t num_obs = times.size();
     size_t num_unique_event_times = unique_event_times.size();
     vector<double> weights(num_obs * num_unique_event_times, 0);    // result is a flattened vector
+    bool multi_state;
+    if (last_observed_time_ids.empty()) {
+        multi_state = false;                // survival model
+    } else {
+        multi_state = true;                 // multi-state model
+    }
 
     for (size_t i = 0; i < num_obs; ++i) {
-        size_t index = unique_event_time_ids[i];
+        // when determining the index for the corresponding unique event time for the given observation,
+        // we need to take the id for the last observed time for a multi-state tree/forest
+        size_t index_obs;
+        if (multi_state) {
+            index_obs = response_event_time_ids[last_observed_time_ids[i]];
+        } else {
+            index_obs = response_event_time_ids[i];
+        }
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             if (times[i] <= unique_event_times[j] && ind[i] == 1) {
-               if (KM_cens[i * num_unique_event_times + index] > 0) {
-                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens[i * num_unique_event_times + index]);   // possibly index - 1 here, check!
+               if (KM_cens[i * num_unique_event_times + index_obs] > 0) {
+                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens[i * num_unique_event_times + index_obs]);   // possibly index_obs - 1 here, check!
                }
             }
             else if (times[i] > unique_event_times[j]) {
@@ -845,13 +879,29 @@ vector<double> computeBrierScoreCpp(const vector<double>& times, const vector<do
 }
 
 // computes the integrated Brier Score (IBS) and the normalised IBS (using the trapezoidal rule)
-pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& unique_event_times) {
+// for a multi-state model (multi_state == true), bs is a flattened vector of length num_unique_event_times * num_states
+pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& unique_event_times, bool multi_state) {
     size_t num_unique_event_times = unique_event_times.size();
-    double ibs = 0;     // IBS
+    double ibs = 0;
 
-    // apply trapezoidal rule
-    for (size_t j = 1; j < num_unique_event_times; ++j) {
-        ibs += (bs[j] + bs[j - 1]) * (unique_event_times[j] - unique_event_times[j - 1]) / 2;
+    if (!multi_state) { // survival
+        // apply trapezoidal rule
+        for (size_t j = 1; j < num_unique_event_times; ++j) {
+            ibs += (bs[j] + bs[j - 1]) * (unique_event_times[j] - unique_event_times[j - 1]) / 2;
+        }
+    } else {            // for multi-state models, aggregate over all states
+        size_t num_states = bs.size() / num_unique_event_times;
+        // first compute the Brier score across all states
+        vector<double> state_contributions(num_unique_event_times, 0);
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            for (size_t j = 0; j < num_states; ++j) {
+                state_contributions[t] += bs[t * num_states + j];
+            }
+        }
+        // now compute the IBS via the trapezoidal rule
+        for (size_t t = 1; t < num_unique_event_times; ++t) {
+            ibs += (state_contributions[t] - state_contributions[t - 1]) * (unique_event_times[t] - unique_event_times[t - 1]) / 2;
+        }
     }
     return {ibs, ibs / unique_event_times.back()};
 }

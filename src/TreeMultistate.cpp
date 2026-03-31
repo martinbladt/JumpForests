@@ -27,8 +27,10 @@ MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, sh
 
 void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& at_risk, vector<size_t>& jumps) {
     // fetch states and other relevant data quantities
+    const vector<double>& times = data->getTimes();
     const vector<uint8_t>& states = data->getStates();
-    const vector<double>& last_observed_times = data->getLastObservedTimes();
+    const vector<size_t>& last_observed_times = data->getLastObservedTimes();
+    //const vector<double>& last_observed_times = data->getLastObservedTimes();
     //const vector<double>& censoring_times = data->getCensoringTimes();
     const vector<uint8_t>& censoring_states = data->getCensoringStates();
 
@@ -56,8 +58,9 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         // compute the censoring contribution C
         uint8_t censoring_state = censoring_states[i];
         if (censoring_state != 0) {     // censoring actually occurs
-            double R = last_observed_times[i];
-            //double R = censoring_times[i];
+            double R = times[last_observed_times[i]];
+            //double R = last_observed_times[i];    // old: when we saved the last observed time itself
+            //double R = censoring_times[i];        // old: when we saved the censoring times only
             for (size_t j = 0; j < num_unique_event_times; ++j) {
                 if ((*unique_event_times)[j] > R) {
                     // all following event times also satisfy > R
@@ -143,8 +146,10 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
 void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final) {
     // fetch states and other relevant data quantities
+    const vector<double>& times = data->getTimes();
     const vector<uint8_t>& states = data->getStates();
-    const vector<double>& last_observed_times = data->getLastObservedTimes();
+    const vector<size_t>& last_observed_times = data->getLastObservedTimes();
+    //const vector<double>& last_observed_times = data->getLastObservedTimes();
     //const vector<double>& censoring_times = data->getCensoringTimes();
     const vector<uint8_t>& censoring_states = data->getCensoringStates();
     uint8_t max_response_length = data->getMaxResponseLength();
@@ -186,7 +191,8 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
                 // censoring contribution
                 uint8_t censoring_state = censoring_states[i];
                 if (censoring_state != 0) {     // censoring actually occurs
-                    double R = last_observed_times[i];
+                    double R = times[last_observed_times[i]];
+                    //double R = last_observed_times[i];
                     //double R  = censoring_times[i];
                     for (size_t j = 0; j < num_unique_event_times; ++j) {
                         if ((*unique_event_times)[j] > R) {
@@ -785,7 +791,7 @@ void MultistateTree::computeCensoringKM() {
     // initalise and fetch data
     vector<double>KM_censoring(num_unique_event_times, 1);
     size_t num_states = data->getNumberOfStates();
-    //const vector<double>& last_observed_times = data->getLastObservedTimes();
+    //const vector<size_t>& last_observed_times = data->getLastObservedTimes();
     //const vector<uint8_t>& censoring_states = data->getCensoringStates();
     //const vector<double>& unique_event_times = this->unique_event_times.get();
     //const vector<size_t>& response_event_time_ids = this->response_event_time_ids.get();
@@ -1080,14 +1086,13 @@ vector<double> MultistateTree::computePredictions(const Data& new_data) {
     vector<double> predictions(num_obs * num_unique_event_times * dim);
     for (size_t i = 0; i < num_obs; ++i) {
         const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));   // the na vector has for unknown reasons been destroyed...
-        cout << "Prediction for observation " << i << ":" << endl;
-        printVector(pred);
-        cout << endl;
+        //cout << "Prediction for observation " << i << ":" << endl;
+        //printVector(pred);
+        //cout << endl;
         for (size_t t = 0; t < num_unique_event_times; ++t) {
             for (size_t j = 0; j < num_states; ++j) {
                 for (size_t k = 0; k < num_states; ++k) {
                     predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
-                    //predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
                 }
             }
         }
@@ -1116,7 +1121,6 @@ pair<vector<double>, vector<double>> MultistateTree::computePredictedInitialDist
             for (size_t j = 0; j < num_states; ++j) {
                 for (size_t k = 0; k < num_states; ++k) {
                     predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
-                    //predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
                 }
             }
         }
@@ -1170,7 +1174,6 @@ vector<vector<double>> MultistateTree::computeAllPredictions(const Data& new_dat
             for (size_t j = 0; j < num_states; ++j) {
                 for (size_t k = 0; k < num_states; ++k) {
                     predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
-                    //predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
                 }
             }
             // save censoring distribution
@@ -1178,7 +1181,7 @@ vector<vector<double>> MultistateTree::computeAllPredictions(const Data& new_dat
         }
         // save initial distribution
         for (size_t j = 0; j < num_states; ++j) {
-            predictions_init[i * num_states + j] = pred[j];
+            predictions_init[i * num_states + j] = init[j];
         }
     }
     return {predictions, predictions_init, censoring};
@@ -1187,7 +1190,38 @@ vector<vector<double>> MultistateTree::computeAllPredictions(const Data& new_dat
 // error estimation for multi-state trees
 //--------------------------------------------------------------------------------------
 
+// computes a vector of the Brier score using given IPCW weights for multi-state predictions 
+// (states_ind is a flattened vector of boolean indicators of whether observation i at event time t is in state j)
+vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                                   const List& occupation_probs, const vector<double>& state_weights) {
+    size_t num_unique_event_times = unique_event_times.size();
+    uint8_t num_states = state_weights.size();
+    size_t num_obs = weights.size() / num_unique_event_times;
+    vector<double> brier(num_unique_event_times * num_states, 0);
 
+    for (size_t i = 0; i < num_obs; ++i) {
+        const List& occ_probs_obs = as<List>(occupation_probs[i]);
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            const vector<double> occ_probs_obs_t = as<vector<double>>(occ_probs_obs[t]);
+            double ipcw = weights[i * num_unique_event_times + t];
+            // difference to survival: need to compute a contribution to the score across all states
+            for (size_t j = 0; j < num_states; ++j) {
+                if (states_ind[i * num_unique_event_times * num_states + j]) {
+                    brier[t * num_states + j] += ipcw * (1 - occ_probs_obs_t[j]) * (1 - occ_probs_obs_t[j]) * state_weights[j];
+                } else {
+                    brier[t * num_states + j] += ipcw * occ_probs_obs_t[j] * occ_probs_obs_t[j] * state_weights[j];
+                }
+            }
+        }
+    }
+    return brier;
+}
+
+// same function as above but where the occupation probabilities are instead given by a flattened vector
+vector<double> computeBrierScoreCppMM(const vector<double>& last_observed_times, const vector<bool>& states_ind, const vector<double>& weights,
+                                      const vector<double>& unique_event_times, const vector<double>& occupation_probs, const vector<double>& state_weights) {
+
+}
 
 // miscellaneous functions related to multi-states
 //--------------------------------------------------------------------------------------
