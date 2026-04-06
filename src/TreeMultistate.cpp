@@ -103,7 +103,6 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     cumulativeMatrixSums(num_jumps_acc, num_jumps, num_states);
 
     // now compute number at risk via the key decomposition
-    
     for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above
         //vector<int> subtraction = subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1));
         vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1)), static_cast<size_t>(num_states));
@@ -486,6 +485,7 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
                            vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices) {
     const vector<double>& feature_values = uniqueValues(data->getValues(node_obs[node_index], feature));
     size_t num_feature_values = feature_values.size();
+    size_t num_states = data->getNumberOfStates();
 
     unordered_set<uint64_t> partition_masks;
     // generate partitions (breaks if no possible splits)
@@ -516,13 +516,16 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
             continue;
         }
 
-        // here we have to compute the survival info in one of the daughters from scratch
-        vector<size_t> num_jumps_left, num_at_risk_left;
+        // here we have to compute the multi-state info in one of the daughters from scratch
+        vector<size_t> num_jumps_left(num_unique_event_times * num_states * num_states);
+        vector<size_t> num_at_risk_left(num_unique_event_times * num_states);
         computeMultistateQuantities(current_left_indices, num_jumps_left, num_at_risk_left);
         double split_val;
         // choose splitrule
         if (splitrule == "logrank") {
+            cout << "Computing log-rank splitting value in bestSplitCategorical" << endl;
             split_val = logRank(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
+            cout << "Done computing log-rank splitting value in bestSplitCategorical" << endl;
         }
         if (splitrule == "gehan") {
             split_val = Gehan(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
@@ -636,15 +639,17 @@ bool MultistateTree::createSplit(size_t node_index) {
     for (size_t i : sampled_features) {
         if (data->getCategorical()[i]) {
             // finds the best split and constructs the indices of the best left and right node
+            cout << "About to call bestSplitCategorical" << endl;
             bestSplitCategorical(node_index, i, best_split_val, best_feature, best_threshold, best_left_indices, best_right_indices);
         }
         else {
             // does not return the best indices, so this has to be done later
+            cout << "About to call bestSplitContinuous" << endl;
             bestSplitContinuous(node_index, i, best_split_val, best_feature, best_threshold);
         }
     }
 
-    //Rcout << "best_split_val = " << best_split_val << endl;
+    Rcout << "best_split_val = " << best_split_val << endl;
 
     // if no best split is found, make the node a leaf
     if (best_split_val < 0) {
@@ -782,8 +787,8 @@ void MultistateTree::computeNA(size_t node_index) {
             na[index + j] = diag;
         }
     }
-    //Rcout << "Nelson-Aalen estimator in terminal node:" << endl;
-    //printVector(na);
+    Rcout << "Nelson-Aalen estimator in terminal node " << node_index << endl;
+    printVector(na);
     this->na.push_back(std::move(na));
 }
 
@@ -835,15 +840,20 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
     for (auto jump : valid_jumps) {
         uint8_t j = jump.first - 1;
         uint8_t k = jump.second - 1;
+        cout << "Considering jump (" << static_cast<size_t>(j) << "," << static_cast<size_t>(k) << ")" << endl;
         double sum_num = 0;
         double sum_den = 0;
         size_t jump_index = split_id * num_unique_event_times * dim;
         size_t at_risk_index = split_id * num_unique_event_times * num_states;
+        cout << "num_unique_event_times = " << num_unique_event_times << endl;
+        cout << "num_jumps.size() = " << num_jumps.size() << ", num_jumps_daughter.size() = " << num_jumps_daughter.size() << ", num_at_risk.size() = " << num_at_risk.size() << ", num_at_risk_daughter.size() = " << num_at_risk_daughter.size() << endl;
         for (size_t i = 0; i < num_unique_event_times; ++i) {
+            cout << "Corresponding indices: " << i * dim + j * num_states + k << ", " << jump_index + i * dim + j * num_states + k << ", " << i * num_states + j << ", " << at_risk_index + i * num_states + j << endl;
             const double d = (double) num_jumps[i * dim + j * num_states + k];
             const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
             const double Y = (double) num_at_risk[i * num_states + j];
             const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
+            cout << "Fetched quantities for event time " << i << endl;
             
             // temporary for debugging
             if (Y < Y1) {
@@ -865,6 +875,7 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
                 sum_num += d1 - d * at_risk_frac;
                 sum_den += d * at_risk_frac * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
             }
+            cout << "Done updating sum_num and sum_den for event time " << i << endl;
         }
 
         // update the final log-rank statistic
@@ -875,7 +886,7 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
     if (LR > 0) {
         return LR;
     } else {
-        return -1;  // if a non-sensical value has been computed, treat as unvalid split
+        return -1;  // if a non-sensical value has been computed, treat as invalid split
     }
 }
 
@@ -1218,9 +1229,29 @@ vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<
 }
 
 // same function as above but where the occupation probabilities are instead given by a flattened vector
-vector<double> computeBrierScoreCppMM(const vector<double>& last_observed_times, const vector<bool>& states_ind, const vector<double>& weights,
-                                      const vector<double>& unique_event_times, const vector<double>& occupation_probs, const vector<double>& state_weights) {
+vector<double> computeBrierScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times, 
+                                      const vector<double>& occupation_probs, const vector<double>& state_weights) {
+    size_t num_unique_event_times = unique_event_times.size();
+    uint8_t num_states = state_weights.size();
+    size_t num_obs = weights.size() / num_unique_event_times;
+    vector<double> brier(num_unique_event_times * num_states, 0);
 
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t obs_index = i * num_unique_event_times * num_states;
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            size_t time_index = obs_index + t * num_states;
+            double ipcw = weights[i * num_unique_event_times + t];
+            // difference to survival: need to compute a contribution to the score across all states
+            for (size_t j = 0; j < num_states; ++j) {
+                if (states_ind[i * num_unique_event_times * num_states + j]) {
+                    brier[t * num_states + j] += ipcw * (1 - occupation_probs[time_index + j]) * (1 - occupation_probs[time_index + j]) * state_weights[j];
+                } else {
+                    brier[t * num_states + j] += ipcw * occupation_probs[time_index + j] * occupation_probs[time_index + j] * state_weights[j];
+                }
+            }
+        }
+    }
+    return brier;
 }
 
 // miscellaneous functions related to multi-states
@@ -1273,21 +1304,21 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
 vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states) {
     vector<double> aj = vector<double>(na.size(), 0);
     size_t dim = num_states * num_states;   // number of entries in each matrix
-    size_t num_jumps = na.size() / dim;     // num_unique_event_times
+    size_t num_unique_event_times = na.size() / dim;
     // initial value is the identity matrix
     for (size_t j = 0; j < num_states; ++j) {
         aj[j * num_states + j] = 1;
     }
 
     // compute the Aalen--Johansen estimator at each jump time using an optimised matrix multiplication scheme
-    for (size_t i = 1; i < num_jumps; ++i) {
+    for (size_t i = 1; i < num_unique_event_times; ++i) {
         for (size_t j = 0; j < num_states; ++j) {           // row of the aj matrix
             for (size_t k = 0; k < num_states; ++k) {       // column of the aj matrix
                 double prev = aj[(i - 1) * dim + j * num_states + k];
                 for (size_t l = 0; l < num_states; ++l) {   // column of matrix in increment
                     double contribution = na[i * dim + k * num_states + l] - na[(i - 1) * dim + k * num_states + l];
                     if (k == l) {
-                        ++contribution;    // add 1 to diagonal elements
+                        ++contribution;
                     }
                     aj[i * dim + j * num_states + l] += prev * contribution;
                 }
@@ -1295,4 +1326,108 @@ vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states) {
         }
     }
     return aj;
+}
+
+// computes the occupation probabilities given a Nelson-Aalen estimator and an initial distribution
+// if na and init are flattened vectors, provide the number of estimators (na and init need to have the same 'dimensions')
+vector<double> occupationProbabilitiesCpp(const vector<double>& na, const vector<double>& init, size_t num_states, size_t num_estimators) {
+    size_t stride_length = na.size() / num_estimators;
+    size_t dim = num_states * num_states;
+    size_t num_unique_event_times = stride_length / dim;
+    vector<double> result(num_estimators * num_unique_event_times * num_states, 0);     // num_estimators corresponds to num_obs
+    vector<double> aj(num_estimators * num_unique_event_times * dim, 0);
+
+    // across all observations, the initial value of the product integral (aj) is the identity matrix
+    for (size_t i = 0; i < num_estimators; ++i) {
+        for (size_t j = 0; j < num_states; ++j) {
+            aj[i * num_unique_event_times * dim + j * num_states + j] = 1;
+        }
+    }
+
+    // now compute the product integral across all event times for every observation
+    for (size_t i = 0; i < num_estimators; ++i) {
+        size_t obs_index = i * num_unique_event_times * dim;
+        for (size_t t = 1; t < num_unique_event_times; ++t) {
+            for (size_t j = 0; j < num_states; ++j) {           // row of the aj matrix
+                for (size_t k = 0; k < num_states; ++k) {       // col of the aj matrix
+                    double prev = aj[obs_index + (t - 1) * dim + j * num_states + k];
+                    for (size_t l = 0; l < num_states; ++l) {   // column of matrix in increment
+                        double contribution = na[obs_index + t * dim + k * num_states + l] - na[obs_index + (t - 1) * dim + k * num_states + l];
+                        if (k == l) {
+                            ++contribution;
+                        }
+                        aj[obs_index + t * dim + j * num_states + l] += prev * contribution;
+                    }
+                }
+            }
+        }
+    }
+
+    // now multiply with the initial distribution
+    for (size_t i = 0; i < num_estimators; ++i) {
+        size_t obs_index = i * num_unique_event_times * num_states;
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            for (size_t j = 0; j < num_states; ++j) {
+                double init_val = init[obs_index + j];
+                for (size_t k = 0; k < num_states; ++k) {
+                    result[obs_index + t * num_states + k] += init_val * aj[obs_index * num_states + t * dim + j * num_states + k];
+                }
+            }
+        }
+    }
+    return result;
+}
+
+// same function as before, but now accepts List inputs instead for na and init (each is a List of Lists)
+vector<double> occupationProbabilities(const List& na, const List& init, size_t num_states) {
+    size_t num_obs = na.size();
+    size_t dim = num_states * num_states;
+    size_t num_unique_event_times = as<List>(na[0]).size();
+    vector<double> result(num_obs * num_unique_event_times * num_states, 0);
+    vector<double> aj(num_obs * num_unique_event_times * dim, 0);
+
+    // across all observations, the initial value of the product integral (aj) is the identity matrix
+    for (size_t i = 0; i < num_obs; ++i) {
+        for (size_t j = 0; j < num_states; ++j) {
+            aj[i * num_unique_event_times * dim + j * num_states + j] = 1;
+        }
+    }
+
+    // now compute the product integral across all event times for every observation
+    for (size_t i = 0; i < num_obs; ++i) {
+        const List& na_obs = as<List>(na[i]);
+        size_t obs_index = i * num_unique_event_times * dim;
+        for (size_t t = 1; t < num_unique_event_times; ++t) {
+            const NumericMatrix& na_obs_cur = na_obs[t];
+            const NumericMatrix& na_obs_prev = na_obs[t - 1];
+            for (size_t j = 0; j < num_states; ++j) {           // row of the aj matrix
+                for (size_t k = 0; k < num_states; ++k) {       // col of the aj matrix
+                    double prev = aj[obs_index + (t - 1) * dim + j * num_states + k];
+                    for (size_t l = 0; l < num_states; ++l) {   // column of matrix in increment
+                        //double contribution = na[obs_index + t * dim + k * num_states + l] - na[obs_index + (t - 1) * dim + k * num_states + l];
+                        double contribution = na_obs_cur(k, l) - na_obs_prev(k, l);
+                        if (k == l) {
+                            ++contribution;
+                        }
+                        aj[obs_index + t * dim + j * num_states + l] += prev * contribution;
+                    }
+                }
+            }
+        }
+    }
+
+    // now multiply with the initial distribution
+    for (size_t i = 0; i < num_obs; ++i) {
+        const vector<double>& init_obs = as<vector<double>>(init[i]);
+        size_t obs_index = i * num_unique_event_times * num_states;
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            for (size_t j = 0; j < num_states; ++j) {
+                double init_val = init_obs[j];
+                for (size_t k = 0; k < num_states; ++k) {
+                    result[obs_index + t * num_states + k] += init_val * aj[obs_index * num_states + t * dim + j * num_states + k];
+                }
+            }
+        }
+    }
+    return result;
 }

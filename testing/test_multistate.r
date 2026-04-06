@@ -42,7 +42,7 @@ set.seed(2026)
 
 n <- 100
 X <- runif(n)   # signal
-Y <- rnorm(n)   # noise
+Y <- rbinom(n, 3, 0.2)   # noise
 c <- runif(n, 0, 5)
 
 sim <- list()
@@ -50,8 +50,8 @@ for(i in 1:n){
   rates <- function(j, y, z){jump_rate(j, y, z)/(1+X[i]*y)}
   sim[[i]] <- sim_path(sample(1:2, 1), rates = rates, dists = mark_dist,
                        tn = c[i], bs = c(2*c[i], 3*c[i], 0))
-  sim[[i]]$X <- X[i]
-  sim[[i]]$Y <- Y[i]
+  #sim[[i]]$X <- X[i]
+  #sim[[i]]$Y <- Y[i]
 }
 
 sum(c == unlist(lapply(sim, FUN = function(z){tail(z$times, 1)}))) / n  #0.295
@@ -75,10 +75,15 @@ sim[1]
 #test_unique_event_times(unique_event_times, 0.5)  # looks fine
 # implement as an option
 
-test_data <- data.frame(X1 = X, X2 = Y)
+test_data <- data.frame(X1 = X, X2 = as.character(Y))
+test_data_functions_mm(sim, test_data, c(1, 2))
 fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20, honest = FALSE)
 }
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
+
+# these results do not make sense at the moment! there is a key decomposition computation that needs fixing in Data.cpp
+fitted_tree$ibs
+fitted_tree$ibs.normalised
 
 jftree.predict(fitted_tree)[[1]][1] # Nelson-Aalen
 jftree.predict(fitted_tree)[[2]][1] # initial distribution
@@ -93,6 +98,32 @@ predicted$predictions.init
 occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]])
 lapply(fitted_tree$init, function(z) sum(z))
 lapply(occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]]), function(z) sum(z))
+
+# testing the error metrics on a survival data set (veteran)
+#-------------------------------------------------------------------------------------------------
+{
+devtools::load_all()
+data(veteran, package = "randomForestSRC")
+veteran <- veteran
+veteran$trt <- as.factor(veteran$trt)
+veteran$celltype <- as.factor(veteran$celltype)
+veteran$prior <- as.factor(veteran$prior)
+# convert to multi-state dataset
+jump_data_veteran <- lapply(seq_len(nrow(veteran)), function(i) {
+  if (veteran$status[i] == 1) {
+    list(times = c(0, veteran$time[i]), states = c(1L, 2L))   # important that the states are of type "integer"
+  } else {
+    list(times = c(0, veteran$time[i]), states = c(1L, 1L))
+  }
+})
+
+veteran_features <- veteran[-c(3, 4)]
+test_data_functions_mm(jump_data_veteran, veteran_features, ncol(veteran_features))
+
+veteran_tree_mm <- jftree(MM ~ ., data = jump_data_veteran, feature_data = veteran_features, nsplits = 10, splitrule = "logrank", min_node_size = 10, honest = FALSE)
+}
+# forest testing
+#-------------------------------------------------------------------------------------------------
 
 # fit the forest (takes a couple of minutes when also saving predictions)
 fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 20, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)

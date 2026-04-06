@@ -181,12 +181,14 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 
   // determine the (sorted) unique event times
   vector<double> unique_event_times = uniqueEventTimesMultistate(data->getTimes(), data->getStates());
+  //Rcout << "Computed unique_event_times" << endl;
 
   // if the user has specified a number of event times, thin the vector of unique event times
   if (num_event_times > 0) {
     unique_event_times = thinUniqueEventTimes(unique_event_times, num_event_times);
   }
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
+  //Rcout << "Computed response_event_time_ids" << endl;
 
   // create and grow the multi-state tree
   shared_ptr<vector<double>> unique_event_times_ptr = make_shared<vector<double>>(unique_event_times);
@@ -218,7 +220,9 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   }
 
   tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
+  //Rcout << "Tree initilised" << endl;
   tree->grow();
+  //Rcout << "Tree grown" << endl;
 
   // specific to multi-states
   NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
@@ -227,7 +231,20 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   result["unique.event.times"] = unique_event_times_R;
   result["Tree"] = multistate_tree;               // add the tree (as a pointer, only to be used for prediction in C++)
   JFCppTreePredict(result);                       // compute and save predictions on the data
-  //     // compute and save error estimate (need to come up with something for multi-states)
+  //Rcout << "Computed predictions" << endl;
+
+  // compute and save error estimate (need to come up with something for multi-states)
+  vector<double> state_weights(num_states, 1 / double(num_states));   // just choose default for now, let the user specify later
+  vector<double> censoring_indicators(data->getNumberOfObs(), 0);
+  const vector<uint8_t> censoring_states = data->getCensoringStates();
+  for (size_t i = 0; i < data->getNumberOfObs(); ++i) {
+    if (censoring_states[i] != 0) {
+      censoring_indicators[i] = 1;    // censoring_state is 0 if and only if censoring has not occured
+    }
+  }
+  //Rcout << "About to run JFCppTreeErrorMultistate" << endl;
+  JFCppTreeErrorMultistate(result, data->getTimes(), data->getLastObservedTimes(), censoring_indicators, unique_event_times, response_event_time_ids, state_weights);
+  //Rcout << "Done computing error for multi-state tree" << endl;
 
   // save information about the tree itself
   result["num.nodes"] = tree->getNumberOfNodes();
@@ -512,7 +529,7 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
     predictions_cpp = std::move(combined_predictions.first);
     censoring_cpp = std::move(combined_predictions.second);
   } else {
-    cout << "Computing predictions (no init nor censoring)" << endl;
+    //cout << "Computing predictions (no init nor censoring)" << endl;
     predictions_cpp = tree->computePredictions(new_data);
   }
   //cout << "predictions_cpp:" << endl;
@@ -608,24 +625,37 @@ double JFCppErrorSurvival(const NumericMatrix& predictions, const vector<double>
 
 // Multi-state
 
-// 
-void JFCppTreeErrorMultistate(List& JFTree, const vector<size_t>& last_observed_time_ids, const vector<double>& ind, const vector<double>& unique_event_times,
-                              const vector<size_t>& response_event_time_ids, const vector<double>& state_weights) {
-  /*
+void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& times, const vector<size_t>& last_observed_time_ids, const vector<double>& ind, 
+                              const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& state_weights) {
   // first compute the IPCW weights
-  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFTree["censoring"], {}, last_observed_time_ids);
+  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFTree["censoring"], times, last_observed_time_ids);
+  cout << "Done computing IPCW weights" << endl;
+  printVector(IPCW_weights);
+  cout << "IPCW_weights.size() = " << IPCW_weights.size() << endl;
 
   // compute the status of whether each observation is in each state at the given event times
   MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
-  vector<bool> states_ind = tree->getData()->computeStateIndicators(response_event_time_ids, unique_event_times.size());
-  // compute occupation probabilities
-  vector<double> brier = computeBrierScoreMM(states_ind, IPCW_weights, unique_event_times, occupation_probs, state_weights);
+  vector<bool> states_ind = tree->getData()->computeStateIndicators(response_event_time_ids, unique_event_times);
+  cout << "Done computing states_ind" << endl;
+  printVector(states_ind);  // sceptical here, why so few ones?
+
+  // compute occupation probabilities as a flattened vector (IMPORTANT: Let the user specify whether init should be used!)
+  vector<double> occupation_probabilities = occupationProbabilities(JFTree["predictions"], JFTree["init"], state_weights.size());
+  cout << "Done computing occupation_probabilities" << endl;
+  printVector(occupation_probabilities);
+
+  // compute the integrated Brier score (IBS) and the normalised IBS
+  vector<double> brier = computeBrierScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
+  cout << "Done computing brier" << endl;
   pair<double, double> ibs = computeIBS(brier, unique_event_times, true);
-  
-  
+  cout << "Done computing ibs" << endl;
+
+  // compute the integrated Kullback-Leibler loss and the normalised IKL
+  // add this here when IBS seems to work
+
+  // save all the error metrics in the tree list
   JFTree["ibs"] = ibs.first;
   JFTree["ibs.normalised"] = ibs.second;
-  */
 }
 
 // General function for a new dataset
@@ -1665,6 +1695,11 @@ void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_
   Rcout << "The response event time ids are: ";
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data.getTimes(), data.getStates());
   printVector(response_event_time_ids);
+  vector<bool> state_indicators = data.computeStateIndicators(response_event_time_ids, unique_event_times);
+  Rcout << "The state indicators are: ";
+  printVector(state_indicators);
+  Rcout << "The last observed time ids are: ";
+  printVector(data.getLastObservedTimes());
 
   // some metadata
   Rcout << "Number of observations: " << data.getNumberOfObs() << endl;

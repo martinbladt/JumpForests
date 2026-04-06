@@ -350,6 +350,30 @@ void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matr
     }
 }
 
+// takes a vector of flattened d x d matrices and computes the cumulative sums of these (used for error computation, not fitting)
+// difference is that computations take place in t and not t-
+void cumulativeMatrixSumsNoDelay(vector<size_t>& acc_matrix, const vector<size_t>& matrix, size_t d) {
+    size_t dim = d * d;
+    size_t num_matrices = matrix.size() / dim;
+
+    // initialise the first matrix
+    for (size_t j = 0; j < d; ++j) {
+        for (size_t k = 0; k < d; ++k) {
+            acc_matrix[j * d + k] = 0;  // =  matrix[j * d + k]
+        }
+    }
+    // now update the matrix
+    for (size_t i = 1; i < num_matrices; ++i) {
+        for (size_t j = 0; j < d; ++j) {
+            for (size_t k = 0; k < d; ++k) {
+                // (i - 1) * dim instead of i * dim in matrix because we want t- and not t for the accumulated jumps in the key decomposition for multi-states
+                acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[i * dim + j * d + k];
+                //acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[i * dim + j * d + k];
+            }
+        }
+    }
+}
+
 void printVector(const vector<double>& vec) {
     for (size_t i = 0; i < vec.size() - 1; ++i) {
         Rcout << vec[i] << ", ";

@@ -12,6 +12,7 @@
 #include <Rcpp.h>
 #include <utility>
 #include <cstdint>
+#include "helper.h"
 using namespace Rcpp;
 using namespace std;
 
@@ -130,7 +131,7 @@ struct Data {
   // get the ID based on a feature name
   size_t getFeatureID(const string& variable_name) const;
 
-  vector<bool> computeStateIndicators(const vector<size_t>& response_event_time_ids, size_t num_unique_event_times);
+  vector<bool> computeStateIndicators(const vector<size_t>& response_event_time_ids, const vector<double>& unique_event_times);
 
 private:
   // data

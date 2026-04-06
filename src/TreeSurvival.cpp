@@ -752,9 +752,6 @@ vector<double> computeOutcomes(const vector<double>& predictions, size_t num_uni
 // computes the IPCW weights for each observation and event time (useful if one wants to extend to other error metrics)
 vector<double> computeIPCW(const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
                            const NumericMatrix& KM_cens, const vector<double>& times, const vector<size_t>& last_observed_time_ids) {
-    if (times.empty() && last_observed_time_ids.empty()) {
-        throw("Error: Precisely one of times and last_observed_time_ids must be supplied. The first for survival and the latter for multi-states.");
-    }
     size_t num_obs;
     bool multi_state;
     if (last_observed_time_ids.empty()) {
@@ -768,22 +765,29 @@ vector<double> computeIPCW(const vector<double>& ind, const vector<double>& uniq
     size_t num_unique_event_times = unique_event_times.size();
     vector<double> weights(num_obs * num_unique_event_times, 0);    // result is a flattened vector
 
+    cout << "multi_state = " << multi_state << endl;
+
     for (size_t i = 0; i < num_obs; ++i) {
         // when determining the index for the corresponding unique event time for the given observation,
         // we need to take the id for the last observed time for a multi-state tree/forest
-        size_t index_obs;
+        size_t event_time_index;
+        size_t obs_index;
         if (multi_state) {
-            index_obs = response_event_time_ids[last_observed_time_ids[i]];
+            obs_index = last_observed_time_ids[i];
+            event_time_index = response_event_time_ids[obs_index];
         } else {
-            index_obs = response_event_time_ids[i];
+            obs_index = i;
+            event_time_index = response_event_time_ids[i];
         }
+        //cout << "index_obs = " << index_obs << endl;
+        //cout << "Dimensions of KM_cens: " << KM_cens.nrow() << ", " << KM_cens.ncol() << endl;
         for (size_t j = 0; j < num_unique_event_times; ++j) {
-            if (times[i] <= unique_event_times[j] && ind[i] == 1) {
-               if (KM_cens(i, index_obs) > 0) {
-                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, index_obs));   // possibly index - 1 here, check!
+            if (times[obs_index] <= unique_event_times[j] && ind[i] == 1) {
+               if (KM_cens(i, event_time_index) > 0) {
+                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, event_time_index));   // possibly index - 1 here, check!
                }
             }
-            else if (times[i] > unique_event_times[j]) {
+            else if (times[obs_index] > unique_event_times[j]) {
                 if (KM_cens(i, j) > 0) {
                     weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, j));
                 }
@@ -900,7 +904,7 @@ pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& 
         }
         // now compute the IBS via the trapezoidal rule
         for (size_t t = 1; t < num_unique_event_times; ++t) {
-            ibs += (state_contributions[t] - state_contributions[t - 1]) * (unique_event_times[t] - unique_event_times[t - 1]) / 2;
+            ibs += (state_contributions[t] + state_contributions[t - 1]) * (unique_event_times[t] - unique_event_times[t - 1]) / 2;
         }
     }
     return {ibs, ibs / unique_event_times.back()};
@@ -972,16 +976,12 @@ vector<double> KaplanMeier(const vector<double>& na, size_t num_estimators) {
     vector<double> KM = vector<double>(na.size(), 1);
 
     for (size_t i = 0; i < num_estimators; ++i) {
+        // compute using the recursion given by the product integral
         for (size_t j = 1; j < stride_length; ++j) {
             size_t index = i * stride_length + j;
             KM[index] = KM[index - 1] * (1 - (na[index] - na[index - 1]));
         }
     }
-
-    // compute using the recursion given by the product integral
-    //for (size_t i = 1; i < na.size(); ++i) {
-    //    KM[i] = KM[i - 1] * (1 - (na[i] - na[i - 1]));
-    //}
     return KM;
 }
 

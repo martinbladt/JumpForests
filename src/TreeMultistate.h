@@ -39,8 +39,6 @@ public:
   pair<vector<double>, vector<double>> computePredictedInitialDistributions(const Data& new_data);
   pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
   vector<vector<double>> computeAllPredictions(const Data& new_data);
-  vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
-                                   const List& occupation_probs, const vector<double>& state_weights);
 
   // VIMP prediction for multi-state trees (to be investigated)
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng);
@@ -100,8 +98,17 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
 // maybe the function below will never be used (the corresponding function for survival is deprecated)
 //vector<double> computeUniqueEventTimes(const vector<double>& times);
 
-// need functions for error computation
+// error computations for multi-states
+
+vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                                   const List& occupation_probs, const vector<double>& state_weights);
+vector<double> computeBrierScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times, 
+                                      const vector<double>& occupation_probs, const vector<double>& state_weights);
+
+// miscellaneous functions related to multi-states
 
 vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states);
+vector<double> occupationProbabilitiesCpp(const vector<double>& na, const vector<double>& init, size_t num_states, size_t num_estimators);
+vector<double> occupationProbabilities(const List& na, const List& init, size_t num_states);
 
 #endif // TREE_MULTISTATE_H

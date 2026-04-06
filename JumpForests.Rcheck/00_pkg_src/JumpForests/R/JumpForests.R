@@ -694,6 +694,11 @@ test_data_functions <- function(data, response_indices, feature_indices) {
 }
 
 test_data_functions_mm <- function(jump_data, feature_data, feature_indices) {
+  # ensure that the states in jump_data are integers
+  jump_data <- lapply(jump_data, function(z) {
+    z$states <- as.integer(z$states)
+    z
+  })
   processed_data <- preprocess_data(feature_data)
   feature_indices <- feature_indices - 1
   max_response_length <- max(sapply(jump_data, function(e) length(e$states)))

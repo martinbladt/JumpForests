@@ -216,10 +216,86 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
 
 /*
 
-Computes a vector of bools indicating whether observation i at unique event time t is in state j
+Computes a vector of bools indicating whether observation i at unique event time t is observed to be in state j
 Used for computing the Brier and KL scores for multi-state trees and forests only
 
 */
+
+vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_time_ids, const vector<double>& unique_event_times) {
+    // initialise vectors of number of jumps and at risk
+    size_t dim = num_states * num_states;
+    size_t num_unique_event_times = unique_event_times.size();
+    vector<bool> result(num_obs * num_unique_event_times * num_states);
+    vector<size_t> jumps(num_unique_event_times * dim);
+    vector<size_t> at_risk(num_unique_event_times * num_states);
+    vector<size_t> jumps_acc(num_unique_event_times * dim);
+    vector<size_t> censoring_contribution(num_unique_event_times * num_states);
+
+    // all quantities are computed at the observation level
+    for (size_t i = 0; i < num_obs; ++i) {
+        // reassign all temporary quantities
+        jumps.assign(num_unique_event_times * dim, 0);
+        at_risk.assign(num_unique_event_times * num_states, 0);
+        //jumps_acc.assign(num_unique_event_times * dim, 0);    // already done in cumulativeMatrixSums
+        censoring_contribution.assign(num_unique_event_times * num_states, 0);
+    
+        // first compute starting state for current observation
+        ++at_risk[states[i * max_response_length] - 1];
+
+        // compute censoring contribution for current observation
+        uint8_t censoring_state = censoring_states[i];
+        if (censoring_state != 0) {
+            double R = times[last_observed_times[i]];
+            for (size_t t = 0; t < num_unique_event_times; ++t) {
+                if (unique_event_times[t] > R) {
+                    for (size_t s = t; s < num_unique_event_times; ++s) {
+                        ++censoring_contribution[s * num_states + censoring_state - 1];
+                    }
+                    break;
+                }
+            }
+        }
+        // now compute the accumulated number of jumps for current observation
+        size_t j = 1;
+        size_t index = i * max_response_length + j;
+        // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
+        while (j < max_response_length && states[index] != 0) {
+            size_t id = response_event_time_ids[index];
+            int current_state_index = states[index] - 1;    // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
+            int prev_state_index = states[index - 1] - 1;
+            if (current_state_index != prev_state_index) {
+                ++jumps[id * dim + prev_state_index * num_states + current_state_index];
+            }
+            ++j;
+            ++index;
+        }
+
+        cumulativeMatrixSumsNoDelay(jumps_acc, jumps, num_states);
+
+        // now compute number at risk via the key decomposition
+        for (size_t t = 1; t < num_unique_event_times; ++t) {   // already computed for t = 0 above
+            vector<int> jump_contributions = columnSums(subtractMatrices(jumps_acc, j * dim, (j + 1) * dim - 1, transpose(jumps_acc, j * dim, (j + 1) * dim - 1)), static_cast<size_t>(num_states));
+            for (size_t j = 0; j < num_states; ++j) {
+                at_risk[t * num_states + j] = at_risk[j] - censoring_contribution[t * num_states + j] + jump_contributions[j];
+            }
+        }
+
+        // for debugging purposes
+        cout << "at_risk for observation " << i << ":" << endl;
+        printVector(at_risk);
+
+        // now update the bool vector result
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            for (size_t j = 0; j < num_states; ++j) {
+                size_t at_risk_index = t * num_states + j;
+                result[i * num_unique_event_times * num_states + at_risk_index] = (bool) at_risk[at_risk_index];
+            }
+        }
+    }
+    return result;
+}
+
+/*
 vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_time_ids, size_t num_unique_event_times) {
     vector<bool> result(num_obs * num_unique_event_times * num_states);
     for (size_t i = 0; i < num_obs; ++i) {
@@ -227,7 +303,7 @@ vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_t
             // remember that the observations are ordered in flattened vectors of num_obs strides of length max_response_length
             for (size_t k = 0; k < max_response_length; ++k) {
                 size_t current_obs_index = i * max_response_length + k;
-                // recall that states are always denoted 1, 2, ..., num_states (0 indicates padding )
+                // recall that states are always denoted 1, 2, ..., num_states (0 indicates padding)
                 if (states[current_obs_index] == j + 1) {
                     result[i * num_unique_event_times * num_states + response_event_time_ids[current_obs_index] * num_states + j] = true;
                 }
@@ -236,3 +312,4 @@ vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_t
     }
     return result;
 }
+*/
