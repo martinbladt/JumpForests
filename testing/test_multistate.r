@@ -42,7 +42,8 @@ set.seed(2026)
 
 n <- 100
 X <- runif(n)   # signal
-Y <- rbinom(n, 3, 0.2)   # noise
+Y <- rnorm(n)
+#Y <- rbinom(n, 3, 0.2)   # noise
 c <- runif(n, 0, 5)
 
 sim <- list()
@@ -104,7 +105,6 @@ lapply(occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$prediction
 {
 devtools::load_all()
 data(veteran, package = "randomForestSRC")
-veteran <- veteran
 veteran$trt <- as.factor(veteran$trt)
 veteran$celltype <- as.factor(veteran$celltype)
 veteran$prior <- as.factor(veteran$prior)
@@ -120,8 +120,114 @@ jump_data_veteran <- lapply(seq_len(nrow(veteran)), function(i) {
 veteran_features <- veteran[-c(3, 4)]
 test_data_functions_mm(jump_data_veteran, veteran_features, ncol(veteran_features))
 
-veteran_tree_mm <- jftree(MM ~ ., data = jump_data_veteran, feature_data = veteran_features, nsplits = 10, splitrule = "logrank", min_node_size = 10, honest = FALSE)
+veteran_tree_mm <- jftree(MM ~ ., data = jump_data_veteran, seed = 2026, feature_data = veteran_features, nsplits = 10, splitrule = "logrank", min_node_size = 10, honest = FALSE)
+veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2026, min_node_size = 10, honest = FALSE)
+
+veteran_tree_mm$ibs             # 90.56269
+veteran_tree$ibs                # 54.02095  # big difference, investigate (maybe the at risk convention when computing the KM estimator for censoring?)
+veteran_tree_mm$ibs.normalised  # 0.09065334
+veteran_tree$ibs.normalised     # 0.05407503
+
+# equals 999, the last event time (as it should)
+90.56269/0.09065334
+54.02095/0.05407503
+tail(veteran_tree_mm$unique.event.times)
+tail(veteran_tree$unique.event.times)
+
+# a little difference, but censoring is also extremely light for this dataset
+veteran_tree_mm$censoring[1, ]
+veteran_tree$censoring[1, ]
+veteran_tree_mm$censoring[2, ]
+veteran_tree$censoring[2, ]
+veteran_tree_mm$censoring[5, ]
+veteran_tree$censoring[5, ]
+
+veteran_tree_mm$init  # why are these not all c(1, 0) when honest == FALSE? (major problem)
 }
+
+# more comparisons to survival using simulated data
+#-------------------------------------------------------------------------------------------------
+
+# plan for 8/6 and beyond
+# 1) Fix initial value estimation (see veteran above), empirical studies show that this is very likely where the difference
+#    in errors come from (big issue!)
+# 2) For moderate to heavy censoring, the KM estimators for censoring are quite different when using multi-state trees instead
+#    of survival trees
+# 3) Related to 2), inconsistent computation of KM, for survival we subtract the number of deaths, but we don't subtract the
+#    total number of jumps for multi-states
+# 4) Allow the user to input an initial distribution for multi-state error computation
+# 5) (Optional) Reconsider removing the 'censored only' event times. This is more natural. What went wrong with the error computation?
+# 6) Test errors against competing risks in randomForestSRC
+# 7) Write prediction functions for multi-state random forests (not just single trees)
+# 8) Extend error computations to whole forests
+
+devtools::load_all()
+library(randomForestSRC)
+set.seed(2026)
+n <- 1000
+X <- runif(n)
+Y <- rnorm(n)                 # noise
+Z <- 10 + rexp(n, 1/(2 + X))  # true survival time
+R <- runif(n, 12, 20)         # censoring times
+W <- pmin(Z, R)               # observed times
+delta <- as.numeric(Z <= R)   # status indicators
+1 - sum(delta)/n              # censoring rate
+
+sim_data <- data.frame(time = W, status = delta, X1 = X, X2 = Y)
+#test_data_functions(sim_data, c(1,2), c(3,4))
+
+jump_data <- lapply(seq_len(nrow(sim_data)), function(i) {
+  if (sim_data$status[i] == 1) {
+    list(times = c(0, sim_data$time[i]), states = c(1L, 2L))   # important that the states are of type "integer"
+  } else {
+    list(times = c(0, sim_data$time[i]), states = c(1L, 1L))
+  }
+})
+
+tree_survival <- jftree(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = FALSE)
+tree_mm <- jftree(MM ~ ., data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, honest = FALSE)
+
+jftree.error(tree_survival) # IBS: 1.071071, normalised IBS: 0.05384817
+tree_mm$ibs                 # IBS: 0.9889692
+tree_mm$ibs.normalised      # normalised IBS: 0.05340845
+
+18.51709  # last unique event time for the multi-state tree (total times: 858)
+19.89058  # last unique event time for the survival tree (total times: 1000)
+# reason for the difference: we do not remove the times that are censored (we used to, but I 'removed' this feature, something to do with censoring KM estimation)
+
+unlist(lapply(tree_mm$init, function(z) sum(z)))  # hmmmm, works as intended here, so why not for veteran?
+
+tree_mm$censoring[1,]
+tree_survival$censoring[1,] # extreme difference for the first observation
+tree_mm$censoring[2,]
+tree_survival$censoring[2,]
+tree_mm$censoring[3,]
+tree_survival$censoring[3,] # pretty big difference
+tree_mm$censoring[4,]
+tree_survival$censoring[4,] # zero???
+tree_mm$censoring[5,]
+tree_survival$censoring[5,] # again zero
+
+# may need to do some investigating here, but other matters are more pressing
+
+# just a bonus comparison with randomForestSRC
+
+forest_survival <- jfforest(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = TRUE)
+forest_survival_src <- rfsrc(Surv(time, status) ~ ., data = sim_data)
+
+print_forest(forest_survival) # C-error: 0.4609178, IBS: 1.187464, normalised IBS: 0.05969983
+forest_survival_src           # C-error: 0.46226363, IBS: 1.20540655, normalised IBS: 0.06509696
+
+# our survival forest provides significantly lower errors with honesty! C-error: 0.403807, IBS: 1.070356, normalised IBS: 0.0538122
+# (just a bonus observation, important to investigate the effect of honesty somewhere, maybe a direct consequence of much larger OOB sample...)
+
+# regain memory
+rm('forest_survival', 'forest_survival_src')
+gc()
+
+# reminder: should also compare to competing risks
+#-------------------------------------------------------------------------------------------------
+
 # forest testing
 #-------------------------------------------------------------------------------------------------
 

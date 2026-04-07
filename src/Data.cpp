@@ -247,7 +247,8 @@ vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_t
         if (censoring_state != 0) {
             double R = times[last_observed_times[i]];
             for (size_t t = 0; t < num_unique_event_times; ++t) {
-                if (unique_event_times[t] > R) {
+                if (unique_event_times[t] >= R) {
+                    // all following event times also satisfy >= R
                     for (size_t s = t; s < num_unique_event_times; ++s) {
                         ++censoring_contribution[s * num_states + censoring_state - 1];
                     }
@@ -255,9 +256,11 @@ vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_t
                 }
             }
         }
+        //cout << "Censoring contribution for observation " << i << ":" << endl;
+        //printVector(censoring_contribution);  // works as it should
         // now compute the accumulated number of jumps for current observation
         size_t j = 1;
-        size_t index = i * max_response_length + j;
+        size_t index = i * max_response_length + 1;
         // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
         while (j < max_response_length && states[index] != 0) {
             size_t id = response_event_time_ids[index];
@@ -270,19 +273,24 @@ vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_t
             ++index;
         }
 
+        // no delay means that we compute in t and not t-
         cumulativeMatrixSumsNoDelay(jumps_acc, jumps, num_states);
+        //cout << "jumps = ";
+        //printVector(jumps, dim);      // works fine
+        //cout << "jumps_acc = ";
+        //printVector(jumps_acc, dim);  // works fine
 
         // now compute number at risk via the key decomposition
         for (size_t t = 1; t < num_unique_event_times; ++t) {   // already computed for t = 0 above
-            vector<int> jump_contributions = columnSums(subtractMatrices(jumps_acc, j * dim, (j + 1) * dim - 1, transpose(jumps_acc, j * dim, (j + 1) * dim - 1)), static_cast<size_t>(num_states));
+            vector<int> jump_contributions = columnSums(subtractMatrices(jumps_acc, t * dim, (t + 1) * dim - 1, transpose(jumps_acc, t * dim, (t + 1) * dim - 1)), static_cast<size_t>(num_states));
             for (size_t j = 0; j < num_states; ++j) {
                 at_risk[t * num_states + j] = at_risk[j] - censoring_contribution[t * num_states + j] + jump_contributions[j];
             }
         }
 
         // for debugging purposes
-        cout << "at_risk for observation " << i << ":" << endl;
-        printVector(at_risk);
+        //cout << "at_risk for observation " << i << ":" << endl;
+        //printVector(at_risk);
 
         // now update the bool vector result
         for (size_t t = 0; t < num_unique_event_times; ++t) {

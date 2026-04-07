@@ -359,15 +359,15 @@ void cumulativeMatrixSumsNoDelay(vector<size_t>& acc_matrix, const vector<size_t
     // initialise the first matrix
     for (size_t j = 0; j < d; ++j) {
         for (size_t k = 0; k < d; ++k) {
-            acc_matrix[j * d + k] = 0;  // =  matrix[j * d + k]
+            acc_matrix[j * d + k] =  matrix[j * d + k]; // = 0 originally
         }
     }
     // now update the matrix
     for (size_t i = 1; i < num_matrices; ++i) {
         for (size_t j = 0; j < d; ++j) {
             for (size_t k = 0; k < d; ++k) {
-                // (i - 1) * dim instead of i * dim in matrix because we want t- and not t for the accumulated jumps in the key decomposition for multi-states
-                acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[i * dim + j * d + k];
+                size_t index = i * dim + j * d + k;
+                acc_matrix[index] = acc_matrix[index - dim] + matrix[index];
                 //acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[i * dim + j * d + k];
             }
         }

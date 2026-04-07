@@ -629,26 +629,26 @@ void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& times, const v
                               const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& state_weights) {
   // first compute the IPCW weights
   vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFTree["censoring"], times, last_observed_time_ids);
-  cout << "Done computing IPCW weights" << endl;
-  printVector(IPCW_weights);
-  cout << "IPCW_weights.size() = " << IPCW_weights.size() << endl;
+  //cout << "Done computing IPCW weights" << endl;
+  //printVector(IPCW_weights);
+  //cout << "IPCW_weights.size() = " << IPCW_weights.size() << endl;
 
   // compute the status of whether each observation is in each state at the given event times
   MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
   vector<bool> states_ind = tree->getData()->computeStateIndicators(response_event_time_ids, unique_event_times);
-  cout << "Done computing states_ind" << endl;
-  printVector(states_ind);  // sceptical here, why so few ones?
+  //cout << "Done computing states_ind" << endl;
+  //printVector(states_ind);  // sceptical here, why so few ones?
 
   // compute occupation probabilities as a flattened vector (IMPORTANT: Let the user specify whether init should be used!)
   vector<double> occupation_probabilities = occupationProbabilities(JFTree["predictions"], JFTree["init"], state_weights.size());
-  cout << "Done computing occupation_probabilities" << endl;
-  printVector(occupation_probabilities);
+  //cout << "Done computing occupation_probabilities" << endl;
+  //printVector(occupation_probabilities);
 
   // compute the integrated Brier score (IBS) and the normalised IBS
   vector<double> brier = computeBrierScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
-  cout << "Done computing brier" << endl;
+  //cout << "Done computing brier" << endl;
   pair<double, double> ibs = computeIBS(brier, unique_event_times, true);
-  cout << "Done computing ibs" << endl;
+  //cout << "Done computing ibs" << endl;
 
   // compute the integrated Kullback-Leibler loss and the normalised IKL
   // add this here when IBS seems to work

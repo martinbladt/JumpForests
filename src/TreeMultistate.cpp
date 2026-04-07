@@ -639,17 +639,17 @@ bool MultistateTree::createSplit(size_t node_index) {
     for (size_t i : sampled_features) {
         if (data->getCategorical()[i]) {
             // finds the best split and constructs the indices of the best left and right node
-            cout << "About to call bestSplitCategorical" << endl;
+            //cout << "About to call bestSplitCategorical" << endl;
             bestSplitCategorical(node_index, i, best_split_val, best_feature, best_threshold, best_left_indices, best_right_indices);
         }
         else {
             // does not return the best indices, so this has to be done later
-            cout << "About to call bestSplitContinuous" << endl;
+            //cout << "About to call bestSplitContinuous" << endl;
             bestSplitContinuous(node_index, i, best_split_val, best_feature, best_threshold);
         }
     }
 
-    Rcout << "best_split_val = " << best_split_val << endl;
+    // cout << "best_split_val = " << best_split_val << endl;
 
     // if no best split is found, make the node a leaf
     if (best_split_val < 0) {
@@ -730,10 +730,10 @@ void MultistateTree::computeInitialDist(size_t node_index) {
     } else {
         num_obs = node_obs[node_index].size();
     }
-    size_t total_num_at_risk = 0;
+    //size_t total_num_at_risk = 0;
     for (size_t j = 0; j < num_states; ++j) {
         init_dist[j] = (double) num_at_risk[j] / num_obs;
-        total_num_at_risk += num_at_risk[j];
+        //total_num_at_risk += num_at_risk[j];
     }
     //cout << "Total number at risk: " << total_num_at_risk << ", total obs in node: " << num_obs << endl;
     this->init_dist.push_back(std::move(init_dist));
@@ -787,8 +787,9 @@ void MultistateTree::computeNA(size_t node_index) {
             na[index + j] = diag;
         }
     }
-    Rcout << "Nelson-Aalen estimator in terminal node " << node_index << endl;
-    printVector(na);
+    // only for debugging
+    //Rcout << "Nelson-Aalen estimator in terminal node " << node_index << endl;
+    //printVector(na);
     this->na.push_back(std::move(na));
 }
 
@@ -840,20 +841,20 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
     for (auto jump : valid_jumps) {
         uint8_t j = jump.first - 1;
         uint8_t k = jump.second - 1;
-        cout << "Considering jump (" << static_cast<size_t>(j) << "," << static_cast<size_t>(k) << ")" << endl;
+        //cout << "Considering jump (" << static_cast<size_t>(j) << "," << static_cast<size_t>(k) << ")" << endl;
         double sum_num = 0;
         double sum_den = 0;
         size_t jump_index = split_id * num_unique_event_times * dim;
         size_t at_risk_index = split_id * num_unique_event_times * num_states;
-        cout << "num_unique_event_times = " << num_unique_event_times << endl;
-        cout << "num_jumps.size() = " << num_jumps.size() << ", num_jumps_daughter.size() = " << num_jumps_daughter.size() << ", num_at_risk.size() = " << num_at_risk.size() << ", num_at_risk_daughter.size() = " << num_at_risk_daughter.size() << endl;
+        //cout << "num_unique_event_times = " << num_unique_event_times << endl;
+        //cout << "num_jumps.size() = " << num_jumps.size() << ", num_jumps_daughter.size() = " << num_jumps_daughter.size() << ", num_at_risk.size() = " << num_at_risk.size() << ", num_at_risk_daughter.size() = " << num_at_risk_daughter.size() << endl;
         for (size_t i = 0; i < num_unique_event_times; ++i) {
-            cout << "Corresponding indices: " << i * dim + j * num_states + k << ", " << jump_index + i * dim + j * num_states + k << ", " << i * num_states + j << ", " << at_risk_index + i * num_states + j << endl;
+            //cout << "Corresponding indices: " << i * dim + j * num_states + k << ", " << jump_index + i * dim + j * num_states + k << ", " << i * num_states + j << ", " << at_risk_index + i * num_states + j << endl;
             const double d = (double) num_jumps[i * dim + j * num_states + k];
             const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
             const double Y = (double) num_at_risk[i * num_states + j];
             const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
-            cout << "Fetched quantities for event time " << i << endl;
+            //cout << "Fetched quantities for event time " << i << endl;
             
             // temporary for debugging
             if (Y < Y1) {
@@ -875,7 +876,7 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<siz
                 sum_num += d1 - d * at_risk_frac;
                 sum_den += d * at_risk_frac * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
             }
-            cout << "Done updating sum_num and sum_den for event time " << i << endl;
+            //cout << "Done updating sum_num and sum_den for event time " << i << endl;
         }
 
         // update the final log-rank statistic

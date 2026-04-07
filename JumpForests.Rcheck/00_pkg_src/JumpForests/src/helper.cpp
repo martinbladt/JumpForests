@@ -269,8 +269,9 @@ void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matr
     for (size_t i = 1; i < num_matrices; ++i) {
         for (size_t j = 0; j < d; ++j) {
             for (size_t k = 0; k < d; ++k) {
+                size_t index = (i - 1) * dim + j * d + k;
                 // (i - 1) * dim instead of i * dim in matrix because we want t- and not t for the accumulated jumps in the key decomposition for multi-states
-                acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[(i - 1) * dim + j * d + k];
+                acc_matrix[index + dim] = acc_matrix[index] + matrix[index];
                 //acc_matrix[i * dim + j * d + k] = acc_matrix[(i - 1) * dim + j * d + k] + matrix[i * dim + j * d + k];
             }
         }
