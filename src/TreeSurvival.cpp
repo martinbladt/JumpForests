@@ -577,6 +577,17 @@ double SurvivalTree::logRank(const vector<size_t>& num_deaths, const vector<size
         const double Y = (double) num_at_risk[i];
         const double Y1 = (double) num_at_risk_daughter[array_index + i];
 
+        // temporary for debugging
+        if (Y < Y1) {
+            Rcout << "Warning: Y = " << Y << " < Y1 = " << Y1 << endl; 
+        }
+        if (d > Y) {
+            Rcout << "Warning: Number of jumps d = " << d << ", but Y = " << Y << " at event time i = " << i << endl;
+        }
+        if (d1 > Y1) {
+            Rcout << "Warning: Number of jumps d1 = " << d1 << ", but Y1 = " << Y1 << " at event time i = " << i << endl;
+        }
+
         // prevent division by zero in the log-rank test
         if (Y < 2 || Y1 < 1) {
             break;  // since the event times are ordered, all subsequent numbers at risk will also be too small

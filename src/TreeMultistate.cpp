@@ -25,7 +25,7 @@ MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, sh
 // functions for growing multi-state trees
 //--------------------------------------------------------------------------------------
 
-void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& at_risk, vector<size_t>& jumps) {
+void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& jumps, vector<size_t>& at_risk) {
     // fetch states and other relevant data quantities
     const vector<double>& times = data->getTimes();
     const vector<uint8_t>& states = data->getStates();
@@ -39,8 +39,8 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     uint8_t dim = num_states * num_states;
     
     // initialise vectors of number of jumps and at risk
-    num_jumps.assign(num_unique_event_times * dim, 0);
-    num_at_risk.assign(num_unique_event_times * num_states, 0);
+    jumps.assign(num_unique_event_times * dim, 0);
+    at_risk.assign(num_unique_event_times * num_states, 0);
     censoring_contribution.assign(num_unique_event_times * num_states, 0);
     // all temporary quantities used for the key decomposition
     //vector<size_t> censoring_contribution(num_unique_event_times * num_states, 0);
@@ -52,7 +52,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     for (size_t i : indices) {
         //Rcout << "Index " << i << endl;
         // initial rates I0
-        ++num_at_risk[states[i * max_response_length] - 1];
+        ++at_risk[states[i * max_response_length] - 1];
         //Rcout << "Updated I0" << endl;
 
         // compute the censoring contribution C
@@ -86,7 +86,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
             int current_state_index = states[index] - 1;     // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
             int prev_state_index = states[index - 1] - 1;
             if (current_state_index != prev_state_index) {
-                ++num_jumps[id * dim + prev_state_index * num_states + current_state_index];
+                ++jumps[id * dim + prev_state_index * num_states + current_state_index];
                 //num_jumps_acc[id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc[(id - 1) * dim + prev_state_index * num_states + current_state_index] + 1;
             } 
             /*
@@ -100,7 +100,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         //Rcout << "Finished computing jumps for index " << i << endl;
     }
     // compute the cumulative number of jumps
-    cumulativeMatrixSums(num_jumps_acc, num_jumps, num_states);
+    cumulativeMatrixSums(num_jumps_acc, jumps, num_states);
 
     // now compute number at risk via the key decomposition
     for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above
@@ -109,10 +109,10 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         for (size_t k = 0; k < num_states; ++k) {
             // key decomposition
             // for debugging thinning
-            //if ((int) num_at_risk[k] - (int) censoring_contribution[j * num_states + k] + (int) jump_contributions[k] < 0) {
-            //    cout << "Warning: Key decomposition negative, causing underflow in num_at_risk" << endl;
+            //if ((int) at_risk[k] - (int) censoring_contribution[j * num_states + k] + (int) jump_contributions[k] < 0) {
+            //    cout << "Warning: Key decomposition negative, causing underflow in at_risk" << endl;
             //}
-            num_at_risk[j * num_states + k] = num_at_risk[k] - censoring_contribution[j * num_states + k] + jump_contributions[k];
+            at_risk[j * num_states + k] = at_risk[k] - censoring_contribution[j * num_states + k] + jump_contributions[k];
         }
     }
     
@@ -121,7 +121,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     Rcout << "Number of jumps: " << endl;
     printVector(num_jumps, dim);
     Rcout << "Numbers at risk: " << endl;
-    printVector(num_at_risk, num_states);
+    printVector(at_risk, num_states);
     Rcout << "Computed num_jumps_acc:" << endl;
     printVector(num_jumps_acc, dim);
     Rcout << "Censoring contribution:" << endl;
@@ -132,7 +132,7 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     /*
     size_t total_number_at_risk = 0;
     for (size_t j = 0; j < data->getNumberOfStates(); ++j) {
-        total_number_at_risk += num_at_risk[j];
+        total_number_at_risk += at_risk[j];
     }
     cout << "Total initial number at risk in computeMultistateQuantities: " << total_number_at_risk << endl;
     cout << "Total initial number of observations in computeMultistateQuantities: " << indices.size() << endl;
@@ -452,7 +452,9 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
 
         // choose splitrule
         if (splitrule == "logrank") {
+            //cout << "Computing log-rank splitting value in bestSplitContinuous" << endl;
             split_val = logRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
+            //cout << "Done computing log-rank splitting value in bestSplitContinuous, split_val = " << split_val << endl;
         }
         if (splitrule == "gehan") {
             split_val = Gehan(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
@@ -523,9 +525,9 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
         double split_val;
         // choose splitrule
         if (splitrule == "logrank") {
-            cout << "Computing log-rank splitting value in bestSplitCategorical" << endl;
+            //cout << "Computing log-rank splitting value in bestSplitCategorical" << endl;
             split_val = logRank(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
-            cout << "Done computing log-rank splitting value in bestSplitCategorical" << endl;
+            //cout << "Done computing log-rank splitting value in bestSplitCategorical, split_val = " << split_val << endl;
         }
         if (splitrule == "gehan") {
             split_val = Gehan(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
@@ -589,14 +591,14 @@ bool MultistateTree::createSplit(size_t node_index) {
         }
 
         // for debugging purposes
-        /*
+        
         size_t total_number_at_risk = 0;
         for (size_t j = 0; j < data->getNumberOfStates(); ++j) {
             total_number_at_risk += num_at_risk[j];
         }
-        cout << "Total initial number at risk in createSplit (making leaf): " << total_number_at_risk << endl;
-        cout << "Total initial number of observations in createSplit (making leaf): " << current_node_obs.size() << endl;
-        */
+        //cout << "Total initial number at risk in createSplit (making leaf): " << total_number_at_risk << endl;
+        //cout << "Total number of observations in createSplit (making leaf): " << current_node_obs.size() << endl;
+        
 
         makeLeaf(node_index);
         return true;
@@ -604,7 +606,10 @@ bool MultistateTree::createSplit(size_t node_index) {
 
     //Rcout << "Computing multi-state quantities in node (not leaf)" << endl;
     computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);   // update parent multi-state info
-
+    //cout << "num_at_risk in parent node:" << endl;
+    //printVector(num_at_risk);
+    //cout << "num_jumps in parent node:" << endl;
+    //printVector(num_jumps);
     // for debugging purposes
     /*
     size_t total_number_at_risk = 0;
@@ -732,6 +737,7 @@ void MultistateTree::computeInitialDist(size_t node_index) {
     }
     //size_t total_num_at_risk = 0;
     for (size_t j = 0; j < num_states; ++j) {
+        //cout << "num_at_risk initially in state " << j << ": " << num_at_risk[j] << endl;
         init_dist[j] = (double) num_at_risk[j] / num_obs;
         //total_num_at_risk += num_at_risk[j];
     }
@@ -805,7 +811,8 @@ void MultistateTree::computeCensoringKM() {
     // compute total censoring and at risk contributions across states (integrator and 1/integrand of the NA estimator for censoring, respectively)
     vector<size_t> censoring_contribution_total = sum_vectors(censoring_contribution, num_unique_event_times);
     vector<size_t> num_at_risk_total = sum_vectors(num_at_risk, num_unique_event_times);
-    
+    vector<size_t> num_jumps_total = sum_vectors(num_jumps, num_unique_event_times);
+
     // possibly relevant for future debugging
     /*
     cout << "num_at_risk_total has length " << num_at_risk_total.size() << endl;
@@ -819,7 +826,7 @@ void MultistateTree::computeCensoringKM() {
     for (size_t i = 1; i < num_unique_event_times; ++i) {
         if (num_at_risk_total[i - 1] > 0) {
             jump_size = censoring_contribution_total[i] - censoring_contribution_total[i - 1];
-            KM_censoring[i] = KM_censoring[i - 1] * (1 - jump_size / double(num_at_risk_total[i - 1]));
+            KM_censoring[i] = KM_censoring[i - 1] * (1 - jump_size / double(num_at_risk_total[i - 1] - num_jumps_total[i - 1]));
         } else {
             KM_censoring[i] = KM_censoring[i - 1];
         }

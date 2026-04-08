@@ -1007,8 +1007,12 @@ void JFCppForestPredict(List& JFForest) {
   if (type == "Multi-state") {
     // compute predictions via multi-threading
     MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
-    const pair<vector<double>, vector<double>>& predictions_cpp = forest->computePredictions();
-    const pair<vector<double>, vector<double>>& predictions_init_cpp = forest->computePredictedInitialDistributions();
+
+    const vector<vector<double>>& predictions_cpp = forest->computePredictions(true, false);
+
+    // old computation
+    //const pair<vector<double>, vector<double>>& predictions_cpp = forest->computePredictions();
+    //const pair<vector<double>, vector<double>>& predictions_init_cpp = forest->computePredictedInitialDistributions();
 
     size_t num_unique_event_times = forest->getNumUniqueEventTimes();
     size_t num_obs = JFForest["num.obs"];
@@ -1027,8 +1031,10 @@ void JFCppForestPredict(List& JFForest) {
         NumericMatrix pred_time_oob(num_states, num_states);
         for (size_t j = 0; j < num_states; ++j) {
           for (size_t k = 0; k < num_states; ++k) {
-            pred_time(j, k) = predictions_cpp.first[i * num_unique_event_times * dim + t * dim + j * num_states + k];
-            pred_time_oob(j, k) = predictions_cpp.second[i * num_unique_event_times * dim + t * dim + j * num_states + k];
+            pred_time(j, k) = predictions_cpp[0][i * num_unique_event_times * dim + t * dim + j * num_states + k];
+            pred_time_oob(j, k) = predictions_cpp[1][i * num_unique_event_times * dim + t * dim + j * num_states + k];
+            //pred_time(j, k) = predictions_cpp.first[i * num_unique_event_times * dim + t * dim + j * num_states + k];
+            //pred_time_oob(j, k) = predictions_cpp.second[i * num_unique_event_times * dim + t * dim + j * num_states + k];
           }
         }
         rpred[t] = pred_time;
@@ -1043,8 +1049,10 @@ void JFCppForestPredict(List& JFForest) {
 
       // save predicted initial distributions
       for (size_t j = 0; j < num_states; ++j) {
-        rpred_init[j] = predictions_init_cpp.first[i * num_states + j];
-        rpred_init_oob[j] = predictions_init_cpp.second[i * num_states + j];
+        rpred_init[j] = predictions_cpp[2][i * num_states + j];
+        rpred_init_oob[j] = predictions_cpp[3][i * num_states + j];
+        //rpred_init[j] = predictions_init_cpp.first[i * num_states + j];
+        //rpred_init_oob[j] = predictions_init_cpp.second[i * num_states + j];
       }
       predictions_init[i] = rpred_init;
       predictions_init_oob[i] = rpred_init_oob;

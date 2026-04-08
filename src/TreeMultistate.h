@@ -63,7 +63,7 @@ private:
   vector<size_t> censoring_contribution;        // censoring contribution for each state at each unique event time (used in key decomposition)
 
   // growing multi-state trees
-  void computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& at_risk, vector<size_t>& jumps); // computes the number at risk and the number of jumps at the unique_event_times
+  void computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& jumps, vector<size_t>& at_risk); // computes the number at risk and the number of jumps at the unique_event_times
   void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
   bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
   void computeInitialDist(size_t node_index);                     // computes the initial distribution in a terminal node

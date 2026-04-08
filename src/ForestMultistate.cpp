@@ -113,6 +113,132 @@ vector<double> MultistateForest::predict(const vector<double>& x) {
     return result;
 }
 
+/*
+
+Computes all predictions, both in-bag and OOB, result is a vector with two, four or five flattened vectors
+depending on the parameters. First two vectors are always in-bag and OOB Nelson-Aalen estimators, and the
+same structure applies to the remaining output vectors. If compute_initial = true, the next two vectors are
+in-bag and OOB predicted initial distributions, and if compute_censoring = true, the OOB censoring predictions
+are added to the result vector.
+
+*/
+
+vector<vector<double>> MultistateForest::computePredictions(bool compute_initial, bool compute_censoring) {
+    size_t num_obs = data->getNumberOfObs();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+
+    // initialise vectors of predictions (in-bag and OOB), predicted initial distributions and censoring distributions
+    vector<double> predictions(num_obs * num_unique_event_times * dim);
+    vector<double> oob_predictions(num_obs * num_unique_event_times * dim);
+    vector<double> predictions_init(num_obs * num_states);
+    vector<double> oob_predictions_init(num_obs * num_states);
+    vector<double> oob_censoring(num_obs * num_unique_event_times);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        // initialise predictions for the current observation
+        vector<double> pred(num_unique_event_times * dim, 0);
+        vector<double> pred_oob(num_unique_event_times * dim, 0);
+        vector<double> pred_init, pred_init_oob, pred_cens;
+        if (compute_initial) {
+            pred_init.assign(num_states, 0);
+            pred_init_oob.assign(num_states, 0);
+        }
+        if (compute_censoring) {
+            pred_cens.assign(num_unique_event_times, 0);
+        }
+        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
+            vector<double> tree_pred, tree_pred_init, tree_pred_cens;
+            size_t leaf_id;
+            
+            if (oob_indices[j][i]) {
+                ++num_oob_trees;
+                leaf_id = tree->predictionLeafID(data->get_x_row(i));    // the leaf id is not saved during fitting for OOB observations
+                // compute the tree prediction and aggregate
+                tree_pred = tree->getNA()[leaf_id];
+                sum_vectors(pred, tree_pred);
+                sum_vectors(pred_oob, tree_pred);
+
+                // repeat for initial distribution
+                if (compute_initial) { 
+                    tree_pred_init = tree->getInitDist()[leaf_id];
+                    sum_vectors(pred_init, tree_pred_init);
+                    sum_vectors(pred_init_oob, tree_pred_init);
+                }
+
+                // repeat for censoring
+                if (compute_censoring) {
+                    tree_pred_cens = tree->getKMCensoring()[leaf_id];
+                    sum_vectors(pred_cens, tree_pred_cens);
+                }
+            }
+            
+            else {
+                leaf_id = tree->getPredictionNodeIDs()[i];   // no need to predict from scratch for in-bag observations since we save the terminal node ID during fitting
+                tree_pred = tree->getNA()[leaf_id];
+                sum_vectors(pred, tree_pred);
+
+                if (compute_initial) {
+                    tree_pred_init = tree->getInitDist()[leaf_id];
+                    sum_vectors(pred_init, tree_pred_init);
+                }
+                // we do not compute censoring KM estimators for in-bag data
+            }
+        }
+
+
+        // normalise and save NA predictions
+        for (size_t k = 0; k < num_unique_event_times * dim; ++k) {
+            pred[k] /= ntrees;
+            if (num_oob_trees > 0) {
+                pred_oob[k] /= num_oob_trees;
+            }
+            predictions[i * num_unique_event_times * dim + k] = pred[k];
+            oob_predictions[i * num_unique_event_times * dim + k] = pred_oob[k];
+        }
+
+        if (compute_initial) {
+            for (size_t j = 0; j < num_states; ++j) {
+                pred_init[j] /= ntrees;
+                if (num_oob_trees > 0) {
+                    pred_init_oob[j] /= num_oob_trees;
+                }
+                predictions_init[i * num_states + j] = pred_init[j];
+                oob_predictions_init[i * num_states + j] = pred_init_oob[j];
+            }
+        }
+
+        if (compute_censoring) {
+            for (size_t t = 0; t < num_unique_event_times; ++t) {
+                if (num_oob_trees > 0) {
+                    pred_cens[t] /= num_oob_trees;
+                }
+                oob_censoring[i * num_unique_event_times + t] = pred_cens[t];
+            }
+        }
+    }
+
+    // finally return the computed predictions
+    if (compute_initial && compute_censoring) {
+        return {predictions, oob_predictions, predictions_init, oob_predictions_init, oob_censoring};
+    } 
+    else if (compute_initial) {
+        return {predictions, oob_predictions, predictions_init, oob_predictions_init};
+    }
+    else if (compute_censoring) {
+        return {predictions, oob_predictions, oob_censoring};
+    }
+    else {
+        return {predictions, oob_predictions};
+    }
+
+}
+
 pair<vector<double>, vector<double>> MultistateForest::computePredictions() {
     size_t num_obs = data->getNumberOfObs();
     uint8_t num_states = data->getNumberOfStates();
@@ -196,6 +322,37 @@ pair<vector<double>, vector<double>> MultistateForest::computePredictedInitialDi
         }
     }
     return {predictions, oob_predictions};
+}
+
+/*
+
+Computes all predictions on a new dataset, result is a vector with one, two or three flattened vectors
+depending on the parameters. First vector is always a flattened vector of Nelson-Aalen estimators. If
+compute_initial = true, the next two vectors are 
+in-bag and OOB predicted initial distributions, and if compute_censoring = true, the OOB censoring predictions
+are added to the result vector.
+
+*/
+
+vector<vector<double>> MultistateForest::computePredictions(const Data& new_data, bool compute_initial, bool compute_censoring) {
+    size_t num_obs = new_data.getNumberOfObs();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    
+    // initialise vectors of predicted NA estimators, initial distributions and censoring
+    vector<double> predictions(num_obs * num_unique_event_times * dim);
+    vector<double> predictions_init, censoring;
+    if (compute_initial) {
+        predictions_init.assign(num_obs * num_states, 0);
+    }
+    if (compute_censoring) {
+        censoring.assign(num_obs * num_unique_event_times, 0);
+    }
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        // AM HERE
+    }
 }
 
 vector<double> MultistateForest::computePredictions(const Data& new_data) {
