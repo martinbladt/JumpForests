@@ -1180,12 +1180,16 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
   uint8_t dim = num_states * num_states;
   List predictions(num_obs);      // each prediction is a list of matrices
   List predictions_init(num_obs); // each predicted initial distribution is a vector
-  const vector<double>& predictions_cpp = forest->computePredictions(new_data);
-  vector<double> predictions_init_cpp;
+  
+  const vector<vector<double>>& predictions_cpp = forest->computePredictions(new_data, compute_initial, false);
 
-  if (compute_initial) {
-    predictions_init_cpp = forest->computePredictedInitialDistributions(new_data);
-  }
+  // old
+  //const vector<double>& predictions_cpp = forest->computePredictions(new_data);
+  //vector<double> predictions_init_cpp;
+
+  //if (compute_initial) {
+  //  predictions_init_cpp = forest->computePredictedInitialDistributions(new_data);
+  //}
 
   for (size_t i = 0; i < num_obs; ++i) {
     List rpred(num_unique_event_times);
@@ -1193,7 +1197,8 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
       NumericMatrix pred_time(num_states, num_states);
       for (size_t j = 0; j < num_states; ++j) {
         for (size_t k = 0; k < num_states; ++k) {
-          pred_time(j, k) = predictions_cpp[i * num_unique_event_times * dim + dim * t + j * num_states + k];
+          pred_time(j, k) = predictions_cpp[0][i * num_unique_event_times * dim + dim * t + j * num_states + k];
+          //pred_time(j, k) = predictions_cpp[i * num_unique_event_times * dim + dim * t + j * num_states + k];
         }
       }
       rpred[t] = pred_time;
@@ -1205,7 +1210,8 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
     if (compute_initial) {
       NumericVector rpred_init(num_states);
       for (size_t j = 0; j < num_states; ++j) {
-        rpred_init[j] = predictions_init_cpp[i * num_states + j];
+        rpred_init[j] = predictions_cpp[1][i * num_states + j];
+        //rpred_init[j] = predictions_init_cpp[i * num_states + j];
       }
       predictions_init[i] = rpred_init;
     }

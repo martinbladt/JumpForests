@@ -40,7 +40,7 @@ lambda <- function(t, x){
 
 set.seed(2026)
 
-n <- 1000
+n <- 100
 X <- runif(n)   # signal
 Y <- rnorm(n)
 #Y <- rbinom(n, 3, 0.2)   # noise
@@ -51,8 +51,8 @@ for(i in 1:n){
   rates <- function(j, y, z){jump_rate(j, y, z)/(1+X[i]*y)}
   sim[[i]] <- sim_path(sample(1:2, 1), rates = rates, dists = mark_dist,
                        tn = c[i], bs = c(2*c[i], 3*c[i], 0))
-  #sim[[i]]$X <- X[i]
-  #sim[[i]]$Y <- Y[i]
+  sim[[i]]$X <- X[i]
+  sim[[i]]$Y <- Y[i]
 }
 
 sum(c == unlist(lapply(sim, FUN = function(z){tail(z$times, 1)}))) / n  #0.295
@@ -104,7 +104,15 @@ lapply(occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$prediction
 fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 20, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)
 print_forest(fitted_forest)
 
-jfforest.predict(fitted_forest)[[2]][1:10]
+jfforest.predict(fitted_forest)$init
+jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$init
+unlist(jfforest.predict(fitted_forest)$init) - unlist(jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$init)
+
+jfforest.predict(fitted_forest)$predictions
+jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$predictions
+unlist(jfforest.predict(fitted_forest)$predictions) - unlist(jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$predictions)
+# okay, the internal predictions are the same as predictions computed manually on the training data
+
 #jfforest.predict(fitted_forest)  # warning: only call if the number of observations is not very large (otherwise it never finishes printing)
 lapply(jfforest.predict(fitted_forest)[[2]], function(z) sum(z))
 occupation_prob(init = fitted_forest$init[[1]], na = fitted_forest$predictions[[1]])
@@ -169,16 +177,17 @@ unlist(lapply(veteran_tree_mm$init, function(z) sum(z)))  # works!
 # 4) Allow the user to input an initial distribution for multi-state error computation
 # 5) (Optional) Reconsider removing the 'censored only' event times. This is more natural. What went wrong with the error computation?
 # 6) Test errors against competing risks in randomForestSRC
-# 7) Write prediction functions for multi-state random forests (not just single trees)
 # 8) Extend error computations to whole forests
 # 9) There should be a function for survival forests which computes both OOB predictions and censoring predictions in one go instead of
 #    using two different functions (that way we only need to determine the leaf once)
+# 10) Repeat 9) for a single multi-state tree. Also do a thorough cleanup and remove old code used for prediction
 
 # finished points
 # 1) Fix initial value estimation (see veteran above), empirical studies show that this is very likely where the difference
 #    in errors come from (big issue!)
 # 3) Related to 2), inconsistent computation of KM, for survival we subtract the number of deaths, but we don't subtract the
 #    total number of jumps for multi-states (changed, should no longer be a difference)
+# 7) Write prediction functions for multi-state random forests (not just single trees)
 
 devtools::load_all()
 library(randomForestSRC)
@@ -316,18 +325,11 @@ tree_mm$init  # at least this makes sense
 
 # comparison to CoAJ
 #-------------------------------------------------------------------------------------------------
+set.seed(2026)
 
 # fit the forest (takes a couple of minutes when also saving predictions) (use data above!)
 fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 20, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)
 print_forest(fitted_forest)
-
-jfforest.predict(fitted_forest)[[2]][1:10]
-lapply(jfforest.predict(fitted_forest)[[2]], function(z) sum(z))
-occupation_prob(init = fitted_forest$init[[1]], na = fitted_forest$predictions[[1]])
-predictions_new_data <- jfforest.predict(fitted_forest, new_data, compute_initial = TRUE)
-occupation_prob(init = predictions_new_data$initial[[1]], na = predictions_new_data$predictions[[1]])
-#new_data <- data.frame(X2 = runif(1), X1 = rnorm(1))
-#new_data <- test_data[1,]
 
 x1 <- 0.2
 x2 <- 0.6
@@ -356,9 +358,9 @@ FUN = function(L) (c(1/2, 1/2, 0) %*% L)[2]))
 
 # compute the predictios from the random forest
 times <- fitted_forest$unique.event.times
-v11_forest <- unlist(lapply(forest_fit[[1]], FUN = function(L) L[2,1]))
-v21_forest <- unlist(lapply(forest_fit[[2]], FUN = function(L) L[2,1]))
-v31_forest <- unlist(lapply(forest_fit[[3]], FUN = function(L) L[2,1]))
+v11_forest <- unlist(lapply(forest_fit[[1]][[1]], FUN = function(L) L[2,1]))
+v21_forest <- unlist(lapply(forest_fit[[1]][[2]], FUN = function(L) L[2,1]))
+v31_forest <- unlist(lapply(forest_fit[[1]][[3]], FUN = function(L) L[2,1]))
 #p1_forest <- unlist(lapply(aj, FUN = function(L) L[2]))
 #P1 <- unlist(lapply(prodint(0, 5, 0.01, function(t){lambda(times, x = x1)}),
 #FUN = function(L) (c(1/2, 1/2, 0) %*% L)[2]))

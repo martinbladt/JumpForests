@@ -202,6 +202,7 @@ vector<vector<double>> MultistateForest::computePredictions(bool compute_initial
             oob_predictions[i * num_unique_event_times * dim + k] = pred_oob[k];
         }
 
+        // normalise and save initial distribution predictions
         if (compute_initial) {
             for (size_t j = 0; j < num_states; ++j) {
                 pred_init[j] /= ntrees;
@@ -213,6 +214,7 @@ vector<vector<double>> MultistateForest::computePredictions(bool compute_initial
             }
         }
 
+        // normalise and save censoring distribution predictions
         if (compute_censoring) {
             for (size_t t = 0; t < num_unique_event_times; ++t) {
                 if (num_oob_trees > 0) {
@@ -351,7 +353,66 @@ vector<vector<double>> MultistateForest::computePredictions(const Data& new_data
 
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t i = 0; i < num_obs; ++i) {
-        // AM HERE
+        vector<double> pred(num_unique_event_times * dim, 0);
+        vector<double> pred_init, pred_censoring;
+        if (compute_initial) {
+            pred_init.assign(num_states, 0);
+        }
+        if (compute_censoring) {
+            pred_censoring.assign(num_unique_event_times, 0);
+        }
+
+        // aggregate predictions over all trees for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
+            size_t leaf_id = tree->predictionLeafID(new_data.get_x_row(i));
+            vector<double> tree_pred = tree->getNA()[leaf_id];
+            sum_vectors(pred, tree_pred);
+
+            if (compute_initial) {
+                vector<double> tree_pred_init = tree->getInitDist()[leaf_id];
+                sum_vectors(pred_init, tree_pred_init);
+            }
+            if (compute_censoring) {
+                vector<double> tree_pred_cens = tree->getKMCensoring()[leaf_id];
+                sum_vectors(pred_censoring, tree_pred_cens);
+            }
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times * dim; ++k) {
+            pred[k] /= ntrees;
+            predictions[i * num_unique_event_times * dim + k] = pred[k];
+        }
+
+        // normalise and save predictions for initial distributions
+        if (compute_initial) {
+            for (size_t j = 0; j < num_states; ++j) {
+                pred_init[j] /= ntrees;
+                predictions_init[i * num_states + j] = pred_init[j];
+            }
+        }
+
+        // normalise and save predictions for censoring distributions
+        if (compute_censoring) {
+            for (size_t t = 0; t < num_unique_event_times; ++t) {
+                pred_censoring[t] /= ntrees;
+                censoring[i * num_unique_event_times + t] = pred_censoring[t];
+            }
+        }
+    }
+
+    if (compute_initial && compute_censoring) {
+        return {predictions, predictions_init, censoring};
+    }
+    else if (compute_initial) {
+        return {predictions, predictions_init};
+    }
+    else if (compute_censoring) {
+        return {predictions, censoring};
+    }
+    else {
+        return {predictions};
     }
 }
 
