@@ -34,11 +34,12 @@ public:
     return init_dist[predictionLeafID(x)];
   }
 
-  vector<double> computePredictions(const Data& new_data) override;
+  vector<double> computePredictions(const Data& new_data) override;   // not needed (so remove in Tree)
   //vector<double> computePredictedInitialDistributions(const Data& new_data);
-  pair<vector<double>, vector<double>> computePredictedInitialDistributions(const Data& new_data);
-  pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
-  vector<vector<double>> computeAllPredictions(const Data& new_data);
+  //pair<vector<double>, vector<double>> computePredictedInitialDistributions(const Data& new_data);
+  //pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
+  //vector<vector<double>> computeAllPredictions(const Data& new_data);
+  vector<vector<double>> computePredictions(bool compute_initial, bool compute_censoring, const Data& new_data = Data());
 
   // VIMP prediction for multi-state trees (to be investigated)
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng);

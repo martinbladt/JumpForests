@@ -5,6 +5,7 @@
 #include "Data.h"
 #include <memory>
 #include <variant>
+#include <optional>
 
 using namespace std;
 // so that we may handle predictions for different types of trees (extend continuously)

@@ -148,6 +148,8 @@ jfforest.predict(veteran_forest, new_data = veteran)
 jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$predictions
 jfforest.predict(veteran_forest, new_data = veteran, compute_censoring = TRUE)$censoring
 
+jfforest.predict(veteran_forest) - jfforest.predict(veteran_forest, new_data = veteran)
+
 jfforest.error(veteran_forest)  # need to compute errors from scratch if save_predictions == FALSE, note that the OOB errors are NOT saved in the forest
 jfforest.error(veteran_forest, new_data = veteran)  # since veteran is the training data, this just yields the training error, at least when honest = FALSE
 

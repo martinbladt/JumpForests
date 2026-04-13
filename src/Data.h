@@ -25,7 +25,10 @@ struct Data {
   // constructor for creating data objects for multi-states
   Data(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame feature_data,
        vector<size_t> feature_indices, const vector<bool>& categorical, const vector<size_t>& unique);
-
+  // constructor for "no data"
+  Data() {
+    num_obs = 0;
+  }
   // delete the copy constructor and the assignment operator 
   //Data(const Data&) = delete;
   //Data& operator=(const Data&) = delete;

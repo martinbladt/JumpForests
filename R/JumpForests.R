@@ -228,7 +228,7 @@ jftree.error <- function(tree_list, new_data = NULL) {
       return(list("C.error" = tree_list$C.error, "IBS.error" = tree_list$ibs, "normalised.IBS.error" = tree_list$ibs.normalised))
     }
     if (tree_list$tree.type == "Multi-state") {
-
+      return(list("IBS.error" = tree_list$ibs, "normalised.IBS.error" = tree_list$ibs.normalised))
     }
   }
 

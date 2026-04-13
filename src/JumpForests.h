@@ -48,7 +48,7 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
   LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
 
 // predicting with forests
-void JFCppForestPredict(List& JFForest);
+void JFCppForestPredict(List& JFForest, bool compute_censoring = true);
 void JFCppForestPredictTraining(List& JFForest);
 //NumericVector JFCppForestPredictSingle(const List& JFForest, const NumericVector& x);
 NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVector feature_indices,

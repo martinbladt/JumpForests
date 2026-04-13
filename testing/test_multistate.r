@@ -76,25 +76,33 @@ sim[1]
 #test_unique_event_times(unique_event_times, 0.5)  # looks fine
 # implement as an option
 
-test_data <- data.frame(X1 = X, X2 = as.character(Y))
+test_data <- data.frame(X1 = X, X2 = Y)
 test_data_functions_mm(sim, test_data, c(1, 2))
 fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20, honest = FALSE)
 }
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
 
-# these results do not make sense at the moment! there is a key decomposition computation that needs fixing in Data.cpp
+# still need more testing on IBS calculations
 fitted_tree$ibs
 fitted_tree$ibs.normalised
 
 jftree.predict(fitted_tree)[[1]][1] # Nelson-Aalen
 jftree.predict(fitted_tree)[[2]][1] # initial distribution
-unlist(lapply(fitted_tree$init, function(z) sum(z)))  # I thought this was fixed...
+unlist(lapply(fitted_tree$init, function(z) sum(z)))
 fitted_tree$censoring[1,]
-new_data <- data.frame(X2 = runif(10), X1 = rnorm(10))
-predicted <- jftree.predict(fitted_tree, new_data, compute_initial = TRUE, compute_censoring = TRUE)
-predicted$predictions
+#new_data <- data.frame(X2 = runif(10), X1 = rnorm(10))
+new_data <- test_data
+predicted <- jftree.predict(fitted_tree, new_data, compute_initial = TRUE, compute_censoring = FALSE)
+predicted
+predicted$predictions[[1]]
+jftree.predict(fitted_tree)[[1]][[1]]
+unlist(jftree.predict(fitted_tree)$predictions) - unlist(jftree.predict(fitted_tree, new_data = new_data, compute_initial = TRUE)$predictions) # all zeroes as it should be
+
 predicted$censoring
-predicted$predictions.init
+predicted$predictions.init[[1]]
+jftree.predict(fitted_tree)[[2]][[1]]
+
+jftree.error(fitted_tree)
 
 occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]])
 lapply(fitted_tree$init, function(z) sum(z))
@@ -104,9 +112,10 @@ lapply(occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$prediction
 fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 20, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)
 print_forest(fitted_forest)
 
-jfforest.predict(fitted_forest)$init
+jfforest.predict(fitted_forest)$predictions[[1]]
+jfforest.predict(fitted_forest)$init[[1]]
 jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$init
-unlist(jfforest.predict(fitted_forest)$init) - unlist(jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$init)
+unlist(jfforest.predict(fitted_forest)$init) - unlist(jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$init) # all zeroes as it should be
 
 jfforest.predict(fitted_forest)$predictions
 jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$predictions
@@ -114,7 +123,7 @@ unlist(jfforest.predict(fitted_forest)$predictions) - unlist(jfforest.predict(fi
 # okay, the internal predictions are the same as predictions computed manually on the training data
 
 #jfforest.predict(fitted_forest)  # warning: only call if the number of observations is not very large (otherwise it never finishes printing)
-lapply(jfforest.predict(fitted_forest)[[2]], function(z) sum(z))
+unlist(lapply(jfforest.predict(fitted_forest)[[2]], function(z) sum(z)))
 occupation_prob(init = fitted_forest$init[[1]], na = fitted_forest$predictions[[1]])
 predictions_new_data <- jfforest.predict(fitted_forest, new_data, compute_initial = TRUE)
 occupation_prob(init = predictions_new_data$initial[[1]], na = predictions_new_data$predictions[[1]])
@@ -178,9 +187,7 @@ unlist(lapply(veteran_tree_mm$init, function(z) sum(z)))  # works!
 # 5) (Optional) Reconsider removing the 'censored only' event times. This is more natural. What went wrong with the error computation?
 # 6) Test errors against competing risks in randomForestSRC
 # 8) Extend error computations to whole forests
-# 9) There should be a function for survival forests which computes both OOB predictions and censoring predictions in one go instead of
-#    using two different functions (that way we only need to determine the leaf once)
-# 10) Repeat 9) for a single multi-state tree. Also do a thorough cleanup and remove old code used for prediction
+# 11) Something goes wrong for categorical data (again...): the values are saved internally in a nonsensical way
 
 # finished points
 # 1) Fix initial value estimation (see veteran above), empirical studies show that this is very likely where the difference
@@ -188,6 +195,9 @@ unlist(lapply(veteran_tree_mm$init, function(z) sum(z)))  # works!
 # 3) Related to 2), inconsistent computation of KM, for survival we subtract the number of deaths, but we don't subtract the
 #    total number of jumps for multi-states (changed, should no longer be a difference)
 # 7) Write prediction functions for multi-state random forests (not just single trees)
+# 9) There should be a function for survival forests which computes both OOB predictions and censoring predictions in one go instead of
+#    using two different functions (that way we only need to determine the leaf once)
+# 10) Repeat 9) for a single multi-state tree. Also do a thorough cleanup and remove old code used for prediction
 
 devtools::load_all()
 library(randomForestSRC)

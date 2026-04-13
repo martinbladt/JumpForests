@@ -920,3 +920,419 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
 }
 
 */
+
+/*
+
+// old prediction functions for multi-state trees
+
+// compute a flattened vector of predictions (the Nelson-Aalen estimators at each event time)
+vector<double> MultistateTree::computePredictions(const Data& new_data) {
+    uint8_t num_states = data->getNumberOfStates();
+    size_t dim = num_states * num_states;
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times * dim);
+    for (size_t i = 0; i < num_obs; ++i) {
+        const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));   // the na vector has for unknown reasons been destroyed...
+        //cout << "Prediction for observation " << i << ":" << endl;
+        //printVector(pred);
+        //cout << endl;
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            for (size_t j = 0; j < num_states; ++j) {
+                for (size_t k = 0; k < num_states; ++k) {
+                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
+                }
+            }
+        }
+    }
+    return predictions;
+}
+
+// compute a flattened vector of predictions and of the predicted initial distributions
+pair<vector<double>, vector<double>> MultistateTree::computePredictedInitialDistributions(const Data& new_data) {
+    uint8_t num_states = data->getNumberOfStates();
+    size_t dim = num_states * num_states;
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
+    vector<double> predictions_init(num_obs * num_states);
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
+        const vector<double>& pred = na[leaf_id];
+        const vector<double>& init = init_dist[leaf_id];
+        // first save initial distributions
+        for (size_t j = 0; j < num_states; ++j) {
+            predictions_init[i * num_states + j] = init[j];
+        }
+
+        // now save the predicted NA-estimators
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            for (size_t j = 0; j < num_states; ++j) {
+                for (size_t k = 0; k < num_states; ++k) {
+                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
+                }
+            }
+        }
+    }
+    return {predictions, predictions_init};
+}
+
+// computes a pair of flattened vectors, the first predictions and the second the censoring KM estimators
+pair<vector<double>, vector<double>> MultistateTree::computePredictionsCensoring(const Data& new_data) {
+    uint8_t num_states = data->getNumberOfStates();
+    size_t dim = num_states * num_states;
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
+    vector<double> censoring(num_obs * num_unique_event_times);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
+        const vector<double>& pred = na[leaf_id];
+        const vector<double>& cens = KM_censoring[leaf_id];
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            // first save the predicted Nelson-Aalen estimator
+            for (size_t j = 0; j < num_states; ++j) {
+                for (size_t k = 0; k < num_states; ++k) {
+                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
+                    //predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
+                }
+            }
+            // now save the censoring Kaplan-Meier estimator
+            censoring[i * num_unique_event_times + t] = cens[t];
+        }
+    }
+    return {predictions, censoring};
+}
+
+// computes three flattened vectors of all predictions (NA estimators, initial distributions and censoring KM estimators)
+vector<vector<double>> MultistateTree::computeAllPredictions(const Data& new_data) {
+    uint8_t num_states = data->getNumberOfStates();
+    size_t dim = num_states * num_states;
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
+    vector<double> predictions_init(num_obs * num_unique_event_times * num_states);
+    vector<double> censoring(num_obs * num_unique_event_times);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
+        const vector<double>& pred = na[leaf_id];
+        const vector<double>& cens = KM_censoring[leaf_id];
+        const vector<double>& init = init_dist[leaf_id];
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            // first save predicted NA estimators
+            for (size_t j = 0; j < num_states; ++j) {
+                for (size_t k = 0; k < num_states; ++k) {
+                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
+                }
+            }
+            // save censoring distribution
+            censoring[i * num_unique_event_times + t] = cens[t];
+        }
+        // save initial distribution
+        for (size_t j = 0; j < num_states; ++j) {
+            predictions_init[i * num_states + j] = init[j];
+        }
+    }
+    return {predictions, predictions_init, censoring};
+}
+
+// old prediction functions for multi-state forests
+
+pair<vector<double>, vector<double>> MultistateForest::computePredictions() {
+    size_t num_obs = data->getNumberOfObs();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    vector<double> predictions(num_obs * num_unique_event_times * dim);
+    vector<double> oob_predictions(num_obs * num_unique_event_times * dim);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_unique_event_times * dim, 0);
+        vector<double> oob_pred(num_unique_event_times * dim, 0);
+        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
+            
+            if (oob_indices[j][i]) {
+                ++num_oob_trees;
+                vector<double> tree_pred = get<vector<double>>(tree->predict(data->get_x_row(i)));
+                sum_vectors(pred, tree_pred);
+                sum_vectors(oob_pred, tree_pred);
+            }
+            // no need to predict from scratch for in-bag observations since we save the terminal node ID during fitting
+            else {
+                vector<double> tree_pred = tree->getNA()[tree->getPredictionNodeIDs()[i]];
+                sum_vectors(pred, tree_pred);
+            }
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times * dim; ++k) {
+            pred[k] /= ntrees;
+            if (num_oob_trees > 0) {
+                oob_pred[k] /= num_oob_trees;
+            }
+            predictions[i * num_unique_event_times * dim + k] = pred[k];
+            oob_predictions[i * num_unique_event_times * dim + k] = oob_pred[k];
+        }
+    }
+    return {predictions, oob_predictions};
+}
+
+pair<vector<double>, vector<double>> MultistateForest::computePredictedInitialDistributions() {
+    size_t num_obs = data->getNumberOfObs();
+    uint8_t num_states = data->getNumberOfStates();
+    vector<double> predictions(num_obs * num_states);
+    vector<double> oob_predictions(num_obs * num_states);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_states, 0);
+        vector<double> oob_pred(num_states, 0);
+        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
+            
+            if (oob_indices[j][i]) {
+                ++num_oob_trees;
+                vector<double> tree_pred = tree->predictInitDist(data->get_x_row(i));
+                sum_vectors(pred, tree_pred);
+                sum_vectors(oob_pred, tree_pred);
+            }
+            // no need to predict from scratch for in-bag observations since we save the terminal node ID during fitting
+            else {
+                vector<double> tree_pred = tree->getInitDist()[tree->getPredictionNodeIDs()[i]];
+                sum_vectors(pred, tree_pred);
+            }
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_states; ++k) {
+            pred[k] /= ntrees;
+            if (num_oob_trees > 0) {
+                oob_pred[k] /= num_oob_trees;
+            }
+            predictions[i * num_states + k] = pred[k];
+            oob_predictions[i * num_states + k] = oob_pred[k];
+        }
+    }
+    return {predictions, oob_predictions};
+}
+
+
+vector<double> MultistateForest::computePredictions(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    vector<double> predictions(num_obs * num_unique_event_times * dim);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_unique_event_times * dim, 0);
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
+            vector<double> tree_pred = get<vector<double>>(tree->predict(new_data.get_x_row(i)));
+            sum_vectors(pred, tree_pred);
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times * dim; ++k) {
+            pred[k] /= ntrees;
+            predictions[i * num_unique_event_times * dim + k] = pred[k];
+        }
+    }
+    return predictions;
+}
+
+vector<double> MultistateForest::computePredictedInitialDistributions(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    uint8_t num_states = data->getNumberOfStates();
+    vector<double> predictions(num_obs * num_states);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_states, 0);
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
+            vector<double> tree_pred = tree->predictInitDist(new_data.get_x_row(i));
+            sum_vectors(pred, tree_pred);
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_states; ++k) {
+            pred[k] /= ntrees;
+            predictions[i * num_states + k] = pred[k];
+        }
+    }
+    return predictions;
+}
+
+// old prediction functions for survival forests
+
+// computes predictions, both in-bag and out-of-bag
+pair<vector<double>, vector<double>> SurvivalForest::computePredictions() {
+    size_t num_obs = data->getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times);
+    vector<double> oob_predictions(num_obs * num_unique_event_times);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_unique_event_times, 0);
+        vector<double> oob_pred(num_unique_event_times, 0);
+        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+            
+            if (oob_indices[j][i]) {
+                ++num_oob_trees;
+                vector<double> tree_pred = get<vector<double>>(tree->predict(data->get_x_row(i)));
+                sum_vectors(pred, tree_pred);
+                sum_vectors(oob_pred, tree_pred);
+            }
+            // no need to predict from scratch for in-bag observations since we save the terminal node ID during fitting
+            else {
+                vector<double> tree_pred = tree->getCHF()[tree->getPredictionNodeIDs()[i]];
+                sum_vectors(pred, tree_pred);
+            }
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            pred[k] /= ntrees;
+            if (num_oob_trees > 0) {
+                oob_pred[k] /= num_oob_trees;
+            }
+            predictions[i * num_unique_event_times + k] = pred[k];
+            oob_predictions[i * num_unique_event_times + k] = oob_pred[k];
+        }
+    }
+
+    return {predictions, oob_predictions};
+}
+
+// computes out-of-bag censoring predictions
+vector<double> SurvivalForest::computePredictionsCensoringOOB() {
+    size_t num_obs = data->getNumberOfObs();
+    vector<double> oob_censoring(num_obs * num_unique_event_times);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> oob_cens(num_unique_event_times, 0);
+        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+            vector<vector<double>> tree_cens = tree->getKMCensoring();
+            
+            if (oob_indices[j][i]) {
+                ++num_oob_trees;
+                size_t leaf_id = tree->predictionLeafID(data->get_x_row(i));
+                vector<double> tree_cens_obs = tree_cens[leaf_id];
+                sum_vectors(oob_cens, tree_cens_obs);
+            }
+        }
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            if (num_oob_trees > 0) {
+                oob_cens[k] /= num_oob_trees;
+            }
+            oob_censoring[i * num_unique_event_times + k] = oob_cens[k];
+        }
+    }
+    return oob_censoring;
+}
+
+vector<double> SurvivalForest::computePredictions(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_unique_event_times, 0);
+
+        // compute the sum of all predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+            vector<double> tree_pred = get<vector<double>>(tree->predict(new_data.get_x_row(i)));
+            sum_vectors(pred, tree_pred);
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            pred[k] /= ntrees;
+            predictions[i * num_unique_event_times + k] = pred[k];
+        }
+    }
+    return predictions;
+}
+
+// computes a pair of flattened vectors, the first predictions and the second the censoring KM estimators
+// (when censoring KM estimators are already saved during fitting)
+pair<vector<double>, vector<double>> SurvivalForest::computePredictionsCensoring(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times);
+    vector<double> censoring(num_obs * num_unique_event_times);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> pred(num_unique_event_times, 0);
+        vector<double> cens(num_unique_event_times, 0);
+
+        for (size_t j = 0; j < ntrees; ++j) {
+            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+            const vector<vector<double>>& tree_predictions = tree->getCHF();
+            const vector<vector<double>>& tree_censoring = tree->getKMCensoring();
+
+             // fetch predictions from the tree
+            size_t leaf_id = tree->predictionLeafID(new_data.get_x_row(i));
+            vector<double> tree_pred = tree_predictions[leaf_id];               // important: will this still work with const? speedup potential? test!
+            vector<double> tree_cens = tree_censoring[leaf_id];
+
+            // compute the sum of all predictions for observation i
+            sum_vectors(pred, tree_pred);
+            sum_vectors(cens, tree_cens);
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            pred[k] /= ntrees;
+            cens[k] /= ntrees;
+            predictions[i * num_unique_event_times + k] = pred[k];
+            censoring[i * num_unique_event_times + k] = cens[k];
+        }
+    }
+    return {predictions, censoring};
+}
+
+// computes a pair of flattened vectors, the first predictions and the second the censoring KM estimators
+pair<vector<double>, vector<double>> SurvivalForest::computePredictionsExternal(const Data& new_data) {
+    size_t num_obs = new_data.getNumberOfObs();
+    vector<double> predictions(num_obs * num_unique_event_times);
+    vector<double> censoring(num_obs * num_unique_event_times);
+
+    for (size_t j = 0; j < ntrees; ++j) {
+        SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+        const vector<double>& tree_predictions = tree->getCHF();
+
+        // determine the leaf that each observation belongs to
+        vector<size_t> leaf_ids(num_obs);
+        for (size_t i = 0; i < num_obs; ++i) {
+            leaf_ids[i] = tree->predictionLeafID[new_data.get_x_row(i)];
+        }
+        
+        // now group the observations by leaf, compute the survial quantities and 
+        const vector<vector<size_t>>& leaf_obs = groupByLeaf(leaf_ids, tree->getNumberOfTerminalNodes());
+
+    }
+}
+
+*/

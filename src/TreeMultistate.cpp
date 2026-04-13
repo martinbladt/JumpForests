@@ -1119,75 +1119,59 @@ vector<double> MultistateTree::computePredictions(const Data& new_data) {
     return predictions;
 }
 
-// compute a flattened vector of predictions and of the predicted initial distributions
-pair<vector<double>, vector<double>> MultistateTree::computePredictedInitialDistributions(const Data& new_data) {
-    uint8_t num_states = data->getNumberOfStates();
-    size_t dim = num_states * num_states;
-    size_t num_obs = new_data.getNumberOfObs();
-    vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
-    vector<double> predictions_init(num_obs * num_states);
-    for (size_t i = 0; i < num_obs; ++i) {
-        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
-        const vector<double>& pred = na[leaf_id];
-        const vector<double>& init = init_dist[leaf_id];
-        // first save initial distributions
-        for (size_t j = 0; j < num_states; ++j) {
-            predictions_init[i * num_states + j] = init[j];
-        }
+/*
 
-        // now save the predicted NA-estimators
-        for (size_t t = 0; t < num_unique_event_times; ++t) {
-            for (size_t j = 0; j < num_states; ++j) {
-                for (size_t k = 0; k < num_states; ++k) {
-                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
-                }
-            }
-        }
+Computes all in-bag predictions, result is a vector with one, two or three flattened vectors
+depending on the parameters. First two vectors are always in-bag Nelson-Aalen estimators, and the
+same structure applies to the remaining output vectors. If compute_initial = true, the next vector is
+in-bag predicted initial distributions, and if compute_censoring = true, the OOB censoring predictions
+are added to the result vector.
+
+*/
+
+vector<vector<double>> MultistateTree::computePredictions(bool compute_initial, bool compute_censoring, const Data& new_data) {
+    size_t num_obs;
+    bool new_data_provided;
+    if (new_data.getNumberOfObs() == 0) {
+        new_data_provided = false;
+    } else {
+        new_data_provided = true;
     }
-    return {predictions, predictions_init};
-}
 
-// computes a pair of flattened vectors, the first predictions and the second the censoring KM estimators
-pair<vector<double>, vector<double>> MultistateTree::computePredictionsCensoring(const Data& new_data) {
-    uint8_t num_states = data->getNumberOfStates();
-    size_t dim = num_states * num_states;
-    size_t num_obs = new_data.getNumberOfObs();
-    vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
-    vector<double> censoring(num_obs * num_unique_event_times);
-
-    for (size_t i = 0; i < num_obs; ++i) {
-        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
-        const vector<double>& pred = na[leaf_id];
-        const vector<double>& cens = KM_censoring[leaf_id];
-        for (size_t t = 0; t < num_unique_event_times; ++t) {
-            // first save the predicted Nelson-Aalen estimator
-            for (size_t j = 0; j < num_states; ++j) {
-                for (size_t k = 0; k < num_states; ++k) {
-                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
-                    //predictions[i * num_obs + t * num_unique_event_times + j * num_states + k] = pred[t * num_unique_event_times + j * num_states + k];
-                }
-            }
-            // now save the censoring Kaplan-Meier estimator
-            censoring[i * num_unique_event_times + t] = cens[t];
-        }
+    // if new data has not been provided, compute in-bag predictions
+    if (new_data_provided) {
+        num_obs = new_data.getNumberOfObs();
+    } else {
+        num_obs = data->getNumberOfObs();
     }
-    return {predictions, censoring};
-}
-
-// computes three flattened vectors of all predictions (NA estimators, initial distributions and censoring KM estimators)
-vector<vector<double>> MultistateTree::computeAllPredictions(const Data& new_data) {
     uint8_t num_states = data->getNumberOfStates();
     size_t dim = num_states * num_states;
-    size_t num_obs = new_data.getNumberOfObs();
+
+    // initialise vectors of predictions
     vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
     vector<double> predictions_init(num_obs * num_unique_event_times * num_states);
     vector<double> censoring(num_obs * num_unique_event_times);
 
     for (size_t i = 0; i < num_obs; ++i) {
-        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
+        size_t leaf_id;
+        if (new_data_provided) {
+            //printVector(new_data.get_x_row(i));
+            //printVector(data->get_x_row(i));
+            leaf_id = predictionLeafID(new_data.get_x_row(i));
+            //cout << "New data provided, leaf_id = " << leaf_id << endl;
+            //cout << "leaf_id in data = " << predictionLeafID(data->get_x_row(i)) << endl;
+        } else {
+            leaf_id = predictionLeafID(data->get_x_row(i));
+        }
         const vector<double>& pred = na[leaf_id];
-        const vector<double>& cens = KM_censoring[leaf_id];
-        const vector<double>& init = init_dist[leaf_id];
+        vector<double> init;
+        if (compute_initial) {
+            init = init_dist[leaf_id];
+        }
+        vector<double> cens;
+        if (compute_censoring) {
+            cens = KM_censoring[leaf_id];
+        }
         for (size_t t = 0; t < num_unique_event_times; ++t) {
             // first save predicted NA estimators
             for (size_t j = 0; j < num_states; ++j) {
@@ -1196,14 +1180,29 @@ vector<vector<double>> MultistateTree::computeAllPredictions(const Data& new_dat
                 }
             }
             // save censoring distribution
-            censoring[i * num_unique_event_times + t] = cens[t];
+            if (compute_censoring) {
+                censoring[i * num_unique_event_times + t] = cens[t];
+            }
         }
         // save initial distribution
-        for (size_t j = 0; j < num_states; ++j) {
-            predictions_init[i * num_states + j] = init[j];
+        if (compute_initial) {
+            for (size_t j = 0; j < num_states; ++j) {
+                predictions_init[i * num_states + j] = init[j];
+            }
         }
     }
-    return {predictions, predictions_init, censoring};
+
+    if (compute_initial && compute_censoring) {
+        return {predictions, predictions_init, censoring};
+    }
+    else if (compute_initial) {
+        return {predictions, predictions_init};
+    }
+    else if (compute_censoring) {
+        return {predictions, censoring};
+    } else {
+        return {predictions};
+    }
 }
 
 // error estimation for multi-state trees
