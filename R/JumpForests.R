@@ -55,9 +55,11 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
       if (is.null(splitrule)) {
         # TODO
       }
-      JFCppTree(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
-                response_index, feature_indices, processed_data$categorical,
-                processed_data$unique_values, seed)
+      result <- JFCppTree(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
+                          response_index, feature_indices, processed_data$categorical,
+                          processed_data$unique_values, seed)
+      result$categorical.levels <- processed_data$categorical_levels
+      return(result)
     } else {
       # for regression, the default minimal node size is 5
       if (is.null(min_node_size)) {
@@ -68,9 +70,11 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
         splitrule <- "mse"
       }
 
-      JFCppTree(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
-                response_index, feature_indices, processed_data$categorical,
-                processed_data$unique_values, seed)
+      result <- JFCppTree(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
+                          response_index, feature_indices, processed_data$categorical,
+                          processed_data$unique_values, seed)
+      result$categorical.levels <- processed_data$categorical_levels
+      return(result)
     }
     
   }
@@ -109,9 +113,11 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
       splitrule <- "logrank"
     }
 
-    JFCppTree(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
-              response_indices, feature_indices, processed_data$categorical,
-              processed_data$unique_values, seed, num_event_times)
+    result <- JFCppTree(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
+                        response_indices, feature_indices, processed_data$categorical,
+                        processed_data$unique_values, seed, num_event_times)
+    result$categorical.levels <- processed_data$categorical_levels
+    return(result)
   }
   # if the left hand side is "MM", multi-state
   else if (lhs[1] == "MM") {
@@ -148,9 +154,11 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
 
     # data here is jump data, a list of lists, each containing a vector 'times' and a vector 'states'
-    JFCppTreeMM(data, max_response_length, num_states, processed_data$data,
-                mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
-                processed_data$categorical, processed_data$unique_values, seed)
+    result <- JFCppTreeMM(data, max_response_length, num_states, processed_data$data,
+                          mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
+                          processed_data$categorical, processed_data$unique_values, seed)
+    result$categorical.levels <- processed_data$categorical_levels
+    return(result)
 
   } else {
     stop("Type of tree not recognised from the formula.")
@@ -184,10 +192,10 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
     # extracting relevant columns
     covariates <- tree_list$feature.names
     if (ncol(new_data) > 1) {
-      new_data <- new_data[, covariates]  # ensures the columns have the same order as the original dataset
+      new_data <- new_data[, covariates, drop = FALSE]  # ensures the columns have the same order as the original dataset
     }
     feature_indices <- which(names(new_data) %in% covariates) - 1
-    processed_data <- preprocess_data(new_data)
+    processed_data <- preprocess_data(new_data, tree_list$categorical.levels)
 
     # may need to be adapted when more types of trees are implemented
     if (tree_list$tree.type != "Multi-state") {
@@ -243,7 +251,7 @@ jftree.error <- function(tree_list, new_data = NULL) {
   new_data <- new_data[current]
 
   feature_indices <- which(names(new_data) %in% covariates) - 1
-  processed_data <- preprocess_data(new_data)
+  processed_data <- preprocess_data(new_data, tree_list$categorical.levels)
   return(JFCppTreeError(tree_list, processed_data$data, feature_indices,
                           processed_data$categorical, processed_data$unique_values, response_indices))
 }
@@ -333,9 +341,11 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     if (is.null(splitrule)) {
       splitrule <- "mse"
     }
-    JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
-              sample_rate, response_indices, feature_indices, processed_data$categorical,
-              processed_data$unique_values, seed, nworkers, save_predictions)
+    result <- JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
+                          sample_rate, response_indices, feature_indices, processed_data$categorical,
+                          processed_data$unique_values, seed, nworkers, save_predictions)
+    result$categorical.levels <- processed_data$categorical_levels
+    return(result)
   }
   # if left hand side is "Surv(time, status)", survival
   else if (lhs[1] == "Surv") {
@@ -375,9 +385,11 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
       splitrule <- "logrank"
     }
 
-    JFCppForest(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
-              sample_rate, response_indices, feature_indices, processed_data$categorical,
-              processed_data$unique_values, seed, nworkers, save_predictions, num_event_times)
+    result <- JFCppForest(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
+                          sample_rate, response_indices, feature_indices, processed_data$categorical,
+                          processed_data$unique_values, seed, nworkers, save_predictions, num_event_times)
+    result$categorical.levels <- processed_data$categorical_levels
+    return(result)
   }
   # if the left hand side is "MM(...)", multi-state
   else if (lhs[1] == "MM") {
@@ -413,9 +425,11 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     max_response_length <- max(sapply(data, function(e) length(e$states)))
     num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
 
-    JFCppForestMM(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
-                  nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, processed_data$categorical,
-                  processed_data$unique, seed, nworkers, save_predictions, num_event_times);
+    result <- JFCppForestMM(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
+                            nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, processed_data$categorical,
+                            processed_data$unique_values, seed, nworkers, save_predictions, num_event_times)
+    result$categorical.levels <- processed_data$categorical_levels
+    return(result)
 
   } else {
     stop("Type of tree not recognised from the formula.")
@@ -459,10 +473,10 @@ jfforest.predict <- function(forest_list, new_data = NULL, compute_censoring = F
     # extracting relevant columns
     covariates <- forest_list$feature.names
     if (ncol(new_data) > 1) {
-      new_data <- new_data[, covariates]  # ensures the columns have the same order as the original dataset
+      new_data <- new_data[, covariates, drop = FALSE]  # ensures the columns have the same order as the original dataset
     }
     feature_indices <- which(names(new_data) %in% covariates) - 1
-    processed_data <- preprocess_data(new_data)
+    processed_data <- preprocess_data(new_data, forest_list$categorical.levels)
     if (forest_list$tree.type != "Multi-state") {
       if (compute_censoring) {
         return(JFCppForestPredictCensoring(forest_list, processed_data$data, feature_indices,
@@ -525,7 +539,7 @@ jfforest.error <- function(forest_list, new_data = NULL) {
   new_data <- new_data[current]
 
   feature_indices <- which(names(new_data) %in% covariates) - 1
-  processed_data <- preprocess_data(new_data)
+  processed_data <- preprocess_data(new_data, forest_list$categorical.levels)
   return(JFCppForestError(forest_list, processed_data$data, feature_indices,
                           processed_data$categorical, processed_data$unique_values, response_indices))
 }
@@ -651,7 +665,8 @@ print_forest <- function(forest_list) {
   cat("Number of features:", forest_list$num.features, "\n")
 
   if (forest_list$tree.type == "Regression") {
-    # TODO
+    cat("OOB error (MSE):", forest_list$mse.error, "\n")
+    cat("OOB error (R2:)", forest_list$R2.error, "\n")
   }
   if (forest_list$tree.type == "Classification") {
     # TODO
@@ -699,22 +714,39 @@ print_forest <- function(forest_list) {
 # it is up to the user to make sure that categorical variables are supplied
 # either as a Factor, chr or as Booleans, while continuous variables should
 # be numeric
-preprocess_data <- function(data) {
+preprocess_data <- function(data, categorical_levels = NULL) {
   categorical <- rep(0, ncol(data))
   unique_values <- rep(0, ncol(data))
+  new_categorical_levels <- vector("list", ncol(data))
+  names(new_categorical_levels) <- names(data)
 
   for (i in 1:ncol(data)) {
-    if (inherits(data[, i], "character")) {
-      data[, i] <- as.numeric(as.factor(data[, i]))
+    if (inherits(data[, i], "character") || inherits(data[, i], "factor")) {
+      current_levels <- categorical_levels[[names(data)[i]]]
+      if (is.null(current_levels)) {
+        if (inherits(data[, i], "factor")) {
+          current_levels <- levels(data[, i])
+        } else {
+          current_levels <- sort(unique(data[, i]))
+        }
+      }
+      encoded <- match(as.character(data[, i]), current_levels)
+      unknown <- is.na(encoded) & !is.na(data[, i])
+      if (any(unknown)) {
+        stop("New categorical value(s) in ", names(data)[i], " not seen in the training data.")
+      }
+      data[, i] <- encoded
       categorical[i] <- 1
-      unique_values[i] <- length(unique(data[, i]))
-    } else if (inherits(data[, i], "factor") || inherits(data[, i], "logical")) {
+      unique_values[i] <- length(current_levels)
+      new_categorical_levels[[i]] <- current_levels
+    } else if (inherits(data[, i], "logical")) {
       data[, i] <- as.numeric(data[, i])
       categorical[i] <- 1
       unique_values[i] <- length(unique(data[, i]))
     }
   }
-  list(data = data, unique_values = unique_values, categorical = categorical)
+  list(data = data, unique_values = unique_values, categorical = categorical,
+       categorical_levels = new_categorical_levels)
 }
 
 # function for computing the Kaplan-Meier estimator from a Nelson-Aalen estimator
@@ -756,7 +788,7 @@ test_data_functions <- function(data, response_indices, feature_indices) {
   response_indices <- response_indices - 1
   feature_indices <- feature_indices - 1
   testData(processed_data$data, response_indices, feature_indices,
-           processed_data$categorical, processed_data$unique)
+           processed_data$categorical, processed_data$unique_values)
 }
 
 test_data_functions_mm <- function(jump_data, feature_data, feature_indices) {
@@ -765,7 +797,7 @@ test_data_functions_mm <- function(jump_data, feature_data, feature_indices) {
   max_response_length <- max(sapply(jump_data, function(e) length(e$states)))
   num_states <- length(unique(unlist(lapply(jump_data, '[[', "states"))))
   testDataMM(jump_data, max_response_length, num_states, processed_data$data, 
-             feature_indices, processed_data$categorical, processed_data$unique)
+             feature_indices, processed_data$categorical, processed_data$unique_values)
 }
 
 # rough function to fit a survival tree on the data

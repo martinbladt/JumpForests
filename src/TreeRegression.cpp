@@ -73,12 +73,7 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
       best_split_val = decrease;
       best_feature = feature;
       best_sum_left = sum_left;
-      // use average of split points unless it is the final split value
-      if (s == nsplits_final - 1) {
-        best_threshold = {split_points[s]};
-      } else {
-        best_threshold = {(split_points[s] + split_points[s + 1]) / 2.0};
-      }
+      best_threshold = {split_points[s]};
     }
   }
 }
@@ -235,7 +230,12 @@ bool RegressionTree::createSplit(size_t node_index) {
         if (!honest) {
             means.push_back(parent_sum / (double) node_sizes[node_index]);  // for dishonest trees, we may simply reuse the computed sum
         } else {
-            means.push_back(computeSum(holdout_node_obs[node_index]) / (double) holdout_node_obs[node_index].size());  // for honest trees, compute the mean from scratch for the holdout indices
+            const vector<size_t>& holdout_obs = holdout_node_obs[node_index];
+            if (holdout_obs.empty()) {
+                means.push_back(parent_sum / (double) node_sizes[node_index]);
+            } else {
+                means.push_back(computeSum(holdout_obs) / (double) holdout_obs.size());  // for honest trees, compute the mean from scratch for the holdout indices
+            }
         }
         makeLeaf(node_index);
         return true;
@@ -277,7 +277,12 @@ bool RegressionTree::createSplit(size_t node_index) {
         if (!honest) {
           means.push_back(parent_sum / (double) node_sizes[node_index]);  // for dishonest trees, use parent info already computed earlier
         } else {
-          means.push_back(computeSum(holdout_node_obs[node_index]) / (double) holdout_node_obs[node_index].size()); // for honest trees, use the holdout set for computing the mean
+          const vector<size_t>& holdout_obs = holdout_node_obs[node_index];
+          if (holdout_obs.empty()) {
+            means.push_back(parent_sum / (double) node_sizes[node_index]);
+          } else {
+            means.push_back(computeSum(holdout_obs) / (double) holdout_obs.size()); // for honest trees, use the holdout set for computing the mean
+          }
         }
         makeLeaf(node_index);
         return true;

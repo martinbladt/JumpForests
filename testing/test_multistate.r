@@ -78,8 +78,9 @@ sim[1]
 
 test_data <- data.frame(X1 = X, X2 = Y)
 test_data_functions_mm(sim, test_data, c(1, 2))
-fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20, honest = FALSE)
+fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20, honest = TRUE)
 }
+print_tree(fitted_tree, full = TRUE)
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
 
 # still need more testing on IBS calculations
@@ -179,7 +180,7 @@ unlist(lapply(veteran_tree_mm$init, function(z) sum(z)))  # works!
 # Study 1: Comparison to survival data for continuous distributions
 #-------------------------------------------------------------------------------------------------
 
-# plan for 8/6 and beyond
+# plan for 18/5 and beyond
 
 # 2) For moderate to heavy censoring, the KM estimators for censoring are quite different when using multi-state trees instead
 #    of survival trees
@@ -187,7 +188,7 @@ unlist(lapply(veteran_tree_mm$init, function(z) sum(z)))  # works!
 # 5) (Optional) Reconsider removing the 'censored only' event times. This is more natural. What went wrong with the error computation?
 # 6) Test errors against competing risks in randomForestSRC
 # 8) Extend error computations to whole forests
-# 11) Something goes wrong for categorical data (again...): the values are saved internally in a nonsensical way
+# 12) Fix the subsampling printing error for honesty
 
 # finished points
 # 1) Fix initial value estimation (see veteran above), empirical studies show that this is very likely where the difference
@@ -198,6 +199,7 @@ unlist(lapply(veteran_tree_mm$init, function(z) sum(z)))  # works!
 # 9) There should be a function for survival forests which computes both OOB predictions and censoring predictions in one go instead of
 #    using two different functions (that way we only need to determine the leaf once)
 # 10) Repeat 9) for a single multi-state tree. Also do a thorough cleanup and remove old code used for prediction
+# 11) Something goes wrong for categorical data (again...): the values are saved internally in a nonsensical way
 
 devtools::load_all()
 library(randomForestSRC)
@@ -272,8 +274,8 @@ gc()
 devtools::load_all()
 library(randomForestSRC)
 set.seed(2026)
-n <- 25000
-X <- rbinom(n, 1, 0.5)
+n <- 1000
+X <- rbinom(n, 10, 0.5)
 Y <- rnorm(n)                 # noise
 Z <- 10 + rbinom(n, 80, 0.5)  # true survival time (relatively few unique values)
 R <- 45 + rbinom(n, 20, 0.4)  # censoring times
@@ -284,9 +286,9 @@ delta <- as.numeric(Z <= R)   # status indicators
 sim_data <- data.frame(time = W, status = delta, X1 = X, X2 = Y)
 sim_data$X1 <- as.factor(sim_data$X1)
 
-#typeof(sim_data$X1)
-#typeof(sim_data$X2)
-#test_data_functions(sim_data, c(1,2), c(3,4))
+typeof(sim_data$X1)
+typeof(sim_data$X2)
+test_data_functions(sim_data, c(1,2), c(3,4))
 
 jump_data <- lapply(seq_len(nrow(sim_data)), function(i) {
   if (sim_data$status[i] == 1) {
@@ -299,7 +301,7 @@ jump_data <- lapply(seq_len(nrow(sim_data)), function(i) {
 tree_survival <- jftree(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = FALSE)                # why did I not implement multi-threading for prediction for survival trees?
 tree_mm <- jftree(MM ~ ., data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, honest = FALSE)   # much faster for large n
 }
-tree_mm
+print_tree(tree_mm, full = TRUE)
 
 # n = 1000 (quite different)
 tree_survival$ibs             # 2.225711
@@ -327,6 +329,24 @@ tree_mm$censoring[3,]
 tree_survival$censoring[3,]   # ditto
 
 tree_mm$init  # at least this makes sense
+
+# testing predictions
+tree_mm$unique.event.times
+row <- 121
+jftree.predict(tree_mm)$predictions[[row]]
+jftree.predict(tree_mm, new_data = sim_data[row, c(3,4)])[[1]]
+unlist(jftree.predict(tree_mm)$predictions[[row]]) - unlist(jftree.predict(tree_mm, new_data = sim_data[row, c(3,4)])[[1]])
+# seems to work for categorical data here (but X1 is also an 'integer', maybe 'factor' is the problem?)
+
+sim_data$X1 <- sample(c("Yes", "No"), n, replace = TRUE)
+typeof(sim_data$X1) # character
+tree_survival <- jftree(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = FALSE)
+tree_mm <- jftree(MM ~ ., data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, honest = FALSE)
+
+row <- 134
+jftree.predict(tree_mm)$predictions[[row]]
+jftree.predict(tree_mm, new_data = sim_data[row, c(3,4)])[[1]]
+unlist(jftree.predict(tree_mm)$predictions[[row]]) - unlist(jftree.predict(tree_mm, new_data = sim_data[row, c(3,4)])[[1]])
 
 # no issues in regards to Y, Y1, num_at_risk etc. here? so it has nothing to do with ties in the data I guess, the veteran dataset just acts weird
 

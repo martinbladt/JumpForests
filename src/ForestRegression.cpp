@@ -56,8 +56,8 @@ void RegressionForest::grow() {
             } else {
                 // if no double bootstrap, bootstrap the whole dataset and then split
                 size_t subsample_size = floor(sample_rate * n);
-                auto global_bootstrap_indices = sampleIndices(global_indices, subsample_size, swr, local_rng);
-                pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(global_bootstrap_indices, local_rng);
+                bootstrap_indices = sampleIndices(global_indices, subsample_size, swr, local_rng);
+                pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(bootstrap_indices, local_rng);
                 tree = make_unique<RegressionTree>(partition.first, partition.second);
                 oob_indices[i] = computeOOBIndices(bootstrap_indices, n);
             }

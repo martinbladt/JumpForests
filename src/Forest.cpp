@@ -14,6 +14,7 @@ void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int m
     this->honest = honest;
     this->swr = swr;
     this->sample_rate = sample_rate;
+    this->double_bootstrap = false;
     
     // set number of threads to use during fitting and predicting
     int max_workers = thread::hardware_concurrency();

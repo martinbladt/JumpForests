@@ -139,7 +139,7 @@ vector<vector<double>> compute2Partitions(const vector<double>& feature_values) 
 }
 
 // samples k indices from global_indices with or without replacement
-vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, bool with_replacement, mt19937 rng) {    
+vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, bool with_replacement, mt19937& rng) {    
     size_t n = global_indices.size();
     if (k > n && with_replacement == false) {
         return(global_indices);
@@ -443,7 +443,7 @@ vector<bool> computeOOBIndicesDouble(const vector<size_t>& grow, const vector<si
 }
 
 // used for honest trees when partitioning into a grow subset and a holdout subset
-pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indices, mt19937 rng) {
+pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indices, mt19937& rng) {
     size_t n = indices.size();
 
     // shuffle indices
