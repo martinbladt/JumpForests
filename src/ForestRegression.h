@@ -23,6 +23,9 @@ public:
   pair<vector<double>, vector<double>> computePredictions();
   // computing predictions on a new dataset
   vector<double> computePredictions(const Data& new_data);
+  // for computing VIMP based on OOB predictions
+  double computeVIMPPermute(size_t feature, int feature_seed);
+  double computeVIMPRandom(size_t feature, int feature_seed);
 
 private:
   vector<double> means;

@@ -1420,18 +1420,26 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
   string method_cpp = as<string>(method);
   //size_t num_obs = as<size_t>(JFForest["num.obs"]);
 
-  if (type == "Regression") {
+  // translate from feature name to feature index
+  string feature_name_cpp = as<string>(feature_name);
 
+  if (type == "Regression") {
+    RegressionForest* forest = ((XPtr<RegressionForest>) JFForest["Forest"]).get();
+    size_t feature = forest->getData()->getFeatureID(feature_name_cpp);
+    if (method_cpp == "permute") {
+      return forest->computeVIMPPermute(feature, feature_seed);
+    } else if (method_cpp == "random") {
+      return forest->computeVIMPRandom(feature, feature_seed);
+    } else {
+      throw runtime_error("Type of VIMP computation method not recognised, use 'permute' or 'random'");
+    }
   }
   if (type == "Classification") {
 
   }
   if (type == "Survival") {
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
-    // translate from feature name to feature index
-    string feature_name_cpp = as<string>(feature_name);
     size_t feature = forest->getData()->getFeatureID(feature_name_cpp);
-
     if (method_cpp == "permute") {
       return forest->computeVIMPPermute(feature, feature_seed);
     } else if (method_cpp == "random") {

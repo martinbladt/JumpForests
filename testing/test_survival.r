@@ -173,7 +173,7 @@ censoring_predictions[95,]
 jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "permute")
 veteran_forest <- jfforest.vimp(veteran_forest, seed = 2025, method = "permute")
 unlist(veteran_forest$vimp)
-vimp.rfsrc(veteran_forest_SRC, importance = "random", vimp.measure = "concordance")$importance
+vimp.rfsrc(veteran_forest_SRC, importance = "permute", vimp.measure = "concordance")$importance
 importance(veteran_forest_ranger)
 
 # VIMP varies for each run with SRC, so should run several times (here we use the permutation method)
@@ -239,6 +239,18 @@ quantile(VIMP_ranger[,1], c(0.025, 0.975))
 quantile(VIMP[,2], c(0.025, 0.975))
 quantile(VIMP_SRC[,2], c(0.025, 0.975))
 quantile(VIMP_ranger[,2], c(0.025, 0.975))
+quantile(VIMP[,3], c(0.025, 0.975))
+quantile(VIMP_SRC[,3], c(0.025, 0.975))
+quantile(VIMP_ranger[,3], c(0.025, 0.975))
+quantile(VIMP[,4], c(0.025, 0.975))
+quantile(VIMP_SRC[,4], c(0.025, 0.975))
+quantile(VIMP_ranger[,4], c(0.025, 0.975))
+quantile(VIMP[,5], c(0.025, 0.975))
+quantile(VIMP_SRC[,5], c(0.025, 0.975))
+quantile(VIMP_ranger[,5], c(0.025, 0.975))
+quantile(VIMP[,6], c(0.025, 0.975))
+quantile(VIMP_SRC[,6], c(0.025, 0.975))
+quantile(VIMP_ranger[,6], c(0.025, 0.975))
 
 # retinopathy
 #--------------------------------------------------------------------

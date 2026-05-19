@@ -311,6 +311,7 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
 
     double total_vimp = 0;
     double total_oob = 0;   // for proper weighting by number of OOB observations
+    
     // shuffle feature values for all trees among the oob covariates
     vector<vector<size_t>> oob_indices_non_bool;
     OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
@@ -320,7 +321,6 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
     for (size_t i = 0; i < ntrees; ++i) {
         SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[i].get());
         size_t num_oob_obs = oob_indices_non_bool[i].size();
-        total_oob += num_oob_obs;
         
         // initialise vectors of outcomes
         vector<double> tree_outcomes;
@@ -348,7 +348,7 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
                 //tree_outcomes.push_back(vector_sum(tree_pred));
                 //tree_outcomes_shuffled.push_back(vector_sum(tree_pred_shuffled));
 
-                // test using the final chf value instead of the sum
+                // test using the final chf value instead of the sum (I think the outcome should be the sum of the CHF actually)
                 tree_outcomes.push_back(tree_pred[num_unique_event_times - 1]);
                 tree_outcomes_shuffled.push_back(tree_pred_shuffled[num_unique_event_times - 1]);
 
@@ -359,11 +359,14 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
         }
 
         // now compute and save tree VIMP
+        total_oob += num_oob_obs;
         total_vimp += (computeConcordanceIndex(tree_outcomes, times_tree, ind_tree) - computeConcordanceIndex(tree_outcomes_shuffled, times_tree, ind_tree)) * num_oob_obs;
+        //total_vimp += (computeConcordanceIndex(tree_outcomes, times_tree, ind_tree) - computeConcordanceIndex(tree_outcomes_shuffled, times_tree, ind_tree));
     }
     
     // return forest VIMP
     return total_vimp / total_oob;
+    //return total_vimp / ntrees;
 }
 
 double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed) {
@@ -413,10 +416,12 @@ double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed) {
             ind_tree.push_back(ind[j]);
         }
 
+        // now compute and save tree VIMP
         total_oob += num_oob_obs;
         total_vimp += (computeConcordanceIndex(tree_outcomes, times_tree, ind_tree) - computeConcordanceIndex(tree_outcomes_random, times_tree, ind_tree)) * num_oob_obs;
     }
 
+    // return forest VIMP
     return total_vimp / total_oob;
 }
 

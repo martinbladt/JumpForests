@@ -18,6 +18,10 @@ public:
     return means[predictionLeafID(x)];
   }
   vector<double> computePredictions(const Data& new_data) override;
+  // VIMP prediction for regression trees trees
+  ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
+    return means[predictionLeafIDVIMP(x, feature, rng)];
+  }
 
 private:
   vector<double> means;     // the means in each terminal node
