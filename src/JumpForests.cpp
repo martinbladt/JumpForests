@@ -758,7 +758,7 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
 
 // [[Rcpp::export]]
 List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule,
-    unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector response_indices, NumericVector feature_indices, 
+    unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, 
     LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times = 0) {
 
   // convert the input to C++ vectors
@@ -785,7 +785,8 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
     Named("mtry") = mtry,
     Named("min.node.size") = min_node_size,
     Named("nsplits") = nsplits,
-    Named("honest") = honest
+    Named("honest") = honest,
+    Named("double.bootstrap") = double_bootstrap
   );
 
   // the forest is a regression forest
@@ -798,7 +799,7 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 
     // create and grow the regression forest
     RegressionForest* forest = new RegressionForest();
-    forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, seed, nworkers);
+    forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, double_bootstrap, seed, nworkers);
     forest->grow();
 
     XPtr<RegressionForest> regression_forest(forest, true);
@@ -843,7 +844,7 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 
     // create and grow the survival forest
     SurvivalForest* forest = new SurvivalForest(unique_event_times, response_event_time_ids, true_event_time_ids, save_predictions);
-    forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, seed, nworkers);
+    forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, double_bootstrap, seed, nworkers);
     forest->grow();
 
     // specific to survival
@@ -877,7 +878,7 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 
 // [[Rcpp::export]]
 List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
-  unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector feature_indices, 
+  unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, 
   LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times = 0) {
   
   // convert the input to C++ vectors
@@ -923,7 +924,7 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
 
   // create and grow the multi-state forest
   MultistateForest* forest = new MultistateForest(unique_event_times, response_event_time_ids, data->getNumberOfStates(), save_predictions);
-  forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, seed, nworkers);
+  forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, double_bootstrap, seed, nworkers);
   forest->grow();
 
   // specific to multi-states

@@ -41,10 +41,10 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
 //    unsigned int ntrees, bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical,
 //    NumericVector unique, unsigned int seed, unsigned int nworkers);
 List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule,
-    unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector response_indices, NumericVector feature_indices, 
+    unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, 
     LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, size_t num_event_times);
 List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
-  unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, NumericVector feature_indices, 
+  unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, 
   LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
 
 // predicting with forests

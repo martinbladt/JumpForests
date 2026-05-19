@@ -40,7 +40,7 @@ lambda <- function(t, x){
 
 set.seed(2026)
 
-n <- 100
+n <- 1000
 X <- runif(n)   # signal
 Y <- rnorm(n)
 #Y <- rbinom(n, 3, 0.2)   # noise

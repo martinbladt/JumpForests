@@ -17,7 +17,7 @@ class Forest {
 public:
   // function to initialise a general Forest (later add more options such as OOB, honesty etc.)
   void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, string splitrule,
-                  unsigned int ntrees, bool honest, bool swr, double sample_rate, unsigned int seed, unsigned int nworkers);
+                  unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, unsigned int seed, unsigned int nworkers);
 
   virtual ~Forest() = default;
 
@@ -66,7 +66,7 @@ protected:
   unsigned int ntrees;            // number of trees in the forest
   string splitrule;               // splitting rule
   bool swr;                       // sampling with replacement (true) or not (false)
-  double sample_rate;           // the subsampling rate (if double_bootstrap == true, applies to both subsets)
+  double sample_rate;             // the subsampling rate (if double_bootstrap == true, applies to both subsets)
   bool double_bootstrap;          // use bootstrap separately (true) or not (false), only relevant when honest == true
   bool honest;                    // true if the trees in the forest are honest, otherwise false
 

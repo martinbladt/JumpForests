@@ -120,7 +120,7 @@ length(veteran_tree$unique.event.times)
 head(veteran)
 test_data_functions(veteran, c(3, 4), c(2, 1, 8, 6, 5, 7))
 
-veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = FALSE, save_predictions = FALSE)
+veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = TRUE, swr = FALSE, save_predictions = TRUE, double_bootstrap = FALSE)
 (veteran_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = veteran, seed = 2025, samptype = "swr"))
 (veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation"))
 

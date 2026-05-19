@@ -1,7 +1,7 @@
 #include "Forest.h"
 
 void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, string splitrule,
-                        unsigned int ntrees, bool honest, bool swr, double sample_rate, unsigned int seed, unsigned int nworkers) {
+                        unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, unsigned int seed, unsigned int nworkers) {
     // initialise with the chosen hyperparameters
     this->data = data;
     this->mtry = mtry;
@@ -14,7 +14,7 @@ void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int m
     this->honest = honest;
     this->swr = swr;
     this->sample_rate = sample_rate;
-    this->double_bootstrap = false;
+    this->double_bootstrap = double_bootstrap;
     
     // set number of threads to use during fitting and predicting
     int max_workers = thread::hardware_concurrency();

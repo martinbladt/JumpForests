@@ -25,12 +25,12 @@ JFCppTreeError <- function(JFTree, df, feature_indices, categorical, unique, res
     .Call(`_JumpForests_JFCppTreeError`, JFTree, df, feature_indices, categorical, unique, response_indices)
 }
 
-JFCppForest <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times = 0L) {
-    .Call(`_JumpForests_JFCppForest`, tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
+JFCppForest <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times = 0L) {
+    .Call(`_JumpForests_JFCppForest`, tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
 }
 
-JFCppForestMM <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times = 0L) {
-    .Call(`_JumpForests_JFCppForestMM`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
+JFCppForestMM <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times = 0L) {
+    .Call(`_JumpForests_JFCppForestMM`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
 }
 
 JFCppForestPredictTraining <- function(JFForest) {

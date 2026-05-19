@@ -342,7 +342,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
       splitrule <- "mse"
     }
     result <- JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
-                          sample_rate, response_indices, feature_indices, processed_data$categorical,
+                          sample_rate, double_bootstrap, response_indices, feature_indices, processed_data$categorical,
                           processed_data$unique_values, seed, nworkers, save_predictions)
     result$categorical.levels <- processed_data$categorical_levels
     return(result)
@@ -386,7 +386,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     }
 
     result <- JFCppForest(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
-                          sample_rate, response_indices, feature_indices, processed_data$categorical,
+                          sample_rate, double_bootstrap, response_indices, feature_indices, processed_data$categorical,
                           processed_data$unique_values, seed, nworkers, save_predictions, num_event_times)
     result$categorical.levels <- processed_data$categorical_levels
     return(result)
@@ -426,8 +426,9 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
 
     result <- JFCppForestMM(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
-                            nsplits, splitrule, ntrees, honest, swr, sample_rate, feature_indices, processed_data$categorical,
-                            processed_data$unique_values, seed, nworkers, save_predictions, num_event_times)
+                            nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, 
+                            processed_data$categorical, processed_data$unique_values, seed, nworkers, save_predictions, 
+                            num_event_times)
     result$categorical.levels <- processed_data$categorical_levels
     return(result)
 
@@ -692,15 +693,21 @@ print_forest <- function(forest_list) {
   } else {
     cat("Subsampling scheme: Without replacement \n")
   }
-  cat("Resample size used to grow trees:", forest_list$subsample.size, "\n")
   cat("Minimal node size:", forest_list$min.node.size, "\n")
   cat("Number of selected features in each split:", forest_list$mtry, "\n")
   cat("Number of possible splits considered for each feature:", forest_list$nsplits, "\n")
   cat("Splitting rule:", forest_list$splitrule, "\n")
   if (forest_list$honest) {
     cat("Honest: Yes \n")
+    cat("Resample size used to grow trees:", floor(forest_list$subsample.size/2), "(approx.)", "\n")
+    if (forest_list$double.bootstrap) {
+      cat("Double bootstrap: Yes", "\n")
+    } else {
+      cat("Double bootstrap: No", "\n")
+    }
   } else {
     cat("Honest: No \n")
+    cat("Resample size used to grow trees:", forest_list$subsample.size, "\n")
   }
 
   # print info about the forest itself
