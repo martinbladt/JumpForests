@@ -47,7 +47,7 @@ public:
   pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
   void computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index);
   // VIMP prediction for survival trees
-  ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937 rng) {
+  ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
     return chf[predictionLeafIDVIMP(x, feature, rng)];
   }
 

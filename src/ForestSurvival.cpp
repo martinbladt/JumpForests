@@ -1,5 +1,16 @@
 #include "ForestSurvival.h"
 
+namespace {
+mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
+    seed_seq::result_type seed_data[2] = {
+        static_cast<seed_seq::result_type>(feature_seed),
+        static_cast<seed_seq::result_type>(tree_id)
+    };
+    seed_seq tree_seed(seed_data, seed_data + 2);
+    return mt19937(tree_seed);
+    }
+}
+
 // constructor for survival forests
 //--------------------------------------------------------------------------------------
 
@@ -305,7 +316,7 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
     OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
     const vector<vector<double>>& shuffled_values_feature = shuffledFeatureValues(oob_indices_non_bool, feature, feature_seed);
     
-    // #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers) reduction(+:total_vimp,total_oob)
     for (size_t i = 0; i < ntrees; ++i) {
         SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[i].get());
         size_t num_oob_obs = oob_indices_non_bool[i].size();
@@ -314,6 +325,8 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
         // initialise vectors of outcomes
         vector<double> tree_outcomes;
         vector<double> tree_outcomes_shuffled;
+        tree_outcomes.reserve(num_obs);
+        tree_outcomes_shuffled.reserve(num_obs);
         tree_outcomes.reserve(num_oob_obs);
         tree_outcomes_shuffled.reserve(num_oob_obs);
 
@@ -353,39 +366,92 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
     return total_vimp / total_oob;
 }
 
-// computes VIMP predictions by random daughter assignments
-// (this method does not work properly, I don't know why)
-vector<double> SurvivalForest::computePredictionsVIMPRandom(size_t feature, int feature_seed) {
+double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed) {
+    /*
+    Tree-level random-daughter VIMP. For each tree, OOB observations are
+    dropped down normally and with random left/right assignments whenever
+    the target feature is encountered. The tree-level C-index difference is
+    averaged over trees, weighted by each tree's OOB count.
+    */
+
     size_t num_obs = data->getNumberOfObs();
-    vector<double> vimp_predictions(num_obs * num_unique_event_times);
+    const vector<double>& times = data->get_y_col(0);
+    const vector<double>& ind = data->get_y_col(1);
 
-    // for reproducibility, use the random number generator of the forest but with a feature dependent seed
-    //random_number_generator.seed(seed + feature);
+    double total_vimp = 0;
+    double total_oob = 0;
 
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
-    for (size_t i = 0; i < num_obs; ++i) {
-        vector<double> vimp_pred(num_unique_event_times, 0);
-        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers) reduction(+:total_vimp,total_oob)
+    for (size_t i = 0; i < ntrees; ++i) {
+        SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[i].get());
+        mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
+        size_t num_oob_obs = 0;
 
-        // compute the sum of all oob predictions for observation i
-        for (size_t j = 0; j < ntrees; ++j) {
-            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
-            
-            if (oob_indices[j][i]) {
-                // local random number generator to avoid races
-                mt19937 local_rng(feature_seed + j);
-                ++num_oob_trees;
-                vector<double> vimp_tree_pred = get<vector<double>>(tree->predictVIMP(data->get_x_row(i), feature, local_rng));
-                sum_vectors(vimp_pred, vimp_tree_pred);
+        vector<double> tree_outcomes;
+        vector<double> tree_outcomes_random;
+        vector<double> times_tree;
+        vector<double> ind_tree;
+        tree_outcomes.reserve(num_obs);
+        tree_outcomes_random.reserve(num_obs);
+        times_tree.reserve(num_obs);
+        ind_tree.reserve(num_obs);
+
+        for (size_t j = 0; j < num_obs; ++j) {
+            if (!oob_indices[i][j]) {
+                continue;
             }
+
+            ++num_oob_obs;
+            vector<double> x = data->get_x_row(j);
+            vector<double> tree_pred = get<vector<double>>(tree->predict(x));
+            vector<double> tree_pred_random = get<vector<double>>(tree->predictVIMP(x, feature, local_rng));
+
+            // Keep the same risk score currently used by permutation VIMP.
+            tree_outcomes.push_back(tree_pred[num_unique_event_times - 1]);
+            tree_outcomes_random.push_back(tree_pred_random[num_unique_event_times - 1]);
+            times_tree.push_back(times[j]);
+            ind_tree.push_back(ind[j]);
         }
 
-        // normalise and save predictions
-        for (size_t k = 0; k < num_unique_event_times; ++k) {
-            if (num_oob_trees > 0) {
-                vimp_pred[k] /= num_oob_trees;
+        total_oob += num_oob_obs;
+        total_vimp += (computeConcordanceIndex(tree_outcomes, times_tree, ind_tree) - computeConcordanceIndex(tree_outcomes_random, times_tree, ind_tree)) * num_oob_obs;
+    }
+
+    return total_vimp / total_oob;
+}
+
+// computes VIMP predictions by random daughter assignments
+vector<double> SurvivalForest::computePredictionsVIMPRandom(size_t feature, int feature_seed) {
+    size_t num_obs = data->getNumberOfObs();
+    vector<double> vimp_predictions(num_obs * num_unique_event_times, 0);
+    vector<size_t> num_oob_trees(num_obs, 0);
+
+    // Use one RNG stream per tree and advance it across that tree's OOB cases.
+    // Reseeding per observation would give every OOB case in a tree the same
+    // random daughter sequence.
+    for (size_t j = 0; j < ntrees; ++j) {
+        SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+        mt19937 local_rng = makeVIMPTreeRNG(feature_seed, j);
+
+        for (size_t i = 0; i < num_obs; ++i) {
+            if (!oob_indices[j][i]) {
+                continue;
             }
-            vimp_predictions[i * num_unique_event_times + k] = vimp_pred[k];
+
+            ++num_oob_trees[i];
+            vector<double> vimp_tree_pred = get<vector<double>>(tree->predictVIMP(data->get_x_row(i), feature, local_rng));
+            for (size_t k = 0; k < num_unique_event_times; ++k) {
+                vimp_predictions[i * num_unique_event_times + k] += vimp_tree_pred[k];
+            }
+        }
+    }
+
+    // normalise predictions by the number of OOB trees for each observation
+    for (size_t i = 0; i < num_obs; ++i) {
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            if (num_oob_trees[i] > 0) {
+                vimp_predictions[i * num_unique_event_times + k] /= num_oob_trees[i];
+            }
         }
     }
     return vimp_predictions; 
@@ -411,8 +477,6 @@ vector<double> SurvivalForest::computePredictionsVIMPPermute(size_t feature, int
             SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
             
             if (oob_indices[j][i]) {
-                // local random number generator to avoid races
-                mt19937 local_rng(feature_seed + j);
                 ++num_oob_trees;
                 vector<double> x = data->get_x_row(i);
                 x[feature] = shuffled_values_feature[j][i];

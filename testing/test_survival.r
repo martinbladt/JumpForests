@@ -88,6 +88,9 @@ print_forest(fitted_forest)
 #--------------------------------------------------------------------
 
 devtools::load_all()
+library(randomForestSRC)
+library(ranger)
+library(survival)
 data(veteran, package = "randomForestSRC")
 veteran$trt <- as.factor(veteran$trt)
 veteran$celltype <- as.factor(veteran$celltype)
@@ -120,8 +123,8 @@ length(veteran_tree$unique.event.times)
 head(veteran)
 test_data_functions(veteran, c(3, 4), c(2, 1, 8, 6, 5, 7))
 
-veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = TRUE, swr = FALSE, save_predictions = TRUE, double_bootstrap = FALSE)
-(veteran_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = veteran, seed = 2025, samptype = "swr"))
+veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = FALSE, save_predictions = TRUE, double_bootstrap = FALSE)
+(veteran_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = veteran, seed = 2025, samptype = "swr", importance = "permute"))
 (veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation"))
 
 print_forest(veteran_forest)
@@ -156,7 +159,7 @@ jfforest.error(veteran_forest, new_data = veteran)  # since veteran is the train
 # observation: on new data, the IBS is very comparable to a single tree (but here we also use the training data)
 # some numerical instability when computing the OOB Brier score error
 
-min(veteran_forest$censoring.oob) # approx. 0.58 that's fine?
+min(veteran_forest$censoring.oob)
 which(veteran_forest$censoring.oob == min(veteran_forest$censoring.oob))
 veteran_forest$censoring.oob[44,]
 veteran_tree$censoring[44,]
@@ -170,22 +173,23 @@ censoring_predictions[95,]
 jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "permute")
 veteran_forest <- jfforest.vimp(veteran_forest, seed = 2025, method = "permute")
 unlist(veteran_forest$vimp)
-vimp.rfsrc(veteran_forest_SRC, method = "permute", vimp.measure = "concordance")$importance
+vimp.rfsrc(veteran_forest_SRC, importance = "random", vimp.measure = "concordance")$importance
 importance(veteran_forest_ranger)
 
-# VIMP varies for each run with SRC, so should run several times
-set.seed(2025)
-VIMP <- matrix(0, ncol = 6, nrow = 500)
-VIMP_SRC <- matrix(0, ncol = 6, nrow = 500)
-VIMP_ranger <- matrix(0, ncol = 6, nrow = 500)
-for (b in 1:500) {
+# VIMP varies for each run with SRC, so should run several times (here we use the permutation method)
+set.seed(2026)
+nrows <- 100
+VIMP <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_ranger <- matrix(0, ncol = 6, nrow = nrows)
+for (b in 1:nrows) {
     VIMP[b, 1] <- jfforest.vimp(veteran_forest, feature = "trt")
     VIMP[b, 2] <- jfforest.vimp(veteran_forest, feature = "celltype")
     VIMP[b, 3] <- jfforest.vimp(veteran_forest, feature = "karno")
     VIMP[b, 4] <- jfforest.vimp(veteran_forest, feature = "diagtime")
     VIMP[b, 5] <- jfforest.vimp(veteran_forest, feature = "age")
     VIMP[b, 6] <- jfforest.vimp(veteran_forest, feature = "prior")
-    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(veteran_forest_SRC, method = "permute", vimp.measure = "concordance")$importance)
+    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(veteran_forest_SRC, method = "random", vimp.measure = "concordance")$importance)
     veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation")
     VIMP_ranger[b, ] <- as.numeric(importance(veteran_forest_ranger))
     cat("Iteration", b, "\n")
@@ -198,8 +202,43 @@ colMeans(VIMP)
 colMeans(VIMP_SRC)
 colMeans(VIMP_ranger)
 
+quantile(VIMP[,1], c(0.025, 0.975))
+quantile(VIMP_SRC[,1], c(0.025, 0.975))
+quantile(VIMP_ranger[,1], c(0.025, 0.975))
+quantile(VIMP[,2], c(0.025, 0.975))
+quantile(VIMP_SRC[,2], c(0.025, 0.975))
+quantile(VIMP_ranger[,2], c(0.025, 0.975))
+
 # conclusion: gives roughly same error, same average tree complexity etc. for veteran, but
-# for some reason VIMP is different. I will leave this for now
+# for some reason VIMP is different.
+
+set.seed(2026)
+nrows <- 100
+VIMP <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_ranger <- matrix(0, ncol = 6, nrow = nrows)
+for (b in 1:nrows) {
+    VIMP[b, 1] <- jfforest.vimp(veteran_forest, feature = "trt", method = "random")
+    VIMP[b, 2] <- jfforest.vimp(veteran_forest, feature = "celltype", method = "random")
+    VIMP[b, 3] <- jfforest.vimp(veteran_forest, feature = "karno", method = "random")
+    VIMP[b, 4] <- jfforest.vimp(veteran_forest, feature = "diagtime", method = "random")
+    VIMP[b, 5] <- jfforest.vimp(veteran_forest, feature = "age", method = "random")
+    VIMP[b, 6] <- jfforest.vimp(veteran_forest, feature = "prior", method = "random")
+    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(veteran_forest_SRC, method = "random", vimp.measure = "concordance")$importance)
+    #veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation")
+    VIMP_ranger[b, ] <- as.numeric(importance(veteran_forest_ranger))
+    cat("Iteration", b, "\n")
+}
+colMeans(VIMP)
+colMeans(VIMP_SRC)
+colMeans(VIMP_ranger)
+
+quantile(VIMP[,1], c(0.025, 0.975))
+quantile(VIMP_SRC[,1], c(0.025, 0.975))
+quantile(VIMP_ranger[,1], c(0.025, 0.975))
+quantile(VIMP[,2], c(0.025, 0.975))
+quantile(VIMP_SRC[,2], c(0.025, 0.975))
+quantile(VIMP_ranger[,2], c(0.025, 0.975))
 
 # retinopathy
 #--------------------------------------------------------------------
@@ -208,7 +247,7 @@ retinopathy <- retinopathy[, -1]
 head(retinopathy)
 retinopathy_tree <- jftree(Surv(futime, status) ~ ., data = retinopathy)
 
-retinopathy_forest <- jfforest(Surv(futime, status) ~ ., data = retinopathy, splitrule = "logrank", seed = 2025)
+retinopathy_forest <- jfforest(Surv(futime, status) ~ ., data = retinopathy, splitrule = "logrank", seed = 2025, min_node_size = 20)
 (retinopathy_forest_SRC <- rfsrc(Surv(futime, status) ~ ., data = retinopathy, seed = 2025, samptype = "swr"))
 (retinopathy_forest_ranger <- ranger(Surv(futime, status) ~., data = retinopathy, seed = 2025))
 

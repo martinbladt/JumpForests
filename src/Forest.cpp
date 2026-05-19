@@ -1,5 +1,16 @@
 #include "Forest.h"
 
+namespace {
+mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
+    seed_seq::result_type seed_data[2] = {
+        static_cast<seed_seq::result_type>(feature_seed),
+        static_cast<seed_seq::result_type>(tree_id)
+    };
+    seed_seq tree_seed(seed_data, seed_data + 2);
+    return mt19937(tree_seed);
+}
+}
+
 void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, string splitrule,
                         unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, unsigned int seed, unsigned int nworkers) {
     // initialise with the chosen hyperparameters
@@ -62,7 +73,7 @@ vector<vector<double>> Forest::shuffledFeatureValues(const vector<vector<size_t>
         }
 
         // thread-safe local random number generator
-        mt19937 local_rng(feature_seed + i);
+        mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
 
         // shuffle OOB values
         shuffle(oob_values.begin(), oob_values.end(), local_rng);

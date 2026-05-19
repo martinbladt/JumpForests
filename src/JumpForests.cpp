@@ -1435,7 +1435,7 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     if (method_cpp == "permute") {
       return forest->computeVIMPPermute(feature, feature_seed);
     } else if (method_cpp == "random") {
-      throw runtime_error("random not yet implemented");
+      return forest->computeVIMPRandom(feature, feature_seed);
     } else {
       throw runtime_error("Type of VIMP computation method not recognised, use 'permute' or 'random'");
     }
@@ -1467,7 +1467,7 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     //Rcout << "Line 387: times: "; printVector(forest->getData()->get_y_col(0)); 
     //Rcout << "Line 388: ind: "; printVector(forest->getData()->get_y_col(1));
     double vimp_error = (1 - computeConcordanceIndex(outcomes_vimp, forest->getData()->get_y_col(0), forest->getData()->get_y_col(1)));
-    double vimp = vimp_error - as<double>(JFForest["oob.error"]);
+    double vimp = vimp_error - as<double>(JFForest["C.error"]);
     Rcout << "Line 389: VIMP for feature " << feature << ": " << vimp << endl;
     return vimp;
     */

@@ -49,6 +49,7 @@ public:
   vector<double> computePredictionsVIMPRandom(size_t feature, int feature_seed);
   vector<double> computePredictionsVIMPPermute(size_t feature, int feature_seed);
   double computeVIMPPermute(size_t feature, int feature_seed);
+  double computeVIMPRandom(size_t feature, int feature_seed);
 
 private:
   // the trees in the forest
