@@ -4,30 +4,29 @@ library(Rcpp)
 library(randomForestSRC)
 library(ranger)
 
-
-
 set.seed(2026)
 n <- 2000
 X1 <- rbinom(n, 3, 0.2)
 X2 <- rnorm(n, 3, 2)
 X3 <- rnorm(n)
-X4 <- rnorm(n)
+X4 <- rnorm(n)  # noise
+X5 <- rnorm(n)  # noise
 
-test_data <- data.frame(X1 = X1, X2 = X2, X3 = X3, X4 = X4, Y = 2 * X1 + 3 * X2 - 2 * X3^2)
-new_data <- data.frame(X2 = rnorm(n, 3, 2), X1 = rbinom(n, 3, 0.2), Y = 2 * X1 + 3 * X2 - 2 * X3^2, X3 = rnorm(n), X4 = rnorm(n))
+test_data <- data.frame(X1 = X1, X2 = X2, X3 = X3, X4 = X4, X5 = X5, Y = 2 * X1 + 3 * X2 - 2 * X3^2)
+new_data <- data.frame(X2 = rnorm(n, 3, 2), X1 = rbinom(n, 3, 0.2), Y = 2 * X1 + 3 * X2 - 2 * X3^2, X3 = rnorm(n), X4 = rnorm(n), X5 = rnorm(n))
 
 test_forest <- jfforest(Y ~ ., data = test_data, honest = FALSE, min_node_size = 5)
 test_forest
-print_forest(test_forest)   # needs to print error (also fix the subsample size with honesty)
-mean((test_data$Y - mean(test_data$Y))^2)   # 44.95195
+print_forest(test_forest)
+#mean((test_data$Y - mean(test_data$Y))^2)   # 44.95195
 
 jfforest.predict(test_forest)
 jfforest.predict(test_forest, new_data = test_data)
 jfforest.predict(test_forest, new_data = new_data)
 
 jfforest.error(test_forest)
-# without honesty: $mse.error = 1.381681, R2.error = 0.9692632
-# with honesty: $mse.error = 2.123524, R2.error = 0.9527601
+# without honesty: $mse.error = 1.240329, R2 = 0.9724077
+# with honesty: $mse.error = 1.972511, R2 = 0.9561196
 jfforest.error(test_forest, new_data = test_data)
 jfforest.error(test_forest, new_data = new_data)
 
@@ -64,33 +63,72 @@ jftree.error(test_tree)
 jftree.error(test_tree, new_data = test_data)
 jftree.error(test_tree, new_data = new_data)
 
+# VIMP
+test_forest_SRC <- rfsrc(Y ~ ., data = test_data)
+test_forest_ranger <- ranger(Y ~ ., data = test_data, importance = "permutation")
+vimp_permute <- unlist(jfforest.vimp(test_forest, method = "permute")$vimp)
+vimp_random <- unlist(jfforest.vimp(test_forest, method = "random")$vimp)
+
+vimp.rfsrc(test_forest_SRC, importance = "permute", block.size = 1)$importance
+importance(test_forest_ranger)
+vimp_permute
+
+vimp.rfsrc(test_forest_SRC, importance = "random", block.size = 1)$importance
+vimp_random
+
+# actually seems to make sense!
+
 # BostonHousing dataset
 #-------------------------------------------------------------------------------------------------
 data("BostonHousing", package = "mlbench")
 head(BostonHousing)
 set.seed(2026)
-housing_forest <- jfforest(medv ~ ., data = BostonHousing, honest = FALSE, min_node_size = 5)
-housing_forest_SRC <- rfsrc(medv ~ ., data = BostonHousing, min_node_size = 5)
+housing_forest <- jfforest(medv ~ ., data = BostonHousing, honest = FALSE, min_node_size = 5, ntrees = 2000)
+housing_forest_SRC <- rfsrc(medv ~ ., data = BostonHousing, min_node_size = 5, ntrees = 2000)
+housing_forest_ranger <- ranger(medv ~ ., data = BostonHousing, importance = "permutation", num.trees = 2000)
 
-print_forest(housing_forest)    
+print_forest(housing_forest)
 jfforest.error(housing_forest)  # MSE = 13.02692, R^2 = 0.8456884
 housing_forest_SRC              # MSE = 11.56478888, R^2 = 0.86327891
 
 # comment: with a bit of tuning, the OOB error of our forest can be made at least as small as the error for SRC
 
-# test VIMP!
+vimp_permute <- unlist(jfforest.vimp(housing_forest, method = "permute")$vimp)
+vimp_random <- unlist(jfforest.vimp(housing_forest, method = "random")$vimp)
+
+vimp.rfsrc(housing_forest_SRC, importance = "permute", block.size = 1)$importance
+importance(housing_forest_ranger)
+vimp_permute
+
+vimp.rfsrc(housing_forest_SRC, importance = "random", block.size = 1)$importance
+vimp_random
+
+# concurs nicely
 
 # CO2 dataset
 #-------------------------------------------------------------------------------------------------
 data("CO2", package = "datasets")
 head(CO2)
 
-CO2_forest <- jfforest(uptake ~ ., data = CO2, min_node_size = 3)
-CO2_forest_SRC <- rfsrc(uptake ~ ., data = CO2, min_node_size = 5)
+set.seed(2026)
+CO2_forest <- jfforest(uptake ~ ., data = CO2, min_node_size = 3, ntrees = 1000 * (ncol(CO2) - 1))
+CO2_forest_SRC <- rfsrc(uptake ~ ., data = CO2, min_node_size = 5, ntrees = 1000 * (ncol(CO2) - 1))
+CO2_forest_ranger <- ranger(uptake ~., data = CO2, importance = "permutation", num.trees = 1000 * (ncol(CO2) - 1))
 
 print_forest(CO2_forest)
 CO2_forest_SRC
+CO2_forest_ranger
 
-# test VIMP!
+vimp_permute <- unlist(jfforest.vimp(CO2_forest, method = "permute")$vimp)
+vimp_random <- unlist(jfforest.vimp(CO2_forest, method = "random")$vimp)
+
+vimp.rfsrc(CO2_forest_SRC, importance = "permute", block.size = 1)$importance
+importance(CO2_forest_ranger)
+vimp_permute
+
+vimp.rfsrc(CO2_forest_SRC, importance = "random", block.size = 1)$importance
+vimp_random
+
+# here there is some difference for Type and Plant, but otherwise ok
 
 #nolint_end

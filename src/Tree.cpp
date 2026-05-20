@@ -51,14 +51,14 @@ size_t Tree::predictionLeafID(const vector<double>& x) {
 }
 
 size_t Tree::predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
-    uniform_int_distribution<size_t> daughter_id(0, 1);
+    //uniform_int_distribution<size_t> daughter_id(0, 1);
     size_t current_node = 0;
     while (left_daughters[current_node] != 0) { // while not yet in a terminal node
         // if the feature in the current node equals the chosen feature, make daughter assignment random
         if (feature_IDs[current_node] == feature) {
-            //size_t left_daughter_size = node_sizes[left_daughters[current_node]];
-            //size_t right_daughter_size = node_sizes[left_daughters[current_node] + 1];
-            //discrete_distribution<size_t> daughter_id({left_daughter_size, right_daughter_size});
+            size_t left_daughter_size = node_sizes[left_daughters[current_node]];
+            size_t right_daughter_size = node_sizes[left_daughters[current_node] + 1];
+            discrete_distribution<size_t> daughter_id({left_daughter_size, right_daughter_size});
             size_t daughter = daughter_id(rng);
             //Rcout << "daughter:" << daughter << endl;
             current_node = left_daughters[current_node] + daughter;

@@ -610,7 +610,7 @@ List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_
 void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response) {
   const vector<double>& predictions = as<vector<double>>(JFTree["predictions"]);
   JFTree["mse.error"] = computeMSE(predictions, response);
-  JFTree["R2.error"] = computeR2(JFTree["mse.error"], response);
+  JFTree["R2"] = computeR2(JFTree["mse.error"], response);
 }
 
 // Classification
@@ -700,7 +700,7 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
     List result;
     double mse = computeMSE(predictions, response);
     result["mse.error"] = mse;
-    result["R2.error"] = computeR2(mse, response);
+    result["R2"] = computeR2(mse, response);
     return result;
   }
   if (type == "Classification") {
@@ -1269,7 +1269,7 @@ void JFCppForestErrorRegression(List& JFForest, const vector<double>& response) 
     predictions[i] = predictions_R[i];
   }
   JFForest["mse.error"] = computeMSE(predictions, response);
-  JFForest["R2.error"] = computeR2(JFForest["mse.error"], response);
+  JFForest["R2"] = computeR2(JFForest["mse.error"], response);
 }
 
 // computes the error for a regression forest based on new predictions
@@ -1277,7 +1277,7 @@ List JFCppForestErrorRegression(const vector<double>& predictions, const vector<
   List result;
   double mse = computeMSE(predictions, response);
   result["error.mse"] = mse;
-  result["R2.error"] = computeR2(mse, response);
+  result["R2"] = computeR2(mse, response);
   return result;
 }
 

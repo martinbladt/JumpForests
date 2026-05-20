@@ -227,7 +227,7 @@ jftree.error <- function(tree_list, new_data = NULL) {
   # if data is not supplied, return the error based on training data
   if (is.null(new_data)) {
     if (tree_list$tree.type == "Regression") {
-      return(list("mse.error" = tree_list$mse.error, "R2.error" = tree_list$R2.error))
+      return(list("mse.error" = tree_list$mse.error, "R2" = tree_list$R2))
     }
     if (tree_list$tree.type == "Classification") {
 
@@ -507,7 +507,7 @@ jfforest.error <- function(forest_list, new_data = NULL) {
   # if data is not supplied and error metrics are already computed, return the error based on OOB data
   if (is.null(new_data)) {
     if (forest_list$tree.type == "Regression") {
-      return(list("mse.error" = forest_list$mse.error, "R2.error" = forest_list$R2.error))
+      return(list("mse.error" = forest_list$mse.error, "R2" = forest_list$R2))
     }
     if (forest_list$tree.type == "Classification") {
 
@@ -591,7 +591,7 @@ print_tree <- function(tree_list, full = FALSE) {
 
   if (tree_list$tree.type == "Regression") {
     cat("Training error (MSE):",tree_list$mse.error, "\n")
-    cat("Training error (R^2):",tree_list$R2.error, "\n")
+    cat("Training error (R^2):",tree_list$R2, "\n")
   }
   if (tree_list$tree.type == "Classification") {
     # TODO
@@ -667,7 +667,7 @@ print_forest <- function(forest_list) {
 
   if (forest_list$tree.type == "Regression") {
     cat("OOB error (MSE):", forest_list$mse.error, "\n")
-    cat("OOB error (R2:)", forest_list$R2.error, "\n")
+    cat("OOB error (R2:)", forest_list$R2, "\n")
   }
   if (forest_list$tree.type == "Classification") {
     # TODO

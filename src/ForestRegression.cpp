@@ -169,7 +169,7 @@ double RegressionForest::computeVIMPPermute(size_t feature, int feature_seed) {
     OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
     const vector<vector<double>>& shuffled_values_feature = shuffledFeatureValues(oob_indices_non_bool, feature, feature_seed);
 
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers) reduction(+:result)
     for (size_t i = 0; i < ntrees; ++i) {
         RegressionTree* tree = dynamic_cast<RegressionTree*>(trees[i].get());
         size_t num_oob_obs = oob_indices_non_bool[i].size();
@@ -207,7 +207,7 @@ double RegressionForest::computeVIMPRandom(size_t feature, int feature_seed) {
     const vector<double> y = data->get_y();
     double result = 0;
 
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers) reduction(+:result)
     for (size_t i = 0; i < ntrees; ++i) {
         RegressionTree* tree = dynamic_cast<RegressionTree*>(trees[i].get());
         mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
