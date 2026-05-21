@@ -6,6 +6,8 @@ Functions for regression trees
 
 #include "TreeRegression.h"
 
+#include <cmath>
+
 // constructor for RegressionTree
 //--------------------------------------------------------------------------------------
 
@@ -26,11 +28,49 @@ double RegressionTree::computeSum(const vector<size_t>& indices) {
   return sum;
 }
 
-void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
+double RegressionTree::computeAbsoluteDeviation(const vector<size_t>& indices) {
+  if (indices.empty()) {
+    return 0;
+  }
+
+  vector<double> response_values;
+  response_values.reserve(indices.size());
+  for (size_t i : indices) {
+    response_values.push_back(data->get_y(i));
+  }
+  sort(response_values.begin(), response_values.end());
+
+  size_t n = response_values.size();
+  double median = response_values[n / 2];
+  if (n % 2 == 0) {
+    median = (response_values[n / 2 - 1] + median) / 2.0;
+  }
+
+  double absolute_deviation = 0;
+  for (double response : response_values) {
+    absolute_deviation += std::abs(response - median);
+  }
+  return absolute_deviation;
+}
+
+double RegressionTree::computeMSESplitValue(size_t n_left, double sum_left, size_t n_right, double sum_right) {
+  return sum_left * sum_left / (double) n_left + sum_right * sum_right / (double) n_right;
+}
+
+double RegressionTree::computeMAESplitValue(const vector<size_t>& left_indices, const vector<size_t>& right_indices,
+                                            double parent_absolute_deviation) {
+  return parent_absolute_deviation - computeAbsoluteDeviation(left_indices) - computeAbsoluteDeviation(right_indices);
+}
+
+void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature,
                                          vector<double>& best_threshold, double& best_sum_left) {
   const vector<size_t>& current_node_obs = node_obs[node_index];
   size_t num_obs_parent = current_node_obs.size();
   double parent_sum = computeSum(current_node_obs); // sum_node[node_index];
+  double parent_absolute_deviation = 0;
+  if (splitrule == "mae") {
+    parent_absolute_deviation = computeAbsoluteDeviation(current_node_obs);
+  }
 
   // samples split points
   vector<double> split_points;
@@ -56,7 +96,7 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
         break;
       }
     }
-  }  
+  }
   // now find the best split
   for (size_t s = 0; s < nsplits_final; ++s) {
     // if one of the daughter nodes are too small, skip the computation for that split
@@ -64,13 +104,28 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
     if (num_obs_right[s] < min_node_size || num_obs_left < min_node_size) {
       continue;
     }
-    
-    // should extend to general splitting rules here
-    double sum_left = parent_sum - sums_right[s];
-    double decrease = sums_right[s] * sums_right[s] / (double) num_obs_right[s] + sum_left * sum_left / (double) num_obs_left;
 
-    if (decrease > best_split_val) {
-      best_split_val = decrease;
+    double sum_left = parent_sum - sums_right[s];
+    double split_val;
+    if (splitrule == "mae") {
+      vector<size_t> left_indices;
+      vector<size_t> right_indices;
+      left_indices.reserve(num_obs_left);
+      right_indices.reserve(num_obs_right[s]);
+      for (size_t i : current_node_obs) {
+        if (data->get_x(i, feature) <= split_points[s]) {
+          left_indices.push_back(i);
+        } else {
+          right_indices.push_back(i);
+        }
+      }
+      split_val = computeMAESplitValue(left_indices, right_indices, parent_absolute_deviation);
+    } else {
+      split_val = computeMSESplitValue(num_obs_left, sum_left, num_obs_right[s], sums_right[s]);
+    }
+
+    if (split_val > best_split_val) {
+      best_split_val = split_val;
       best_feature = feature;
       best_sum_left = sum_left;
       best_threshold = {split_points[s]};
@@ -78,83 +133,14 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
   }
 }
 
-/* old version
-
-void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
-                                         vector<double>& best_threshold, double& best_sum_left) {
-  const vector<size_t>& current_node_obs = node_obs[node_index];
-  double parent_sum = sum_node[node_index];
-
-  // samples split points
-  vector<double> split_points;
-  size_t nsplits_final = sampleSplitPoints(split_points, current_node_obs, feature);
-
-  // no possible splits
-  if (nsplits_final == 0) {
-    return;
-  }
-
-  // compute number of observations and the sums of responses at each split value
-  number_obs_split.assign(nsplits_final, 0);
-  sums_split.assign(nsplits_final, 0);
-  for (size_t i : current_node_obs) {
-    size_t idx = lower_bound(split_points.begin(), split_points.end(), data->get_x(i, feature)) - split_points.begin();
-    
-    sums_split[idx] += data->get_y(i);
-    ++number_obs_split[idx];
-  }
-
-  // now compute the decrease of impurity for each split
-  size_t n_left = 0;
-  double sum_left = 0;
-  double sum_squared_left = 0;
-
-  for (size_t i = 0; i < nsplits_final; ++i) {
-    // skip the split if identical to the previous one (or if no observations)
-    if (number_obs_split[i] == 0) {
-      continue;
-    }
-
-    n_left += number_obs_split[i];
-    sum_left += sums_split[i];
-    size_t n_right = node_sizes[node_index] - n_left;
-
-    // stop if right child is too small (break since the split points are sorted)
-    if (n_right < min_node_size) {
-      break;
-    }
-
-    // stop if minimal node size is reached
-    if (n_left < min_node_size) {
-      continue;
-    }
-
-    // this is completely nonsensical, do it from scratch
-    double sum_right = parent_sum - sum_left;
-    double decrease = sum_left * sum_left / (double) n_left + sum_right * sum_right / (double) n_right;
-    double split_val = parent_sum * parent_sum / (double) node_sizes[node_index] - decrease;
-
-    if (split_val > best_split_val) {
-      best_split_val = split_val;
-      best_feature = feature;
-      best_sum_left = sum_left;
-      // use average of split points unless it is the final split value
-      if (i == nsplits_final - 1) {
-        best_threshold = {split_points[i]};
-      } else {
-        best_threshold = {(split_points[i] + split_points[i + 1]) / 2.0};
-      }
-    }
-  }
-}
-
-*/
-
-// the impurity calculation is non-sensical, redo from scratch
-void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
+void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature,
                            vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices, double& best_sum_left) {
   const vector<double>& feature_values = uniqueValues(data->getValues(node_obs[node_index], feature));
   double parent_sum = sum_node[node_index];
+  double parent_absolute_deviation = 0;
+  if (splitrule == "mae") {
+    parent_absolute_deviation = computeAbsoluteDeviation(node_obs[node_index]);
+  }
   size_t num_feature_values = feature_values.size();
 
   unordered_set<uint64_t> partition_masks;
@@ -192,10 +178,15 @@ void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, dou
     // here we have to compute the means in one of the daughters from scratch
     double sum_left = computeSum(current_left_indices);
     double sum_right = parent_sum - sum_left;
-    double decrease = sum_left * sum_left / (double) n_left + sum_right * sum_right / (double) n_right;
+    double split_val;
+    if (splitrule == "mae") {
+      split_val = computeMAESplitValue(current_left_indices, current_right_indices, parent_absolute_deviation);
+    } else {
+      split_val = computeMSESplitValue(n_left, sum_left, n_right, sum_right);
+    }
 
-    if (decrease > best_split_val) {
-        best_split_val = decrease;
+    if (split_val > best_split_val) {
+        best_split_val = split_val;
         best_left_indices = std::move(current_left_indices);
         best_right_indices = std::move(current_right_indices);
         best_feature = feature;
@@ -348,8 +339,7 @@ bool RegressionTree::createSplit(size_t node_index) {
 // splitting rules for regression trees
 //--------------------------------------------------------------------------------------
 
-
-
+// functions related to splitting rules should be moved to here eventually, possibly refactored and with new names
 
 // prediction for regression trees
 //--------------------------------------------------------------------------------------

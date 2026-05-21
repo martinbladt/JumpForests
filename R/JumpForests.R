@@ -7,7 +7,7 @@
 #' @param formula Model formula.
 #' @param data Training data.
 #' @param feature_data Optional feature data for multi-state models.
-#' @param splitrule Splitting rule.
+#' @param splitrule Splitting rule. For regression, choose "mse" (default), "variance" (alias for "mse"), or "mae".
 #' @param mtry Number of candidate features at each split.
 #' @param min_node_size Minimal node size.
 #' @param nsplits Number of split points per feature.
@@ -263,7 +263,7 @@ jftree.error <- function(tree_list, new_data = NULL) {
 #' @param formula Model formula.
 #' @param data Training data.
 #' @param feature_data Optional feature data for multi-state models.
-#' @param splitrule Splitting rule.
+#' @param splitrule Splitting rule. For regression, choose "mse" (default), "variance" (alias for "mse"), or "mae".
 #' @param mtry Number of candidate features at each split.
 #' @param min_node_size Minimal node size.
 #' @param nsplits Number of split points per feature.

@@ -15,7 +15,7 @@ X5 <- rnorm(n)  # noise
 test_data <- data.frame(X1 = X1, X2 = X2, X3 = X3, X4 = X4, X5 = X5, Y = 2 * X1 + 3 * X2 - 2 * X3^2)
 new_data <- data.frame(X2 = rnorm(n, 3, 2), X1 = rbinom(n, 3, 0.2), Y = 2 * X1 + 3 * X2 - 2 * X3^2, X3 = rnorm(n), X4 = rnorm(n), X5 = rnorm(n))
 
-test_forest <- jfforest(Y ~ ., data = test_data, honest = FALSE, min_node_size = 5)
+test_forest <- jfforest(Y ~ ., data = test_data, honest = FALSE, min_node_size = 5, splitrule = "mae")
 test_forest
 print_forest(test_forest)
 #mean((test_data$Y - mean(test_data$Y))^2)   # 44.95195

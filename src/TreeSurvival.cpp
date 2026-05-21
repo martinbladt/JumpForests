@@ -566,6 +566,7 @@ void SurvivalTree::grow() {
 //--------------------------------------------------------------------------------------
 
 // split_id = 0 for categorical splits
+
 double SurvivalTree::logRank(const vector<size_t>& num_deaths, const vector<size_t>& num_at_risk, 
                              const vector<size_t>& num_deaths_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
     double sum_num = 0;

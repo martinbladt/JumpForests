@@ -122,6 +122,9 @@ struct Data {
   vector<string> getResponseNames () const {
     return response_names;
   }
+  size_t getNumClasses() const {
+    return num_classes;
+  }
   uint8_t getMaxResponseLength () const {
     return max_response_length;
   }
@@ -156,6 +159,7 @@ private:
   vector<string> response_names;                // variable name for each response
   vector<size_t> response_indices;              // the indices of the responses
   vector<size_t> feature_indices;               // the indices of the features
+  size_t num_classes;                           // the number of classes (only for classification)
   uint8_t max_response_length;                  // maximum number of jumps observed in the data (only for multi-state data)
   uint8_t num_states;                           // number of states in the multi-state model (only for multi-state data)
   vector<pair<uint8_t, uint8_t>> valid_jumps;   // pairs of the valid jumps

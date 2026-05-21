@@ -34,7 +34,7 @@ public:
     return init_dist[predictionLeafID(x)];
   }
 
-  vector<double> computePredictions(const Data& new_data) override;   // not needed (so remove in Tree)
+  vector<double> computePredictions(const Data& new_data);   // not needed (so remove in Tree)
   //vector<double> computePredictedInitialDistributions(const Data& new_data);
   //pair<vector<double>, vector<double>> computePredictedInitialDistributions(const Data& new_data);
   //pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);

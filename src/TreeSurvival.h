@@ -43,7 +43,7 @@ public:
     return chf[predictionLeafID(x)];
   }
 
-  vector<double> computePredictions(const Data& new_data) override;
+  vector<double> computePredictions(const Data& new_data);
   pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
   void computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index);
   // VIMP prediction for survival trees
@@ -106,8 +106,6 @@ private:
                            vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices); // computes the best split for a chosen categorical feature
 
   // splitting rules
-  //double log_rank(const vector<size_t>& left_indices, const vector<size_t>& right_indices);  // log-rank splitting
-  //double log_rank();
   double logRank(const vector<size_t>& num_deaths, const vector<size_t>& num_at_risk, 
                  const vector<size_t>& num_deaths_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id = 0);
   double conserve(const vector<size_t>& num_deaths, const vector<size_t>& num_at_risk, 

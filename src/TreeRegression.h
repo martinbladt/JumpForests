@@ -7,8 +7,6 @@ class RegressionTree : public Tree {
 public:
   RegressionTree(const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices = {});
 
-  //void grow();  // grow the regression tree
-
   const vector<double> getMeans() const {
     return means;
   }
@@ -17,8 +15,8 @@ public:
   ValueType predict(const vector<double>& x) override {
     return means[predictionLeafID(x)];
   }
-  vector<double> computePredictions(const Data& new_data) override;
-  // VIMP prediction for regression trees trees
+  vector<double> computePredictions(const Data& new_data);
+  // VIMP prediction for regression trees
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
     return means[predictionLeafIDVIMP(x, feature, rng)];
   }
@@ -33,6 +31,10 @@ private:
 
   // growing regression trees
   double computeSum(const vector<size_t>& indices);
+  double computeAbsoluteDeviation(const vector<size_t>& indices);
+  double computeMSESplitValue(size_t n_left, double sum_left, size_t n_right, double sum_right);
+  double computeMAESplitValue(const vector<size_t>& left_indices, const vector<size_t>& right_indices,
+                              double parent_absolute_deviation);
   void makeLeaf(size_t node_index);
   bool createSplit(size_t node_index) override;
   void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold, double& best_sum_left);

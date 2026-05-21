@@ -29,7 +29,7 @@ jfforest(
 
 \item{feature_data}{Optional feature data for multi-state models.}
 
-\item{splitrule}{Splitting rule.}
+\item{splitrule}{Splitting rule. For regression, choose "mse" (default), "variance" (alias for "mse"), or "mae".}
 
 \item{mtry}{Number of candidate features at each split.}
 

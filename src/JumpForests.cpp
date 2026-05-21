@@ -54,9 +54,9 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
   // the tree is a regression tree
   if (tree_type == 1) {
     // check validity of splitrule argument
-    vector<string> valid_splitrules = {"mse"};
+    vector<string> valid_splitrules = {"mse", "variance", "mae"};
     if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-      throw runtime_error("Invalid splitrule, please choose between mse (ADD MORE)");
+      throw runtime_error("Invalid splitrule, please choose between mse, variance or mae");
     }
 
     RegressionTree* tree;
@@ -792,9 +792,9 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
   // the forest is a regression forest
   if (tree_type == 1) {
     // check validity of splitrule argument
-    vector<string> valid_splitrules = {"mse"};
+    vector<string> valid_splitrules = {"mse", "variance", "mae"};
     if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-      throw runtime_error("Invalid splitrule, please choose between mse, (ADD MORE)");
+      throw runtime_error("Invalid splitrule, please choose between mse, variance or mae");
     }
 
     // create and grow the regression forest

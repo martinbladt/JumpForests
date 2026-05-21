@@ -1336,3 +1336,75 @@ pair<vector<double>, vector<double>> SurvivalForest::computePredictionsExternal(
 }
 
 */
+
+/* old version
+
+void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
+                                         vector<double>& best_threshold, double& best_sum_left) {
+  const vector<size_t>& current_node_obs = node_obs[node_index];
+  double parent_sum = sum_node[node_index];
+
+  // samples split points
+  vector<double> split_points;
+  size_t nsplits_final = sampleSplitPoints(split_points, current_node_obs, feature);
+
+  // no possible splits
+  if (nsplits_final == 0) {
+    return;
+  }
+
+  // compute number of observations and the sums of responses at each split value
+  number_obs_split.assign(nsplits_final, 0);
+  sums_split.assign(nsplits_final, 0);
+  for (size_t i : current_node_obs) {
+    size_t idx = lower_bound(split_points.begin(), split_points.end(), data->get_x(i, feature)) - split_points.begin();
+    
+    sums_split[idx] += data->get_y(i);
+    ++number_obs_split[idx];
+  }
+
+  // now compute the decrease of impurity for each split
+  size_t n_left = 0;
+  double sum_left = 0;
+  double sum_squared_left = 0;
+
+  for (size_t i = 0; i < nsplits_final; ++i) {
+    // skip the split if identical to the previous one (or if no observations)
+    if (number_obs_split[i] == 0) {
+      continue;
+    }
+
+    n_left += number_obs_split[i];
+    sum_left += sums_split[i];
+    size_t n_right = node_sizes[node_index] - n_left;
+
+    // stop if right child is too small (break since the split points are sorted)
+    if (n_right < min_node_size) {
+      break;
+    }
+
+    // stop if minimal node size is reached
+    if (n_left < min_node_size) {
+      continue;
+    }
+
+    // this is completely nonsensical, do it from scratch
+    double sum_right = parent_sum - sum_left;
+    double decrease = sum_left * sum_left / (double) n_left + sum_right * sum_right / (double) n_right;
+    double split_val = parent_sum * parent_sum / (double) node_sizes[node_index] - decrease;
+
+    if (split_val > best_split_val) {
+      best_split_val = split_val;
+      best_feature = feature;
+      best_sum_left = sum_left;
+      // use average of split points unless it is the final split value
+      if (i == nsplits_final - 1) {
+        best_threshold = {split_points[i]};
+      } else {
+        best_threshold = {(split_points[i] + split_points[i + 1]) / 2.0};
+      }
+    }
+  }
+}
+
+*/
