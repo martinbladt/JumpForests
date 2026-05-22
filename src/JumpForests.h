@@ -3,6 +3,7 @@
 
 #include "Data.h"
 #include "ForestRegression.h"
+#include "ForestClassification.h"
 #include "ForestSurvival.h"
 #include "ForestMultistate.h"
 

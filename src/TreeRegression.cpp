@@ -156,7 +156,7 @@ void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, dou
         if ((mask >> i) & 1) {
             left_values.insert(feature_values[i]);
         }
-      }
+    }
 
     vector<size_t> current_left_indices;
     vector<size_t> current_right_indices;

@@ -4,6 +4,12 @@ library(Rcpp)
 library(randomForestSRC)
 library(ranger)
 
+# plan for Monday 25
+# - debug!
+# - finish implementing the classification tree and forest in JumpForest.cpp + JumpForest.h
+# - implement the R interface for classification including the print_forest (OOB misclassification and Brier score, also confusion matrix)
+# - test and compare VIMP for classification
+
 data(wine, package = "randomForestSRC")
 head(wine)
 

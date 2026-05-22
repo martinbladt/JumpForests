@@ -31,13 +31,13 @@ void RegressionForest::grow() {
     trees.resize(ntrees);
     oob_indices.resize(ntrees);
 
-    int n_threads = this->nworkers;
+    size_t n_threads = this->nworkers;
     omp_set_num_threads(n_threads);
     Rcout << "Growing forest using " << n_threads << " threads" << endl;
 
     // use OpenMP for parallel tree growing
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
-    for (int i = 0; i < static_cast<int>(ntrees); ++i) {
+    for (size_t i = 0; i < static_cast<int>(ntrees); ++i) {
         // give each thread its own random number generator to prevent races
         mt19937 local_rng(seed + i);
         unique_ptr<RegressionTree> tree;
@@ -85,7 +85,7 @@ void RegressionForest::grow() {
     computeForestQuantities();
 }
 
-// functions for predicting with survival forests
+// functions for predicting with regression forests
 //--------------------------------------------------------------------------------------
 
 double RegressionForest::predict(const vector<double>& x) {
@@ -190,7 +190,7 @@ double RegressionForest::computeVIMPPermute(size_t feature, int feature_seed) {
             }
         }
         // add VIMP contribution from the tree
-        result += (tree_oob_error_shuffled - tree_oob_error) / num_oob_obs;
+        result += (tree_oob_error_shuffled - tree_oob_error) / (double) num_oob_obs;
     }
     // return final forest VIMP
     return result / (double) ntrees;

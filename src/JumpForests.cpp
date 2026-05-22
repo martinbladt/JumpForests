@@ -73,10 +73,10 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
     XPtr<RegressionTree> regression_tree(tree, true);   // cast the regression tree as an R pointer
     result["tree.type"] = "Regression";
-    result["Tree"] = regression_tree;               // add the tree (as a pointer, only to be used for prediction in C++)
-    JFCppTreePredict(result);                       // compute and save predictions on the data
+    result["Tree"] = regression_tree;                   // add the tree (as a pointer, only to be used for prediction in C++)
+    JFCppTreePredict(result);                           // compute and save predictions on the data
     vector<double> response = as<vector<double>>(df[response_indices_cpp[0]]);
-    JFCppTreeErrorRegression(result, response);     // compute and save error estimate
+    JFCppTreeErrorRegression(result, response);         // compute and save error estimate
 
     // save information about the tree itself
     result["num.nodes"] = tree->getNumberOfNodes();
@@ -86,6 +86,35 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
   // the tree is a classification tree
   if (tree_type == 2) {
+    // check validity of splitrule argument
+    vector<string> valid_splitrules = {"gini", "entropy", "misc", "twoing", "hellinger"};
+    if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
+      throw runtime_error("Invalid splitrule, please choose between gini, entropy, misc, twoing og hellinger");
+    }
+
+    ClassificationTree* tree;
+    if (!honest) {
+      tree = new ClassificationTree(subset_indices_cpp);
+    } else {
+      mt19937 rng(seed + 1);
+      pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
+      tree = new ClassificationTree(partition.first, partition.second);
+      tree->setRNG(rng);
+    }
+    tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
+    tree->grow();
+
+    XPtr<ClassificationTree> classification_tree(tree, true);   // cast the classification tree as an R pointer
+    result["tree.type"] = "Classification";
+    result["tree"] = classification_tree;                       // add the tree (as a pointer, only to be used for prediction in C++)
+    JFCppTreePredict(result);                                   // compute and save predictions on the data
+    vector<double> response = as<vector<double>>(df[response_indices_cpp[0]]);
+    //JFCppTreeErrorClassification(result, response);             // compute and save error estimate
+
+    // save information about the tree itself
+    result["num.nodes"] = tree->getNumberOfNodes();
+    result["num_terminal_nodes"] = tree->getNumberOfTerminalNodes();
+    result["tree.depth"] = tree->getTreeDepth();
 
   }
 
@@ -278,7 +307,7 @@ void JFCppTreePredict(List& JFTree) {
     JFTree["predictions"] = predictions;
   }
   if (type == "Classification") {
-
+    
   }
   if (type == "Survival") {
     /*
