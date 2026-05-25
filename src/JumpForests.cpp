@@ -106,14 +106,15 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
     XPtr<ClassificationTree> classification_tree(tree, true);   // cast the classification tree as an R pointer
     result["tree.type"] = "Classification";
-    result["tree"] = classification_tree;                       // add the tree (as a pointer, only to be used for prediction in C++)
+    result["num.classes"] = data->getNumClasses();
+    result["Tree"] = classification_tree;                       // add the tree (as a pointer, only to be used for prediction in C++)
     JFCppTreePredict(result);                                   // compute and save predictions on the data
     vector<double> response = as<vector<double>>(df[response_indices_cpp[0]]);
-    //JFCppTreeErrorClassification(result, response);             // compute and save error estimate
+    JFCppTreeErrorClassification(result, response);             // compute and save error estimate
 
     // save information about the tree itself
     result["num.nodes"] = tree->getNumberOfNodes();
-    result["num_terminal_nodes"] = tree->getNumberOfTerminalNodes();
+    result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
     result["tree.depth"] = tree->getTreeDepth();
 
   }
@@ -307,7 +308,25 @@ void JFCppTreePredict(List& JFTree) {
     JFTree["predictions"] = predictions;
   }
   if (type == "Classification") {
-    
+    ClassificationTree* tree = ((XPtr<ClassificationTree>) JFTree["Tree"]).get();
+    size_t num_classes = as<size_t>(JFTree["num.classes"]);
+    //size_t num_classes = tree->getData()->getNumClasses();
+    NumericVector predictions(num_obs);
+    NumericMatrix predictions_prob(num_obs, num_classes);
+
+    // fetch predictions, first vector is the predicted classes, second a flattened vector of class probabilities
+    const pair<vector<double>, vector<double>>& predictions_cpp = tree->computePredictions();
+
+    for (size_t i = 0; i < num_obs; ++i) {
+      predictions[i] = predictions_cpp.first[i];
+      size_t index = i * num_classes;
+      for (size_t c = 0; c < num_classes; ++c) {
+        predictions_prob(i, c) = predictions_cpp.second[index + c];
+      }
+    }
+
+    JFTree["predictions"] = predictions;
+    JFTree["predictions.prob"] = predictions_prob;
   }
   if (type == "Survival") {
     /*
@@ -421,20 +440,35 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
   
   // convert the new data to a suitable Data object
   Data new_data = Data(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
+  size_t num_obs = new_data.getNumberOfObs();
 
   string type = as<string>(JFTree["tree.type"]);
   if (type == "Regression") {
     RegressionTree* tree = ((XPtr<RegressionTree>) JFTree["Tree"]).get();
-
-    NumericMatrix predictions(new_data.getNumberOfObs(), 1);
-    for (size_t i = 0; i < new_data.getNumberOfObs(); ++i) {
+    NumericMatrix predictions(num_obs, 1);
+    for (size_t i = 0; i < num_obs; ++i) {
       predictions(i, 0) = get<double>(tree->predict(new_data.get_x_row(i)));
     }
     return predictions;
   }
 
   if (type == "Classification") {
+    ClassificationTree* tree = ((XPtr<ClassificationTree>) JFTree["Tree"]).get();
+    size_t num_classes = as<size_t>(JFTree["num.classes"]);
+    //size_t num_classes = tree->getData()->getNumClasses();
+    NumericMatrix predictions(num_obs, num_classes + 1);
     
+    // fetch predictions, first vector is the predicted classes, second a flattened vector of class probabilities
+    const pair<vector<double>, vector<double>> predictions_cpp = tree->computePredictions(new_data);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+      predictions(i, 0) = predictions_cpp.first[i];
+      size_t index = i * num_classes;
+      for (size_t c = 0; c < num_classes; ++c) {
+        predictions(i, c + 1) = predictions_cpp.second[index + c];
+      }
+    }
+    return predictions;
   }
 
   if (type == "Survival") {
@@ -452,7 +486,6 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
     return predictions;
     */
     
-    size_t num_obs = new_data.getNumberOfObs();
     size_t num_unique_event_times = tree->getEventTimes().size();
     NumericMatrix predictions(num_obs, num_unique_event_times);
 
@@ -644,6 +677,42 @@ void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response) {
 
 // Classification
 
+void JFCppTreeErrorClassification(List& JFTree, const vector<double>& response) {
+  size_t num_classes = as<size_t>(JFTree["num.classes"]);
+  NumericVector class_misclassification_errors(num_classes);
+  NumericMatrix confusionMatrix(num_classes, num_classes);
+  NumericMatrix prob_predictions_matrix = as<NumericMatrix>(JFTree["predictions.prob"]);
+  vector<double> prob_predictions(response.size() * num_classes);
+
+  // compute and save overall misclassification error and class-wise misclassification error
+  vector<double> misc = computeMisclassificationError(JFTree["predictions"], response, num_classes);
+  JFTree["misc.error.total"] = misc[num_classes];
+  for (size_t c = 0; c < num_classes; ++c) {
+    class_misclassification_errors[c] = misc[c];
+  }
+  JFTree["misc.error"] = class_misclassification_errors;
+
+  // compute and save the Brier score error
+  for (size_t i = 0; i < response.size(); ++i) {
+    size_t index = i * num_classes;
+    for (size_t c = 0; c < num_classes; ++c) {
+      prob_predictions[index + c] = prob_predictions_matrix(i, c);
+    }
+  }
+  JFTree["bs"] = computeBrierScoreError(prob_predictions, response, num_classes);
+  JFTree["bs.normalised"] = computeNormalizedBrierScoreError(prob_predictions, response, num_classes);
+
+  // compute and save the confusion matrix
+  vector<size_t> confusion = computeConfusionMatrix(JFTree["predictions"], response, num_classes);
+  for (size_t c1 = 0; c1 < num_classes; ++c1) {
+    size_t row = c1 * num_classes;
+    for (size_t c2 = 0; c2 < num_classes; ++c2) {
+      confusionMatrix(c1, c2) = confusion[row + c2];
+    }
+  }
+  JFTree["confusion"] = confusionMatrix;
+}
+
 // Survival
 
 void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids) {
@@ -733,6 +802,35 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
     return result;
   }
   if (type == "Classification") {
+    ClassificationTree* tree = ((XPtr<ClassificationTree>) JFTree["Tree"]).get();
+    const pair<vector<double>, vector<double>>& predictions = tree->computePredictions(new_data);
+    const vector<double>& response = new_data.get_y_col(0);
+    size_t num_classes = as<size_t>(JFTree["num.classes"]);
+
+    NumericVector class_misclassification_errors(num_classes);
+    NumericMatrix confusionMatrix(num_classes, num_classes);
+
+    List result = List::create(
+      Named("BS.error") = computeBrierScoreError(predictions.second, response, num_classes),
+      Named("normalised.BS.error") = computeNormalizedBrierScoreError(predictions.second, response, num_classes)
+    );
+
+    vector<double> misc = computeMisclassificationError(predictions.first, response, num_classes);
+    result["misclassification.error.total"] = misc[num_classes];
+    for (size_t c = 0; c < num_classes; ++c) {
+      class_misclassification_errors[c] = misc[c];
+    }
+    result["misclassification.error"] = class_misclassification_errors;
+
+    vector<size_t> confusion = computeConfusionMatrix(predictions.first, response, num_classes);
+    for (size_t c1 = 0; c1 < num_classes; ++c1) {
+      size_t row = c1 * num_classes;
+      for (size_t c2 = 0; c2 < num_classes; ++c2) {
+        confusionMatrix(c1, c2) = confusion[row + c2];
+      }
+    }
+    result["confusion.matrix"] = confusionMatrix;
+    return result;
 
   }
   if (type == "Survival") {
@@ -847,7 +945,30 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 
   // the forest is a classification forest
   if (tree_type == 2) {
+    // check validity of splitrule argument
+    vector<string> valid_splitrules = {"gini", "entropy", "misc", "twoing", "hellinger"};
+    if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
+      throw runtime_error("Invalid splitrule, please choose between gini, entropy, misc, twoing og hellinger");
+    }
 
+    // create and grow the classification forest
+    ClassificationForest* forest = new ClassificationForest();
+    forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, double_bootstrap, seed, nworkers);
+    forest->grow();
+
+    XPtr<ClassificationForest> classification_forest(forest, true);
+    result["tree.type"] = "Classification";
+    result["num.trees"] = ntrees;
+    result["num.classes"] = data->getNumClasses();
+    result["Forest"] = classification_forest; // add the forest as a pointer, only to be used for prediction
+
+    vector<double> response = as<vector<double>>(df[response_indices_cpp[0]]);
+    JFCppForestPredict(result);
+    JFCppForestErrorClassification(result, response);
+
+    result["avg.num.nodes"] = forest->getAvgNumberOfNodes();
+    result["avg.num.terminal.nodes"] = forest->getAvgNumberOfTerminalNodes();
+    result["avg.tree.depth"] = forest->getAvgTreeDepth();
   }
 
   // the forest is a survival forest
@@ -1000,13 +1121,35 @@ void JFCppForestPredict(List& JFForest, bool compute_censoring) {
       predictions[i] = predictions_cpp.first[i];
       predictions_oob[i] = predictions_cpp.second[i];
     }
-
     // save predictions
     JFForest["predictions"] = predictions;
     JFForest["oob.predictions"] = predictions_oob;
   }
   if (type == "Classification") {
+    ClassificationForest* forest = ((XPtr<ClassificationForest>) JFForest["Forest"]).get();
+    const vector<vector<double>>& predictions_cpp = forest->computePredictions();
+    size_t num_obs = JFForest["num.obs"];
+    size_t num_classes = JFForest["num.classes"];
 
+    NumericVector predictions(num_obs);
+    NumericVector predictions_oob(num_obs);
+    NumericMatrix predictions_prob(num_obs, num_classes);
+    NumericMatrix predictions_prob_oob(num_obs, num_classes);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+      predictions[i] = predictions_cpp[0][i];
+      predictions_oob[i] = predictions_cpp[1][i];
+      size_t index = i * num_classes;
+      for (size_t c = 0; c < num_classes; ++c) {
+        predictions_prob(i, c) = predictions_cpp[2][index + c];
+        predictions_prob_oob(i, c) = predictions_cpp[3][index + c];
+      }
+    }
+    // save predictions
+    JFForest["predictions"] = predictions;
+    JFForest["oob.predictions"] = predictions_oob;
+    JFForest["predictions.prob"] = predictions_prob;
+    JFForest["oob.predictions.prob"] = predictions_prob_oob;
   }
   
   if (type == "Survival") {
@@ -1151,7 +1294,18 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
   }
 
   if (type == "Classification") {
-    
+    ClassificationForest* forest = ((XPtr<ClassificationForest>) JFForest["Forest"]).get();
+    size_t num_classes = as<size_t>(JFForest["num.classes"]);
+    NumericMatrix predictions(num_obs, num_classes + 1);
+    const pair<vector<double>, vector<double>>& predictions_cpp = forest->computePredictions(new_data, true);
+    for (size_t i = 0; i < num_obs; ++i) {
+      predictions(i, 0) = predictions_cpp.first[i];
+      size_t index = i * num_classes;
+      for (size_t c = 0; c < num_classes; ++c) {
+        predictions(i, c + 1) = predictions_cpp.second[index + c];
+      }
+    }
+    return predictions;
   }
 
   if (type == "Survival") {
@@ -1292,12 +1446,14 @@ List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feat
 // computes the error based on the OOB predictions of the forest
 void JFCppForestErrorRegression(List& JFForest, const vector<double>& response) {
   size_t num_obs = as<size_t>(JFForest["num.obs"]);
+  /*
   vector<double> predictions(num_obs);
   const NumericVector& predictions_R = JFForest["oob.predictions"];
   for (size_t i = 0; i < num_obs; ++i) {
     predictions[i] = predictions_R[i];
   }
-  JFForest["mse.error"] = computeMSE(predictions, response);
+  */
+  JFForest["mse.error"] = computeMSE(JFForest["oob.predictions"], response);
   JFForest["R2"] = computeR2(JFForest["mse.error"], response);
 }
 
@@ -1311,6 +1467,83 @@ List JFCppForestErrorRegression(const vector<double>& predictions, const vector<
 }
 
 // Classification
+
+void JFCppForestErrorClassification(List& JFForest, const vector<double>& response) {
+  size_t num_obs = as<size_t>(JFForest["num.obs"]);
+  size_t num_classes = as<size_t>(JFForest["num.classes"]);
+  NumericVector class_misclassification_errors(num_classes);
+  NumericMatrix confusionMatrix(num_classes, num_classes);
+  NumericVector class_predictions_R = as<NumericVector>(JFForest["oob.predictions"]);
+  NumericMatrix prob_predictions_matrix = as<NumericMatrix>(JFForest["oob.predictions.prob"]);
+  vector<double> class_predictions;
+  vector<double> response_oob;
+  vector<double> prob_predictions;
+  class_predictions.reserve(num_obs);
+  response_oob.reserve(num_obs);
+  prob_predictions.reserve(num_obs * num_classes);
+
+  for (size_t i = 0; i < num_obs; ++i) {
+    if (NumericVector::is_na(class_predictions_R[i])) {
+      continue;
+    }
+
+    bool complete_probabilities = true;
+    for (size_t c = 0; c < num_classes; ++c) {
+      if (NumericVector::is_na(prob_predictions_matrix(i, c))) {
+        complete_probabilities = false;
+        break;
+      }
+    }
+    if (!complete_probabilities) {
+      continue;
+    }
+
+    class_predictions.push_back(class_predictions_R[i]);
+    response_oob.push_back(response[i]);
+    for (size_t c = 0; c < num_classes; ++c) {
+      prob_predictions.push_back(prob_predictions_matrix(i, c));
+    }
+  }
+
+  if (class_predictions.empty()) {
+    JFForest["misc.error.total"] = NA_REAL;
+    for (size_t c = 0; c < num_classes; ++c) {
+      class_misclassification_errors[c] = NA_REAL;
+      for (size_t c2 = 0; c2 < num_classes; ++c2) {
+        confusionMatrix(c, c2) = NA_REAL;
+      }
+    }
+    JFForest["misc.error"] = class_misclassification_errors;
+    JFForest["bs"] = NA_REAL;
+    JFForest["bs.normalised"] = NA_REAL;
+    JFForest["num.oob.predictions"] = 0;
+    JFForest["confusion"] = confusionMatrix;
+    return;
+  }
+
+  // compute and save overall misclassification error and class-wise misclassification error
+  vector<double> misc = computeMisclassificationError(class_predictions, response_oob, num_classes);
+  JFForest["misc.error.total"] = misc[num_classes];
+  for (size_t c = 0; c < num_classes; ++c) {
+    class_misclassification_errors[c] = misc[c];
+  }
+  JFForest["misc.error"] = class_misclassification_errors;
+
+  // compute and save the Brier score error
+  JFForest["bs"] = computeBrierScoreError(prob_predictions, response_oob, num_classes);
+  JFForest["bs.normalised"] = computeNormalizedBrierScoreError(prob_predictions, response_oob, num_classes);
+  JFForest["num.oob.predictions"] = class_predictions.size();
+
+  // compute and save the confusion matrix
+  vector<size_t> confusion = computeConfusionMatrix(class_predictions, response_oob, num_classes);
+  for (size_t c1 = 0; c1 < num_classes; ++c1) {
+    size_t row = c1 * num_classes;
+    for (size_t c2 = 0; c2 < num_classes; ++c2) {
+      confusionMatrix(c1, c2) = confusion[row + c2];
+    }
+  }
+  JFForest["confusion"] = confusionMatrix;
+}
 
 // Survival
 
@@ -1394,7 +1627,36 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
     return JFCppForestErrorRegression(predictions, response);
   }
   if (type == "Classification") {
+    ClassificationForest* forest = ((XPtr<ClassificationForest>) JFForest["Forest"]).get();
+    const pair<vector<double>, vector<double>>& predictions = forest->computePredictions(new_data, true);
+    const vector<double>& response = new_data.get_y_col(0);
 
+    size_t num_classes = as<size_t>(JFForest["num.classes"]);
+    NumericVector class_misclassification_errors(num_classes);
+    NumericMatrix confusionMatrix(num_classes, num_classes);
+
+    // create list, compute and save the Brier Score error
+    List result = List::create(Named("BS.error") = computeBrierScoreError(predictions.second, response, num_classes),
+                               Named("normalised.BS.error") = computeNormalizedBrierScoreError(predictions.second, response, num_classes));
+
+    // compute and save overall misclassification error and class-wise misclassification error
+    vector<double> misc = computeMisclassificationError(predictions.first, response, num_classes);
+    result["misclassification.error.total"] = misc[num_classes];
+    for (size_t c = 0; c < num_classes; ++c) {
+      class_misclassification_errors[c] = misc[c];
+    }
+    result["misclassification.error"] = class_misclassification_errors;
+
+    // compute and save the confusion matrix
+    vector<size_t> confusion = computeConfusionMatrix(predictions.first, response, num_classes);
+    for (size_t c1 = 0; c1 < num_classes; ++c1) {
+      size_t row = c1 * num_classes;
+      for (size_t c2 = 0; c2 < num_classes; ++c2) {
+        confusionMatrix(c1, c2) = confusion[row + c2];
+      }
+    }
+    result["confusion.matrix"] = confusionMatrix;
+    return result;
   }
   if (type == "Survival") {
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();

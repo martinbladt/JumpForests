@@ -17,6 +17,7 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
     this->num_features = feature_indices.size();
     this->response_indices = response_indices;
     this->num_responses = response_indices.size();
+    this->num_classes = 0;
     sort(feature_indices.begin(), feature_indices.end());
     this->feature_indices = feature_indices;
 
@@ -28,6 +29,11 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
         if (response_indices.size() == 1) {
             vector<double> y_res = as<vector<double>>(data[response_indices[0]]);
             this->y = y_res;
+
+            // only relevant for classification
+            if (categorical[response_indices[0]]) {
+                num_classes = unique[response_indices[0]];
+            }
         }
         // survival
         else if (response_indices.size() == 2) {

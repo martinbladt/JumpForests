@@ -22,14 +22,15 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
 void JFCppTreePredict(List& JFTree);
 //List JFCppTreePredict(const List& JFTree, DataFrame df);
 NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector feature_indices, 
-                               LogicalVector categorical, NumericVector unique, bool compute_censoring);
+                               LogicalVector categorical, NumericVector unique);
 List JFCppTreePredictCensoring(const List& JFTree, DataFrame df, NumericVector feature_indices, 
                                LogicalVector categorical, NumericVector unique);
 List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, 
-                                 LogicalVector categorical, NumericVector unique);
+                                 LogicalVector categorical, NumericVector unique, bool compute_initial, bool compute_censoring);
 
 // error computation with trees
 void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response);
+void JFCppTreeErrorClassification(List& JFTree, const vector<double>& response);
 void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids);
 //double JFCppErrorSurvival(const NumericMatrix& predictions, NumericVector times, NumericVector ind);
 double JFCppErrorSurvival(const NumericMatrix& predictions, const vector<double>& times, const vector<double>& ind);
@@ -43,7 +44,7 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
 //    NumericVector unique, unsigned int seed, unsigned int nworkers);
 List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule,
     unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, 
-    LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, size_t num_event_times);
+    LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
 List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
   unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, 
   LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
@@ -56,12 +57,13 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
                                  LogicalVector categorical, NumericVector unique);
 List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique);
-List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical,
-                        NumericVector unique, bool compute_initial, bool compute_censoring);
+List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical,
+                          NumericVector unique, bool compute_initial);
 
 // error computation with forests
 void JFCppForestErrorRegression(List& JFForest, const vector<double>& response);
 List JFCppForestErrorRegression(const vector<double>& predictions, const vector<double>& response);
+void JFCppForestErrorClassification(List& JFForest, const vector<double>& response);
 void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids);
 List JFCppForestErrorSurvivalExternal(List& JFForest);
 List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_indices,

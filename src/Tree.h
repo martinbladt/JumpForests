@@ -60,7 +60,7 @@ public:
     return tree_depth;
   }
 
-  vector<size_t> getPredictionNodeIDs() const {
+  const vector<size_t>& getPredictionNodeIDs() const {
     return prediction_node_IDs;
   }
 

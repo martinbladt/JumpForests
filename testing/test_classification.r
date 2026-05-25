@@ -4,28 +4,40 @@ library(Rcpp)
 library(randomForestSRC)
 library(ranger)
 
-# plan for Monday 25
+# plan for Monday 25 - Friday 29
 # - debug!
 # - finish implementing the classification tree and forest in JumpForest.cpp + JumpForest.h
 # - implement the R interface for classification including the print_forest (OOB misclassification and Brier score, also confusion matrix)
 # - test and compare VIMP for classification
+# - simulation study for regression
+
+
+
+# wine
+#-------------------------------------------------------------------------------------------------
 
 data(wine, package = "randomForestSRC")
 head(wine)
-
-typeof(wine$quality)
-class(wine$quality)
-is.factor(wine$quality)
 wine$quality <- as.factor(wine$quality)
-typeof(wine$quality)
-class(wine$quality)
-is.factor(wine$quality)
 
-# to transform the 'factor' vector to a double vector for use in C++:
-as.numeric(wine$quality)
+wine_tree <- jftree(quality ~ ., data = wine, min_node_size = 5)
+print_tree(wine_tree)
+wine_tree
+
+wine_forest <- jfforest(quality ~ ., data = wine)
+wine_forest
 
 wine_forest_SRC <- rfsrc(quality ~., data = wine)
-
 wine_forest_SRC
+
+# iris
+#-------------------------------------------------------------------------------------------------
+
+iris_tree <- jftree(Species ~ ., data = iris, min_node_size = 5)
+iris_tree
+print_tree(iris_tree)
+
+iris_forest_SRC <- rfsrc(Species ~ ., data = iris)
+iris_forest_SRC
 
 #nolint end

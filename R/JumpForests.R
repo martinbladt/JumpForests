@@ -46,19 +46,29 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     }
 
     # if the response is categorical, classification, otherwise regression
-    if (processed_data$categorical[response_index]) {
+    if (processed_data$categorical[response_index + 1]) {
       # for classification, the default minimal node size is 1
       if (is.null(min_node_size)) {
         min_node_size <- 1
       }
-      # set default splitting rule (TODO)
+      # set default splitting rule
       if (is.null(splitrule)) {
-        # TODO
+        splitrule <- "gini"
       }
       result <- JFCppTree(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
                           response_index, feature_indices, processed_data$categorical,
                           processed_data$unique_values, seed)
       result$categorical.levels <- processed_data$categorical_levels
+      result$class.levels <- processed_data$categorical_levels[[response_index + 1]]
+      if (is.null(result$class.levels)) {
+        result$class.levels <- paste0("class.", seq_len(result$num.classes))
+      }
+      colnames(result$predictions.prob) <- result$class.levels
+      names(result$misc.error) <- result$class.levels
+      dimnames(result$confusion) <- list(
+        observations = result$class.levels,
+        predicted = result$class.levels
+      )
       return(result)
     } else {
       # for regression, the default minimal node size is 5
@@ -203,8 +213,12 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
         return(JFCppTreePredictCensoring(tree_list, processed_data$data, feature_indices,
                             processed_data$categorical, processed_data$unique_values))
       } else {
-        return(JFCppTreePredict(tree_list, processed_data$data, feature_indices,
-                            processed_data$categorical, processed_data$unique_values))
+        predictions <- JFCppTreePredict(tree_list, processed_data$data, feature_indices,
+                            processed_data$categorical, processed_data$unique_values)
+        if (tree_list$tree.type == "Classification") {
+          colnames(predictions) <- c("prediction", tree_list$class.levels)
+        }
+        return(predictions)
       }
     } else {
       return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices, processed_data$categorical,
@@ -230,7 +244,9 @@ jftree.error <- function(tree_list, new_data = NULL) {
       return(list("mse.error" = tree_list$mse.error, "R2" = tree_list$R2))
     }
     if (tree_list$tree.type == "Classification") {
-
+      return(list("BS.error" = tree_list$bs, "normalised.BS.error" = tree_list$bs.normalised,
+                  "misclassification.error.total" = tree_list$misc.error.total , "misclassification.error" = tree_list$misc.error,
+                  "confusion.matrix" = tree_list$confusion))
     }
     if (tree_list$tree.type == "Survival") {
       return(list("C.error" = tree_list$C.error, "IBS.error" = tree_list$ibs, "normalised.IBS.error" = tree_list$ibs.normalised))
@@ -243,17 +259,26 @@ jftree.error <- function(tree_list, new_data = NULL) {
   # if new_data is supplied, compute predictions and error from scratch
   covariates <- tree_list$feature.names
   response <- tree_list$response.names
+  missing_columns <- setdiff(c(response, covariates), names(new_data))
+  if (length(missing_columns) > 0) {
+    stop("new_data is missing column(s): ", paste(missing_columns, collapse = ", "))
+  }
+
+  # ensures the response and features have the same order as the original dataset
+  new_data <- new_data[, c(response, covariates), drop = FALSE]
   response_indices <- which(names(new_data) %in% response) - 1
-
-  # ensures the columns have the same order as the original dataset
-  current <- names(new_data)
-  current[match(covariates, current)] <- covariates
-  new_data <- new_data[current]
-
   feature_indices <- which(names(new_data) %in% covariates) - 1
   processed_data <- preprocess_data(new_data, tree_list$categorical.levels)
-  return(JFCppTreeError(tree_list, processed_data$data, feature_indices,
-                          processed_data$categorical, processed_data$unique_values, response_indices))
+  result <- JFCppTreeError(tree_list, processed_data$data, feature_indices,
+                           processed_data$categorical, processed_data$unique_values, response_indices)
+  if (tree_list$tree.type == "Classification") {
+    names(result$misclassification.error) <- tree_list$class.levels
+    dimnames(result$confusion.matrix) <- list(
+      observations = tree_list$class.levels,
+      predicted = tree_list$class.levels
+    )
+  }
+  return(result)
 }
 
 #' Fit a JumpForests forest
@@ -314,11 +339,11 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
   if (length(lhs) == 1 && lhs[1] != "MM") {
     # preprocess the entire dataset
     processed_data <- preprocess_data(data)
-    response_indices <- which(names(data) %in% as.character(formula[[2]])[1]) - 1
+    response_index <- which(names(data) %in% as.character(formula[[2]])[1]) - 1
     # formula determines the type of tree, the features and the response. if the
     # user supplies ~ ., all covariates are used
     if (formula[[3]] == ".") {
-      covariates <- names(data)[-(response_indices + 1)]
+      covariates <- names(data)[-(response_index + 1)]
     } else {
       covariates <- attr(terms(formula), "term.labels")
     }
@@ -329,23 +354,56 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     if (is.null(mtry)) {
       mtry <- ceiling(sqrt(length(covariates)))
     }
-    # for regression, the default minimal node size is 5
-    if (is.null(min_node_size)) {
-      min_node_size <- 5
+
+    # if the response is categorical, classification, otherwise regression
+    if (processed_data$categorical[response_index + 1]) {
+      # for classification, the default minimal node size is 1
+      if (is.null(min_node_size)) {
+        min_node_size <- 1
+      }
+      # for classification, the default number of trees is 1000
+      if (is.null(ntrees)) {
+        ntrees <- 1000
+      }
+      # set default splitting rule
+      if (is.null(splitrule)) {
+        splitrule <- "gini"
+      }
+      result <- JFCppForest(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
+                            sample_rate, double_bootstrap, response_index, feature_indices, processed_data$categorical,
+                            processed_data$unique_values, seed, nworkers, save_predictions)
+      result$categorical.levels <- processed_data$categorical_levels
+      result$class.levels <- processed_data$categorical_levels[[response_index + 1]]
+      if (is.null(result$class.levels)) {
+        result$class.levels <- paste0("class.", seq_len(result$num.classes))
+      }
+      colnames(result$predictions.prob) <- result$class.levels
+      names(result$misc.error) <- result$class.levels
+      dimnames(result$confusion) <- list(
+        observations = result$class.levels,
+        predicted = result$class.levels
+      )
+      return(result)
+    } else {
+      # for regression, the default minimal node size is 5
+      if (is.null(min_node_size)) {
+        min_node_size <- 5
+      }
+      # for regression, the default number of trees is 1000
+      if (is.null(ntrees)) {
+        ntrees <- 1000
+      }
+      # for regression, the default splitting rule is mean squared error
+      if (is.null(splitrule)) {
+        splitrule <- "mse"
+      }
+      result <- JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
+                            sample_rate, double_bootstrap, response_index, feature_indices, processed_data$categorical,
+                            processed_data$unique_values, seed, nworkers, save_predictions)
+      result$categorical.levels <- processed_data$categorical_levels
+      return(result)
     }
-    # for regression, the default number of trees is 1000
-    if (is.null(ntrees)) {
-      ntrees <- 1000
-    }
-    # for regression, the default splitting rule is mean squared error
-    if (is.null(splitrule)) {
-      splitrule <- "mse"
-    }
-    result <- JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
-                          sample_rate, double_bootstrap, response_indices, feature_indices, processed_data$categorical,
-                          processed_data$unique_values, seed, nworkers, save_predictions)
-    result$categorical.levels <- processed_data$categorical_levels
-    return(result)
+
   }
   # if left hand side is "Surv(time, status)", survival
   else if (lhs[1] == "Surv") {
@@ -483,8 +541,12 @@ jfforest.predict <- function(forest_list, new_data = NULL, compute_censoring = F
         return(JFCppForestPredictCensoring(forest_list, processed_data$data, feature_indices,
                             processed_data$categorical, processed_data$unique_values))
       } else {
-        return(JFCppForestPredict(forest_list, processed_data$data, feature_indices,
-                            processed_data$categorical, processed_data$unique_values))
+        predictions <- JFCppForestPredict(forest_list, processed_data$data, feature_indices,
+                            processed_data$categorical, processed_data$unique_values)
+        if (forest_list$tree.type == "Classification") {
+          colnames(predictions) <- c("prediction", forest_list$class.levels)
+        }
+        return(predictions)
       }
     } else {
       return(JFCppForestPredictMM(forest_list, processed_data$data, feature_indices,
@@ -510,7 +572,9 @@ jfforest.error <- function(forest_list, new_data = NULL) {
       return(list("mse.error" = forest_list$mse.error, "R2" = forest_list$R2))
     }
     if (forest_list$tree.type == "Classification") {
-
+      return(list("BS.error" = forest_list$bs, "normalised.BS.error" = forest_list$bs.normalised,
+                  "misclassification.error.total" = forest_list$misc.error.total , "misclassification.error" = forest_list$misc.error,
+                  "confusion.matrix" = forest_list$confusion))
     }
     if (forest_list$tree.type == "Survival") {
       # if the errors are already computed and saved, simply return them, otherwise compute them from scratch
@@ -532,17 +596,26 @@ jfforest.error <- function(forest_list, new_data = NULL) {
   # if new_data is supplied, compute predictions and error from scratch
   covariates <- forest_list$feature.names
   response <- forest_list$response.names
+  missing_columns <- setdiff(c(response, covariates), names(new_data))
+  if (length(missing_columns) > 0) {
+    stop("new_data is missing column(s): ", paste(missing_columns, collapse = ", "))
+  }
+
+  # ensures the response and features have the same order as the original dataset
+  new_data <- new_data[, c(response, covariates), drop = FALSE]
   response_indices <- which(names(new_data) %in% response) - 1
-
-  # ensures the columns have the same order as the original dataset
-  current <- names(new_data)
-  current[match(covariates, current)] <- covariates
-  new_data <- new_data[current]
-
   feature_indices <- which(names(new_data) %in% covariates) - 1
   processed_data <- preprocess_data(new_data, forest_list$categorical.levels)
-  return(JFCppForestError(forest_list, processed_data$data, feature_indices,
-                          processed_data$categorical, processed_data$unique_values, response_indices))
+  result <- JFCppForestError(forest_list, processed_data$data, feature_indices,
+                             processed_data$categorical, processed_data$unique_values, response_indices)
+  if (forest_list$tree.type == "Classification") {
+    names(result$misclassification.error) <- forest_list$class.levels
+    dimnames(result$confusion.matrix) <- list(
+      observations = forest_list$class.levels,
+      predicted = forest_list$class.levels
+    )
+  }
+  return(result)
 }
 
 #' Variable importance for a fitted forest
@@ -594,7 +667,22 @@ print_tree <- function(tree_list, full = FALSE) {
     cat("Training error (R^2):",tree_list$R2, "\n")
   }
   if (tree_list$tree.type == "Classification") {
-    # TODO
+    cat("Training error (overall misclassification):",tree_list$misc.error.total, "\n")
+    cat("Training error (Brier score):", tree_list$bs, "\n")
+    if (!is.null(tree_list$bs.normalised)) {
+      cat("Training error (normalised Brier score):", tree_list$bs.normalised, "\n")
+    }
+    cat("Training error (class-wise misclassification):\n")
+    print(tree_list$misc.error)
+    cat("Confusion matrix:\n")
+    confusion <- tree_list$confusion
+    if (is.null(dimnames(confusion)) && !is.null(tree_list$class.levels)) {
+      dimnames(confusion) <- list(
+        observations = tree_list$class.levels,
+        predicted = tree_list$class.levels
+      )
+    }
+    print(confusion)
   }
   if (tree_list$tree.type == "Survival") {
     cat("Number of deaths:", tree_list$num.deaths, "\n")
@@ -670,7 +758,21 @@ print_forest <- function(forest_list) {
     cat("OOB error (R2:)", forest_list$R2, "\n")
   }
   if (forest_list$tree.type == "Classification") {
-    # TODO
+    cat("OOB error (overall misclassification)", forest_list$misc.error.total, "\n")
+    cat("OOB error (Brier score)", forest_list$bs, "\n")
+    if (!is.null(forest_list$bs.normalised)) {
+      cat("OOB error (normalised Brier score):", forest_list$bs.normalised, "\n")
+    }
+    cat("OOB error (class-wise misclassification):\n")
+    print(forest_list$misc.error)
+    confusion <- forest_list$confusion
+    if (is.null(dimnames(confusion)) && !is.null(forest_list$class.levels)) {
+      dimnames(confusion) <- list(
+        observations = forest_list$class.levels,
+        predicted = forest_list$class.levels
+      )
+    }
+    print(confusion)
   }
   if (forest_list$tree.type == "Survival") {
     cat("Number of deaths:", forest_list$num.deaths, "\n")
@@ -747,9 +849,19 @@ preprocess_data <- function(data, categorical_levels = NULL) {
       unique_values[i] <- length(current_levels)
       new_categorical_levels[[i]] <- current_levels
     } else if (inherits(data[, i], "logical")) {
-      data[, i] <- as.numeric(data[, i])
+      current_levels <- categorical_levels[[names(data)[i]]]
+      if (is.null(current_levels)) {
+        current_levels <- c("FALSE", "TRUE")
+      }
+      encoded <- match(as.character(data[, i]), current_levels)
+      unknown <- is.na(encoded) & !is.na(data[, i])
+      if (any(unknown)) {
+        stop("New categorical value(s) in ", names(data)[i], " not seen in the training data.")
+      }
+      data[, i] <- encoded
       categorical[i] <- 1
-      unique_values[i] <- length(unique(data[, i]))
+      unique_values[i] <- length(current_levels)
+      new_categorical_levels[[i]] <- current_levels
     }
   }
   list(data = data, unique_values = unique_values, categorical = categorical,

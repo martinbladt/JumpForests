@@ -7,10 +7,10 @@ class ClassificationTree : public Tree {
 public:
   ClassificationTree(const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices = {});
 
-  const vector<double> getClasses() const {
+  const vector<double>& getClasses() const {
     return classes;
   }
-  const vector<vector<double>> getClassProportions() const {
+  const vector<vector<double>>& getClassProportions() const {
     return class_proportions;
   }
 
@@ -23,6 +23,7 @@ public:
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
     return classes[predictionLeafIDVIMP(x, feature, rng)];
   }
+  pair<vector<double>, vector<double>> computePredictions();
   pair<vector<double>, vector<double>> computePredictions(const Data& new_data);
 
 private:
@@ -60,6 +61,11 @@ private:
     vector<vector<double>>().swap(class_counts_node);
   }
 };
+
+vector<double> computeMisclassificationError(const vector<double>& class_predictions, const vector<double>& response, size_t num_classes);
+double computeBrierScoreError(const vector<double>& prob_predictions, const vector<double>& response, size_t num_classes);
+double computeNormalizedBrierScoreError(const vector<double>& prob_predictions, const vector<double>& response, size_t num_classes);
+vector<size_t> computeConfusionMatrix(const vector<double>& class_predictions, const vector<double>& response, size_t num_classes);
 
 vector<double> classCountsToProportions(const vector<double>& class_counts, size_t num_classes, size_t num_obs, size_t split_id = 0);
 double mostFrequentClass(const vector<double>& class_counts);

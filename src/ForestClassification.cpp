@@ -1,5 +1,7 @@
 #include "ForestClassification.h"
 
+#include <cmath>
+
 namespace {
 mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
     seed_seq::result_type seed_data[2] = {
@@ -9,6 +11,15 @@ mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
     seed_seq tree_seed(seed_data, seed_data + 2);
     return mt19937(tree_seed);
     }
+
+size_t encodedResponseToClassIndex(double response, size_t num_classes) {
+    double rounded_response = round(response);
+    if (!isfinite(response) || abs(response - rounded_response) > 1e-8 ||
+        rounded_response < 1 || rounded_response > static_cast<double>(num_classes)) {
+        throw runtime_error("Classification response values must be encoded as 1, ..., num_classes");
+    }
+    return static_cast<size_t>(rounded_response) - 1;
+}
 }
 
 // functions for growing classification forests
@@ -88,15 +99,6 @@ void ClassificationForest::grow() {
 // functions for predicting with classification forests
 //--------------------------------------------------------------------------------------
 
-double ClassificationForest::predict(const vector<double>& x) {
-    double result = 0;
-    for (const auto& tree : trees) {
-        double prediction = get<double>(tree->predict(x));
-        result += prediction;
-    }
-    return result / ntrees;
-}
-
 vector<vector<double>> ClassificationForest::computePredictions() {
     size_t num_obs = data->getNumberOfObs();
     size_t num_classes = data->getNumClasses();
@@ -105,20 +107,14 @@ vector<vector<double>> ClassificationForest::computePredictions() {
     vector<double> predictions_prob(num_obs * num_classes);
     vector<double> oob_predictions_prob(num_obs * num_classes);
 
-    // temporary quantities to determine the final predicted class (by majority rule) and their probabilities for each observation
-    vector<double> class_counts_obs;
-    vector<double> oob_class_counts_obs;
-    vector<double> class_probs_obs;
-    vector<double> oob_class_probs_obs;
-
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t i = 0; i < num_obs; ++i) {
         double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
 
-        class_counts_obs.assign(num_classes, 0);
-        oob_class_counts_obs.assign(num_classes, 0);
-        class_probs_obs.assign(num_classes, 0);
-        oob_class_probs_obs.assign(num_classes, 0);
+        vector<double> class_counts_obs(num_classes, 0);
+        vector<double> oob_class_counts_obs(num_classes, 0);
+        vector<double> class_probs_obs(num_classes, 0);
+        vector<double> oob_class_probs_obs(num_classes, 0);
 
         // compute the sum of all predictions for observation i
         for (size_t j = 0; j < ntrees; ++j) {
@@ -130,37 +126,81 @@ vector<vector<double>> ClassificationForest::computePredictions() {
                 size_t leaf_id = tree->predictionLeafID(data->get_x_row(i));
 
                 // fetch predicted class and update class counts
-                size_t tree_pred_class = static_cast<size_t>(tree->getClasses()[leaf_id]);
+                size_t tree_pred_class = encodedResponseToClassIndex(tree->getClasses()[leaf_id], num_classes);
                 ++class_counts_obs[tree_pred_class];
                 ++oob_class_counts_obs[tree_pred_class];
 
                 // fetch predicted class probabilities and increment
                 const vector<double>& tree_pred_probs = tree->getClassProportions()[leaf_id];
-                class_probs_obs[tree_pred_class] += tree_pred_probs[tree_pred_class];
-                oob_class_probs_obs[tree_pred_class] += tree_pred_probs[tree_pred_class];
+                for (size_t c = 0; c < num_classes; ++c) {
+                    class_probs_obs[c] += tree_pred_probs[c];
+                    oob_class_probs_obs[c] += tree_pred_probs[c];
+                }
             }
             // no need to predict from scratch for in-bag observations since we save the terminal node ID during fitting
             else {
                 // repeat the above but only for the inbag-observation
-                size_t tree_pred_class = static_cast<size_t>(tree->getClasses()[tree->getPredictionNodeIDs()[i]]);
+                size_t leaf_id = tree->getPredictionNodeIDs()[i];
+                size_t tree_pred_class = encodedResponseToClassIndex(tree->getClasses()[leaf_id], num_classes);
                 ++class_counts_obs[tree_pred_class];
-                const vector<double>& tree_pred_probs = tree->getClassProportions()[tree->getPredictionNodeIDs()[i]];
-                class_probs_obs[tree_pred_class] += tree_pred_probs[tree_pred_class];
+                const vector<double>& tree_pred_probs = tree->getClassProportions()[leaf_id];
+                for (size_t c = 0; c < num_classes; ++c) {
+                    class_probs_obs[c] += tree_pred_probs[c];
+                }
             }
         }
-
         // normalise and save probability predictions
         size_t obs_index = i * num_classes;
         for (size_t c = 0; c < num_classes; ++c) {
             predictions_prob[obs_index + c] = class_probs_obs[c] / ntrees;
-            oob_predictions_prob[obs_index + c] = oob_class_probs_obs[c] / num_oob_trees;
+            oob_predictions_prob[obs_index + c] = num_oob_trees > 0 ? oob_class_probs_obs[c] / num_oob_trees : NA_REAL;
         }
         // determine the final class prediction by majority rule
         predictions[i] = mostFrequentClass(class_counts_obs);
-        oob_predictions[i] = mostFrequentClass(oob_class_counts_obs);
+        oob_predictions[i] = num_oob_trees > 0 ? mostFrequentClass(oob_class_counts_obs) : NA_REAL;
     }
 
     return {predictions, oob_predictions, predictions_prob, oob_predictions_prob};
+}
+
+pair<vector<double>, vector<double>> ClassificationForest::computePredictions(const Data& new_data, bool compute_probs) {
+    size_t num_obs = new_data.getNumberOfObs();
+    size_t num_classes = data->getNumClasses();
+    vector<double> predictions(num_obs);
+    vector<double> predictions_prob(num_obs * num_classes);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> class_counts_obs(num_classes, 0);
+        vector<double> class_probs_obs(num_classes, 0);
+
+        for (size_t j = 0; j < ntrees; ++j) {
+            ClassificationTree* tree = dynamic_cast<ClassificationTree*>(trees[j].get());
+            size_t leaf_id = tree->predictionLeafID(new_data.get_x_row(i));
+
+            // fetch predicted class and update class counts
+            size_t tree_pred_class = encodedResponseToClassIndex(tree->getClasses()[leaf_id], num_classes);
+            ++class_counts_obs[tree_pred_class];
+
+            // fetch predicted class probabilities if compute_probs == true and increment
+            if (compute_probs) {
+                const vector<double>& tree_pred_probs = tree->getClassProportions()[leaf_id];
+                for (size_t c = 0; c < num_classes; ++c) {
+                    class_probs_obs[c] += tree_pred_probs[c];
+                }
+            }
+        }
+        // normalise and save probability predictions if compute_probs == true
+        if (compute_probs) {
+            size_t obs_index = i * num_classes;
+            for (size_t c = 0; c < num_classes; ++c) {
+                predictions_prob[obs_index + c] = class_probs_obs[c] / ntrees;
+            }
+        }
+        // determine the final class prediction by majority rule
+        predictions[i] = mostFrequentClass(class_counts_obs);
+    }
+    return {predictions, predictions_prob};
 }
 
 /*
@@ -192,6 +232,8 @@ vector<double> ClassificationForest::computeVIMPPermute(size_t feature, int feat
 
         for (size_t j = 0; j < num_obs; ++j) {
             if (oob_indices[i][j]) {
+                size_t response_class = encodedResponseToClassIndex(y[j], num_classes);
+
                 // fetch tree predictions without shuffled values for 'feature'
                 vector<double> x = data->get_x_row(j);
                 size_t leaf_id = tree->predictionLeafID(x);
@@ -205,32 +247,29 @@ vector<double> ClassificationForest::computeVIMPPermute(size_t feature, int feat
                 vector<double> tree_pred_probs_shuffled = tree->getClassProportions()[leaf_id_shuffled];
 
                 if (error_type == "brier") {                        // Brier score
-                    for (double c = 0; c < num_classes; ++c) {
-                        if (c == y[j]) {
-                            tree_oob_error[c] += (1 - tree_pred_probs[c]) * (1 - tree_pred_probs[c]);
-                            tree_oob_error[num_classes] += tree_oob_error[c];
+                    for (size_t c = 0; c < num_classes; ++c) {
+                        double error;
+                        double error_shuffled;
+                        if (c == response_class) {
+                            error = (1 - tree_pred_probs[c]) * (1 - tree_pred_probs[c]);
+                            error_shuffled = (1 - tree_pred_probs_shuffled[c]) * (1 - tree_pred_probs_shuffled[c]);
                         } else {
-                            tree_oob_error[c] += tree_pred_probs[c] * tree_pred_probs[c];
-                            tree_oob_error[num_classes] += tree_oob_error[c];
+                            error = tree_pred_probs[c] * tree_pred_probs[c];
+                            error_shuffled = tree_pred_probs_shuffled[c] * tree_pred_probs_shuffled[c];
                         }
-                        if (c == y[j]) {
-                            tree_oob_error_shuffled[c] += (1 - tree_pred_probs_shuffled[c]) * (1 - tree_pred_probs_shuffled[c]);
-                            tree_oob_error_shuffled[num_classes] += tree_oob_error_shuffled[c];
-                        } else {
-                            tree_oob_error_shuffled[c] += tree_pred_probs_shuffled[c] * tree_pred_probs_shuffled[c];
-                            tree_oob_error_shuffled[num_classes] += tree_oob_error_shuffled[c];
-                        }
+                        tree_oob_error[c] += error;
+                        tree_oob_error[num_classes] += error;
+                        tree_oob_error_shuffled[c] += error_shuffled;
+                        tree_oob_error_shuffled[num_classes] += error_shuffled;
                     }
                 } else if (error_type == "misc") {                   // misclassification error
-                    for (double c = 0; c < num_classes; ++c) {
-                        if (c == tree_pred_class && tree_pred_class != y[j]) {
-                            ++tree_oob_error[c];
-                            ++tree_oob_error[num_classes];
-                        }
-                        if (c == tree_pred_class_shuffled && tree_pred_class_shuffled != y[j]) {
-                            ++tree_oob_error_shuffled[c];
-                            ++tree_oob_error_shuffled[num_classes];
-                        }
+                    if (encodedResponseToClassIndex(tree_pred_class, num_classes) != response_class) {
+                        ++tree_oob_error[response_class];
+                        ++tree_oob_error[num_classes];
+                    }
+                    if (encodedResponseToClassIndex(tree_pred_class_shuffled, num_classes) != response_class) {
+                        ++tree_oob_error_shuffled[response_class];
+                        ++tree_oob_error_shuffled[num_classes];
                     }
                 } else {
                     throw("Unknown choice of loss function. Choose either 'brier' or 'misc' (misclassification)");
@@ -283,6 +322,7 @@ vector<double> ClassificationForest::computeVIMPRandom(size_t feature, int featu
         for (size_t j = 0; j < num_obs; ++j) {
             if (oob_indices[i][j]) {
                 ++num_oob_obs;
+                size_t response_class = encodedResponseToClassIndex(y[j], num_classes);
 
                 // fetch tree predictions without random daughter assignment
                 vector<double> x = data->get_x_row(j);
@@ -296,32 +336,29 @@ vector<double> ClassificationForest::computeVIMPRandom(size_t feature, int featu
                 vector<double> tree_pred_probs_random = tree->getClassProportions()[leaf_id_vimp];
 
                 if (error_type == "brier") {                        // Brier score
-                    for (double c = 0; c < num_classes; ++c) {
-                        if (c == y[j]) {
-                            tree_oob_error[c] += (1 - tree_pred_probs[c]) * (1 - tree_pred_probs[c]);
-                            tree_oob_error[num_classes] += tree_oob_error[c];
+                    for (size_t c = 0; c < num_classes; ++c) {
+                        double error;
+                        double error_random;
+                        if (c == response_class) {
+                            error = (1 - tree_pred_probs[c]) * (1 - tree_pred_probs[c]);
+                            error_random = (1 - tree_pred_probs_random[c]) * (1 - tree_pred_probs_random[c]);
                         } else {
-                            tree_oob_error[c] += tree_pred_probs[c] * tree_pred_probs[c];
-                            tree_oob_error[num_classes] += tree_oob_error[c];
+                            error = tree_pred_probs[c] * tree_pred_probs[c];
+                            error_random = tree_pred_probs_random[c] * tree_pred_probs_random[c];
                         }
-                        if (c == y[j]) {
-                            tree_oob_error_random[c] += (1 - tree_pred_probs_random[c]) * (1 - tree_pred_probs_random[c]);
-                            tree_oob_error_random[num_classes] += tree_oob_error_random[c];
-                        } else {
-                            tree_oob_error_random[c] += tree_pred_probs_random[c] * tree_pred_probs_random[c];
-                            tree_oob_error_random[num_classes] += tree_oob_error_random[c];
-                        }
+                        tree_oob_error[c] += error;
+                        tree_oob_error[num_classes] += error;
+                        tree_oob_error_random[c] += error_random;
+                        tree_oob_error_random[num_classes] += error_random;
                     }
                 } else if (error_type == "misc") {                   // misclassification error
-                    for (double c = 0; c < num_classes; ++c) {
-                        if (c == tree_pred_class && tree_pred_class != y[j]) {
-                            ++tree_oob_error[c];
-                            ++tree_oob_error[num_classes];
-                        }
-                        if (c == tree_pred_class_random && tree_pred_class_random != y[j]) {
-                            ++tree_oob_error_random[c];
-                            ++tree_oob_error_random[num_classes];
-                        }
+                    if (encodedResponseToClassIndex(tree_pred_class, num_classes) != response_class) {
+                        ++tree_oob_error[response_class];
+                        ++tree_oob_error[num_classes];
+                    }
+                    if (encodedResponseToClassIndex(tree_pred_class_random, num_classes) != response_class) {
+                        ++tree_oob_error_random[response_class];
+                        ++tree_oob_error_random[num_classes];
                     }
                 } else {
                     throw("Unknown choice of loss function. Choose either 'brier' or 'misc' (misclassification)");

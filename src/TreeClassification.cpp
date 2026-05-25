@@ -6,6 +6,19 @@ Functions for classification trees
 
 #include "TreeClassification.h"
 
+#include <cmath>
+
+namespace {
+size_t encodedResponseToClassIndex(double response, size_t num_classes) {
+  double rounded_response = round(response);
+  if (!isfinite(response) || abs(response - rounded_response) > 1e-8 ||
+      rounded_response < 1 || rounded_response > static_cast<double>(num_classes)) {
+    throw runtime_error("Classification response values must be encoded as 1, ..., num_classes");
+  }
+  return static_cast<size_t>(rounded_response) - 1;
+}
+}
+
 // constructor for ClassificationTree
 //--------------------------------------------------------------------------------------
 
@@ -22,7 +35,7 @@ ClassificationTree::ClassificationTree(const vector<size_t>& subset_indices, con
 vector<double> ClassificationTree::computeClassCounts(const vector<size_t>& node_obs) {
   size_t num_classes = data->getNumClasses();
   vector<double> result(num_classes, 0);
-  for (double i = 1; i < num_classes + 1; ++i) {
+  for (size_t i = 1; i < num_classes + 1; ++i) {
     for (size_t j : node_obs) {
       if (data->get_y(j) == i) {
         ++result[i - 1];
@@ -55,6 +68,11 @@ void ClassificationTree::makeLeaf(size_t node_index) {
   // since we are in a terminal node, we save the indices for the observations
   for (size_t i : node_obs[node_index]) {
     prediction_node_IDs[i] = node_index;
+  }
+  if (honest) {
+    for (size_t i : holdout_node_obs[node_index]) {
+      prediction_node_IDs[i] = node_index;
+    }
   }
 }
 
@@ -269,8 +287,9 @@ bool ClassificationTree::createSplit(size_t node_index) {
     vector<double> best_threshold;
     vector<size_t> best_left_indices;
     vector<size_t> best_right_indices;
-    vector<double> best_class_counts_left;
-    vector<double> best_class_counts_right;
+    size_t num_classes = data->getNumClasses();
+    vector<double> best_class_counts_left(num_classes, 0);
+    vector<double> best_class_counts_right(num_classes, 0);
 
     // only used for honesty
     vector<size_t> holdout_left_indices;
@@ -288,7 +307,9 @@ bool ClassificationTree::createSplit(size_t node_index) {
     for (size_t i : sampled_features) {
         if (data->getCategorical()[i]) {
             // finds the best split and constructs the indices of the best left and right node
-            //bestSplitCategorical();
+            bestSplitCategorical(node_index, i, best_split_val, best_feature, best_threshold,
+                                 best_left_indices, best_right_indices,
+                                 best_class_counts_left, best_class_counts_right);
         }
         else {
             // does not return the best indices, so this has to be done later
@@ -450,15 +471,35 @@ double ClassificationTree::Hellinger(const vector<double>& class_prop_left, cons
 // prediction for classification trees
 //--------------------------------------------------------------------------------------
 
-pair<vector<double>, vector<double>> ClassificationTree::computePredictions(const Data& new_data) {
-  size_t num_obs = new_data.getNumberOfObs();
-  size_t num_classes = new_data.getNumClasses();
+// for computing predictions on the training data
+pair<vector<double>, vector<double>> ClassificationTree::computePredictions() {
+  size_t num_obs = data->getNumberOfObs();
+  size_t num_classes = data->getNumClasses();
   vector<double> predictions_class(num_obs);
   vector<double> predictions_prob(num_obs * num_classes);
 
-  // add multithreading here
+  // add multithreading here?
   for (size_t i = 0; i < num_obs; ++i) {
     size_t leaf_id = predictionLeafID(data->get_x_row(i));
+    predictions_class[i] = classes[leaf_id];
+    size_t index = i * num_classes;
+    for (size_t c = 0; c < num_classes; ++c) {
+      predictions_prob[index + c] = class_proportions[leaf_id][c];
+    }
+  }
+  return {predictions_class, predictions_prob};
+}
+
+// for computing predictions on new data
+pair<vector<double>, vector<double>> ClassificationTree::computePredictions(const Data& new_data) {
+  size_t num_obs = new_data.getNumberOfObs();
+  size_t num_classes = data->getNumClasses();
+  vector<double> predictions_class(num_obs);
+  vector<double> predictions_prob(num_obs * num_classes);
+
+  // add multithreading here?
+  for (size_t i = 0; i < num_obs; ++i) {
+    size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
     predictions_class[i] = classes[leaf_id];
     size_t index = i * num_classes;
     for (size_t c = 0; c < num_classes; ++c) {
@@ -473,23 +514,32 @@ pair<vector<double>, vector<double>> ClassificationTree::computePredictions(cons
 
 // computes the misclassification error for each class and in total based on a vector of predictions and a test vector response
 vector<double> computeMisclassificationError(const vector<double>& class_predictions, const vector<double>& response, size_t num_classes) {
+  if (class_predictions.size() != response.size()) {
+    throw runtime_error("Number of classification predictions does not match number of responses");
+  }
+  if (response.empty()) {
+    throw runtime_error("Cannot compute classification error on an empty response vector");
+  }
+
   vector<double> result(num_classes + 1, 0);    // last entry is the aggregate misclassification error
   vector<double> class_counts(num_classes, 0);
 
   for (size_t i = 0; i < response.size(); ++i) {
-    for (double c = 0; c < num_classes; ++c) {
-      if (c == response[i]) {
-        ++class_counts[c];
-        if (c != class_predictions[i]) {
-          ++result[c];
-          ++result[num_classes];
-        }
-      }
+    size_t response_class = encodedResponseToClassIndex(response[i], num_classes);
+    size_t predicted_class = encodedResponseToClassIndex(class_predictions[i], num_classes);
+    ++class_counts[response_class];
+    if (response_class != predicted_class) {
+      ++result[response_class];
+      ++result[num_classes];
     }
   }
   // normalise the results
   for (size_t c = 0; c < num_classes; ++c) {
-    result[c] /= class_counts[c];
+    if (class_counts[c] > 0) {
+      result[c] /= class_counts[c];
+    } else {
+      result[c] = NA_REAL;
+    }
   }
   result[num_classes] /= response.size();
   return result;
@@ -498,12 +548,23 @@ vector<double> computeMisclassificationError(const vector<double>& class_predict
 // computes the Brier score error for each class and in total based on a flattened vector of predictions of the class probabilities
 // and a vector of predicted classes response
 double computeBrierScoreError(const vector<double>& prob_predictions, const vector<double>& response, size_t num_classes) {
+  if (num_classes < 2) {
+    throw runtime_error("Brier score requires at least two classes");
+  }
+  if (response.empty()) {
+    throw runtime_error("Cannot compute Brier score on an empty response vector");
+  }
+  if (prob_predictions.size() != response.size() * num_classes) {
+    throw runtime_error("Number of class-probability predictions does not match response/classes");
+  }
+
   double result = 0;
   
   for (size_t i = 0; i < response.size(); ++i) {
     size_t index = i * num_classes;
-    for (double c = 0; c < num_classes; ++c) {
-      if (c == response[i]) {
+    size_t response_class = encodedResponseToClassIndex(response[i], num_classes);
+    for (size_t c = 0; c < num_classes; ++c) {
+      if (c == response_class) {
         result += (1 - prob_predictions[index + c]) * (1 - prob_predictions[index + c]);
       } else {
         result += prob_predictions[index + c] * prob_predictions[index + c];
@@ -511,8 +572,27 @@ double computeBrierScoreError(const vector<double>& prob_predictions, const vect
     }
   }
 
-  // normalise and return the result (use the adjusted Brier score as in the vignette https://www.randomforestsrc.org/articles/rfsrc-subsample.html)
-  return result * (double) num_classes / (double) (num_classes - 1) * (double) response.size(); 
+  return result / ((double) response.size() * (double) num_classes);
+}
+
+double computeNormalizedBrierScoreError(const vector<double>& prob_predictions, const vector<double>& response, size_t num_classes) {
+  return computeBrierScoreError(prob_predictions, response, num_classes) *
+         (double) num_classes * (double) num_classes / (double) (num_classes - 1);
+}
+
+// computes the confusion matrix based as a flattened vector of length num_classes^2
+vector<size_t> computeConfusionMatrix(const vector<double>& class_predictions, const vector<double>& response, size_t num_classes) {
+  if (class_predictions.size() != response.size()) {
+    throw runtime_error("Number of classification predictions does not match number of responses");
+  }
+
+  vector<size_t> result(num_classes * num_classes, 0);
+  for (size_t i = 0; i < response.size(); ++i) {
+    size_t row = encodedResponseToClassIndex(response[i], num_classes);
+    size_t col = encodedResponseToClassIndex(class_predictions[i], num_classes);
+    ++result[row * num_classes + col];
+  }
+  return result;
 }
 
 // miscellaneous functions related to classification trees
@@ -534,9 +614,8 @@ double mostFrequentClass(const vector<double>& class_counts) {
   for (size_t i = 0; i < class_counts.size(); ++i) {
     if (class_counts[i] > highest_count) {
       highest_count = class_counts[i];
-      result = i;
+      result = i + 1;
     }
   }
   return result;
 }
-
