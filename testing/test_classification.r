@@ -37,7 +37,21 @@ iris_tree <- jftree(Species ~ ., data = iris, min_node_size = 5)
 iris_tree
 print_tree(iris_tree)
 
+iris_forest <- jfforest(Species ~ ., data = iris)
+print_forest(iris_forest)
+
 iris_forest_SRC <- rfsrc(Species ~ ., data = iris)
 iris_forest_SRC
+
+# very much comparable
+
+# should probably test more datasets
+
+
+data("Zoo", package = "mlbench")
+data("Satellite", package = "mlbench")
+data("Shuttle", package = "mlbench")
+data("Sonar", package = "mlbench")
+data("Glass", package = "mlbench")
 
 #nolint end
