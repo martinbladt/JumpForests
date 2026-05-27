@@ -365,6 +365,18 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// getNodeSize
+int getNodeSize(const List& JFTree, const NumericVector& x);
+RcppExport SEXP _JumpForests_getNodeSize(SEXP JFTreeSEXP, SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFTree(JFTreeSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(getNodeSize(JFTree, x));
+    return rcpp_result_gen;
+END_RCPP
+}
 // testList
 List testList();
 RcppExport SEXP _JumpForests_testList() {
@@ -476,6 +488,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_testDataMM", (DL_FUNC) &_JumpForests_testDataMM, 7},
     {"_JumpForests_testUniqueEventTimesThinning", (DL_FUNC) &_JumpForests_testUniqueEventTimesThinning, 2},
     {"_JumpForests_test_omp", (DL_FUNC) &_JumpForests_test_omp, 0},
+    {"_JumpForests_getNodeSize", (DL_FUNC) &_JumpForests_getNodeSize, 2},
     {"_JumpForests_testList", (DL_FUNC) &_JumpForests_testList, 0},
     {"_JumpForests_extract_column", (DL_FUNC) &_JumpForests_extract_column, 2},
     {"_JumpForests_rcpp_hello_world", (DL_FUNC) &_JumpForests_rcpp_hello_world, 0},

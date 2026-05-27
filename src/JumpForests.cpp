@@ -116,7 +116,6 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
     result["num.nodes"] = tree->getNumberOfNodes();
     result["num.terminal.nodes"] = tree->getNumberOfTerminalNodes();
     result["tree.depth"] = tree->getTreeDepth();
-
   }
 
   // the tree is a survival tree
@@ -2070,4 +2069,12 @@ void test_omp() {
   {
     Rcout << "Thread: " << omp_get_thread_num() << "\n";
   }
+}
+
+// returns the size of the node in the tree belonging to x (for testing normality)
+// [[Rcpp::export]]
+int getNodeSize(const List& JFTree, const NumericVector& x) {
+  Tree* tree = ((XPtr<Tree>) JFTree["Tree"]).get();
+  vector<double> covariate = as<vector<double>>(x);
+  return tree->nodeSize(covariate);
 }

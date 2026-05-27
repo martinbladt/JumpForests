@@ -89,6 +89,10 @@ test_omp <- function() {
     invisible(.Call(`_JumpForests_test_omp`))
 }
 
+getNodeSize <- function(JFTree, x) {
+    .Call(`_JumpForests_getNodeSize`, JFTree, x)
+}
+
 testList <- function() {
     .Call(`_JumpForests_testList`)
 }

@@ -489,5 +489,26 @@ forest_HousePrices_honest$R2            # 0.6515211
 
 # Testing asymptotic normality
 #-------------------------------------------------------------------------------------------------
+devtools::load_all()
+library(Rcpp)
+library(randomForestSRC)
+library(ranger)
+
+get_node_size <- function(tree, x) {
+    getNodeSize(tree, x)
+}
 
 # here we need a density satisfying Assumption 1, so start with Unif[0, 1]^d for simplicity
+set.seed(2026)
+n <- 1000
+X1 <- runif(n)
+X2 <- runif(n)
+X3 <- runif(n)  # noise
+X4 <- runif(n)  # noise
+
+Y <- 2 * X1 + 3 * sin(X2) + rnorm(n)
+
+train_data <- data.frame(Y = Y, X1 = X1, X2 = X2, X3 = X3, X4 = X4)
+
+tree <- jftree(Y ~ X1 + X2, data = train_data)
+get_node_size(tree, as.numeric(train_data[, -1][1, ]))

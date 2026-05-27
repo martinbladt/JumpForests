@@ -31,6 +31,11 @@ public:
   // returns the ID of the leaf containing x when computing VIMP (random daughter assignments of feature x)
   size_t predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt19937& rng);
 
+  // returns the size of the node containing x
+  size_t nodeSize(const vector<double>& x) {
+    return node_sizes[predictionLeafID(x)];
+  }
+
   // functions to get tree info
   const vector<size_t> getLeftDaughters() const {
     return left_daughters;
@@ -62,6 +67,10 @@ public:
 
   const vector<size_t>& getPredictionNodeIDs() const {
     return prediction_node_IDs;
+  }
+
+  const vector<size_t>& getNodeSizes() const {
+    return node_sizes;
   }
 
   // functions to set hyperparameters
