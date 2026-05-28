@@ -437,7 +437,7 @@ vector<bool> computeOOBIndicesDouble(const vector<size_t>& grow, const vector<si
         oob[i] = false;
     }
     for (size_t i : holdout) {
-        oob[i] = true;
+        oob[i] = false;
     }
     return oob;
 }

@@ -41,13 +41,13 @@ test_data <- data.frame(Y = Y, X = X)
 
 forest <- jfforest(Y ~ ., data = test_data, sample_rate = 0.4)
 print_forest(forest)
-forest$mse.error    # 1.088126
-forest$R2           # 0.1231571
+forest$mse.error    # 1.037524
+forest$R2           # 0.1639333
 
 forest_honest <- jfforest(Y ~ ., data = test_data, honest = TRUE, double_bootstrap = TRUE, sample_rate = 0.8)
 print_forest(forest_honest)
-forest_honest$mse.error    # 0.8168693
-forest_honest$R2           # 0.3417433
+forest_honest$mse.error    # 1.018154
+forest_honest$R2           # 0.1795427
 
 # we use half the sample rate for the dishonest forest to get about the same average tree depth
 # (15.54 for the dishonest forest and 15.558 for the honest)
@@ -55,7 +55,7 @@ forest_honest$R2           # 0.3417433
 
 jfforest.predict(forest, new_data = data.frame(X = 1/2))
 
-# honesty with double bootstrap provides a significant improvement it seems,
+# honesty with double bootstrap provides a slight improvement it seems,
 
 # test varying sample sizes
 test_values <- seq(0, 1, 0.01)
@@ -248,11 +248,12 @@ ggsave("DecisionTreePlots/min_node_size_plot_R2.png", units = "cm", width = 14, 
 # now try to predict the regression function in its entirety across many runs (and also compute MSE and R^2)
 
 set.seed(2026)
-test_values <- data.frame(X = seq(0, 1, 0.05))
-n_forests <- 100
+test_grid <- seq(0, 1, 0.05)
+test_values <- data.frame(X = test_grid)
+n_simulations <- 100
 sizes <- c(50, 100, 250, 500, 1000, 2500, 5000)
 num_sizes <- length(sizes)
-num_test_values <- length(seq(0, 1, 0.05))
+num_test_values <- length(test_grid)
 
 mse_sizes <- rep(0, num_sizes)
 R2_sizes <- rep(0, num_sizes)
@@ -264,22 +265,21 @@ var_sizes <- matrix(rep(0, num_sizes * num_test_values), nrow = num_sizes)
 var_sizes_honest <- matrix(rep(0, num_sizes * num_test_values), nrow = num_sizes)
 
 for (i in 1:num_sizes) {
-    U <- runif(sizes[i])
-    X <- quantile_X(U)
-    Y <- g(X) + rnorm(sizes[i])
-    test_data <- data.frame(Y = Y, X = X)
-
     # define quantities for this size particularly
-    mse_sizes_temp <- rep(0, n_forests)
-    R2_sizes_temp <- rep(0, n_forests)
-    mse_sizes_honest_temp <- rep(0, n_forests)
-    R2_sizes_honest_temp <- rep(0, n_forests)
-    predictions_temp <- matrix(rep(0, n_forests * num_test_values), nrow = n_forests)
-    predictions_honest_temp <- matrix(rep(0, n_forests * num_test_values), nrow = n_forests)
+    mse_sizes_temp <- rep(0, n_simulations)
+    R2_sizes_temp <- rep(0, n_simulations)
+    mse_sizes_honest_temp <- rep(0, n_simulations)
+    R2_sizes_honest_temp <- rep(0, n_simulations)
+    predictions_temp <- matrix(rep(0, n_simulations * num_test_values), nrow = n_simulations)
+    predictions_honest_temp <- matrix(rep(0, n_simulations * num_test_values), nrow = n_simulations)
 
-    # now compute predictions and error metrics across all forests
-    for (j in 1:n_forests) {
-        print(j)
+    for (j in 1:n_simulations) {
+        cat("Data size", sizes[i], "simulation", j, "\n")
+        U <- runif(sizes[i])
+        X <- quantile_X(U)
+        Y <- g(X) + rnorm(sizes[i])
+        test_data <- data.frame(Y = Y, X = X)
+
         # dishonest forest
         current_forest <- jfforest(Y ~ ., data = test_data, ntrees = 500)
         mse_sizes_temp[j] <- current_forest$mse.error
@@ -309,9 +309,8 @@ for (i in 1:num_sizes) {
 }
 
 df_data_size_errors <- data.frame(num.obs = sizes, mse = mse_sizes, R2 = R2_sizes, mse.honest = mse_sizes_honest, R2.honest = R2_sizes_honest)
-df_data_size_variances <- cbind(as.data.frame(var_sizes), as.data.frame(var_sizes_honest))
+df_data_size_variances <- cbind(data.frame(num.obs = sizes), as.data.frame(var_sizes), as.data.frame(var_sizes_honest))
 df_data_size_predictions <- cbind(data.frame(num.obs = sizes), as.data.frame(predictions), as.data.frame(predictions_honest))
-df_squared_biases <- 
 
 write.table(df_data_size_errors, file = "DecisionTreePlots/data_size_errors.txt", sep = "\t", row.names = FALSE)
 write.table(df_data_size_variances, file = "DecisionTreePlots/df_data_size_variances.txt", sep = "\t", row.names = FALSE)
@@ -321,11 +320,11 @@ write.table(df_data_size_predictions, file = "DecisionTreePlots/df_data_size_pre
 df_data_size_errors <- as.data.frame(read.table("DecisionTreePlots/data_size_errors.txt", header = TRUE))
 
 library(tidyverse)
-n_mse_plot <- ggplot(data = df_data_size_errors) + 
-    geom_line(aes(x = num.obs, y = mse, colour = "MSE (Dishonest)", linetype = "MSE (Dishonest)")) + 
-    geom_line(aes(x = num.obs, y = mse.honest, colour = "MSE (Honest)", linetype = "MSE (Honest)")) + 
+n_mse_plot <- ggplot(data = df_data_size_errors) +
+    geom_line(aes(x = num.obs, y = mse, colour = "MSE (Dishonest)", linetype = "MSE (Dishonest)")) +
+    geom_line(aes(x = num.obs, y = mse.honest, colour = "MSE (Honest)", linetype = "MSE (Honest)")) +
     scale_x_continuous(breaks = df_data_size_errors$num.obs, trans = "log") +
-    xlab("Size of dataset") + ylab("MSE") + theme_bw() + 
+    xlab("Size of dataset") + ylab("MSE") + theme_bw() +
     scale_colour_manual(name = "Type", values = c("MSE (Dishonest)" = "DarkBlue", "MSE (Honest)" = "DarkGreen")) +
     scale_linetype_manual(name = "Type", values = c("MSE (Dishonest)" = 2, "MSE (Honest)" = 1)) +
     theme(legend.position = "bottom")
@@ -363,25 +362,86 @@ n_R2_plot
 ggsave("DecisionTreePlots/n_R2_plot.png", units = "cm", width = 14, height = 10) 
 
 # now plot the predictions with specific focus on the x = 2/3 covariate
+test_values <- seq(0, 1, 0.05)
+num_test_values <- length(test_values)
+dishonest_prediction_cols <- 2:(num_test_values + 1)
+honest_prediction_cols <- (num_test_values + 2):(2 * num_test_values + 1)
+test_values[14]    # closest to 2/3
+g <- function(x) {
+    2 * x
+}
 
 # two vectors of predictions per row (dishonest, then honest)
 df_data_size_predictions <- as.data.frame(read.table("DecisionTreePlots/df_data_size_predictions.txt", header = TRUE))
-# TODO
+head(df_data_size_predictions)
+dim(df_data_size_predictions)
+df_data_size_predictions[,1]
+
+as.numeric(df_data_size_predictions[1, dishonest_prediction_cols])
+test_values
+
+library(tidyverse)
+# row = 1: 50, row = 2: 100 etc. num_obs = (50  100  250  500 1000 2500 5000)
+plot_regression_lines <- function(row) {
+    ggplot() +
+    geom_line(aes(x = test_values, y = as.numeric(df_data_size_predictions[row, dishonest_prediction_cols]), colour = "Dishonest", linetype = "Dishonest"), linewidth = 1.3) +
+    geom_line(aes(x = test_values, y = as.numeric(df_data_size_predictions[row, honest_prediction_cols]), colour = "Honest", linetype = "Honest"), linewidth = 1.3) +
+    geom_function(fun = g, linewidth = 1.3) + xlab("Covariate") + ylab("Regression function") + theme_bw() +
+    scale_colour_manual(name = "Type", values = c("Dishonest" = "DarkBlue", "Honest" = "DarkGreen")) +
+    scale_linetype_manual(name = "Type", values = c("Dishonest" = 2, "Honest" = 1)) + theme(legend.position = "bottom")
+}
+
+plot_regression_lines(7)
 
 # now consider bias-variance decomposition plots
 df_data_size_variances <- as.data.frame(read.table("DecisionTreePlots/df_data_size_variances.txt", header = TRUE))
+variance_start_col <- if ("num.obs" %in% names(df_data_size_variances)) 2 else 1
+dishonest_variance_cols <- variance_start_col:(variance_start_col + num_test_values - 1)
+honest_variance_cols <- (variance_start_col + num_test_values):(variance_start_col + 2 * num_test_values - 1)
 
 # compute the squared bias
-biases_squared <- df_data_size_predictions[, 2:22]
-biases_squared_honest <- df_data_size_predictions[, 23:43]
-for (i in 1:nrow(biases)) {
-    biases_squared[i, ] <- (biases_squared[i, ] - g(test_values$X))^2
-    biases_squared_honest[i, ] <- (biases_squared_honest[i, ] - g(test_values$X))^2
+biases_squared <- df_data_size_predictions[, dishonest_prediction_cols]
+biases_squared_honest <- df_data_size_predictions[, honest_prediction_cols]
+for (i in 1:nrow(biases_squared)) {
+    biases_squared[i, ] <- (biases_squared[i, ] - g(test_values))^2
+    biases_squared_honest[i, ] <- (biases_squared_honest[i, ] - g(test_values))^2
 }
 
+biases_squared
 # note: variance of the noise is sigma^2 = 1
 # bias-variance decomposition is MSE = bias^2 + var(f_hat) + sigma^2, so lowest possible MSE is 1
-# TODO
+
+noise_variance <- 1
+mse_plot <- function(row) {
+    dishonest_variance <- as.numeric(df_data_size_variances[row, dishonest_variance_cols])
+    dishonest_bias_squared <- as.numeric(biases_squared[row, ])
+    dishonest_sum <- dishonest_bias_squared + dishonest_variance + noise_variance
+
+    honest_variance <- as.numeric(df_data_size_variances[row, honest_variance_cols])
+    honest_bias_squared <- as.numeric(biases_squared_honest[row, ])
+    honest_sum <- honest_bias_squared + honest_variance + noise_variance
+
+    ggplot() +
+        geom_line(aes(x = test_values, y = dishonest_bias_squared, colour = "Dishonest", linetype = "Bias squared"), linewidth = 1.3) +
+        geom_line(aes(x = test_values, y = dishonest_variance, colour = "Dishonest", linetype = "Variance"), linewidth = 1.3) +
+        geom_line(aes(x = test_values, y = dishonest_sum, colour = "Dishonest", linetype = "Sum"), linewidth = 1.3) +
+        geom_line(aes(x = test_values, y = honest_bias_squared, colour = "Honest", linetype = "Bias squared"), linewidth = 1.3) +
+        geom_line(aes(x = test_values, y = honest_variance, colour = "Honest", linetype = "Variance"), linewidth = 1.3) +
+        geom_line(aes(x = test_values, y = honest_sum, colour = "Honest", linetype = "Sum"), linewidth = 1.3) +
+        scale_colour_manual(
+            name = "Type",
+            values = c("Dishonest" = "DarkBlue", "Honest" = "DarkGreen")
+        ) +
+        scale_linetype_manual(
+            name = "Decomposition",
+            values = c("Bias squared" = 1, "Variance" = 2, "Sum" = 3)
+        ) +
+        xlab("Covariate") + ylab("Error contribution") + theme_bw() +
+        theme(legend.position = "bottom")
+}
+
+# maybe not that enlightening
+mse_plot(3)
 
 # just for good measure, try with another regression function
 set.seed(2026)
@@ -405,8 +465,8 @@ forest_honest <- jfforest(Y ~ ., data = test_data, honest = TRUE, double_bootstr
 
 forest$mse.error        # 1.074213 
 forest$R2               # 0.6411498
-forest_honest$mse.error # 0.8437099
-forest_honest$R2        # 0.7181514
+forest_honest$mse.error # 1.006416
+forest_honest$R2        # 0.6637979
 
 library(tidyverse)
 ggplot() + 
@@ -423,12 +483,11 @@ ggplot() +
 data("BostonHousing", package = "mlbench")
 data("CO2", package = "datasets")
 data("Ozone", package = "mlbench")
+Ozone <- na.omit(Ozone)
 data("HousePrices", package = "AER")
 
 # other potential datasets
 data("CASchools", package = "AER")
-
-Ozone <- na.omit(Ozone)
 
 set.seed(2026)
 rfsrc(medv ~ ., data = BostonHousing)
@@ -437,10 +496,10 @@ forest_BostonHousing_honest <- jfforest(medv ~ ., data = BostonHousing, honest =
 
 print_forest(forest_BostonHousing_honest)
 
-forest_BostonHousing$mse.error          # 13.02692
-forest_BostonHousing_honest$mse.error   # 14.33489
-forest_BostonHousing$R2                 # 0.8456884
-forest_BostonHousing_honest$R2          # 0.8301947
+forest_BostonHousing$mse.error          # 12.99228
+forest_BostonHousing_honest$mse.error   # 17.04466
+forest_BostonHousing$R2                 # 0.8460987
+forest_BostonHousing_honest$R2          # 0.7980958
 
 # conclusion: honesty is slightly worse for BostonHousing
 
@@ -454,8 +513,8 @@ print_forest(forest_CO2_honest)
 
 forest_CO2$mse.error           # 11.20203
 forest_CO2$R2                  # 0.9030625
-forest_CO2_honest$mse.error    # 17.93083
-forest_CO2_honest$R2           # 0.8448343
+forest_CO2_honest$mse.error    # 23.19975
+forest_CO2_honest$R2           # 0.7992393
 
 # conclusion: honesty is quite a lot worse for CO2, but this is also a very small dataset
 
@@ -466,10 +525,10 @@ forest_Ozone_honest <- jfforest(V4 ~ ., data = Ozone, honest = TRUE, double_boot
 
 forest_Ozone$mse.error          # 17.64241
 forest_Ozone$R2                 # 0.7356805
-forest_Ozone_honest$mse.error   # 16.98578
-forest_Ozone_honest$R2          # 0.7455183
+forest_Ozone_honest$mse.error   # 20.07164
+forest_Ozone_honest$R2          # 0.6992856
 
-# honesty works slightly better for Ozone
+# honesty is worse when the holdout set is not OOB
 
 set.seed(2026)
 rfsrc(price ~ ., data = HousePrices)
@@ -480,11 +539,10 @@ forest_HousePrices_honest <- jfforest(price ~ ., data = HousePrices, honest = TR
 # rfsrc R^2                               0.63089568
 forest_HousePrices$mse.error            # 268634483
 forest_HousePrices$R2                   # 0.6225595
-forest_HousePrices_honest$mse.error     # 248021766
-forest_HousePrices_honest$R2            # 0.6515211
+forest_HousePrices_honest$mse.error     # 290063016
+forest_HousePrices_honest$R2            # 0.5924517
 
-# overall conclusion: 50/50 whether it works better or not, so definitely worth
-# to try both with and without honesty when applying the method in practice
+# again honesty is worse when the holdout set is not OOB
 
 # Testing asymptotic normality
 #-------------------------------------------------------------------------------------------------
@@ -905,3 +963,15 @@ qq_plot(pred_normalised_5000)
 normal_plot(pred_normalised_5000)
 # 68.69215
 # 0.2029284
+
+# n = 10000
+pred_normalised_10000 <- normalise(df_forest_normality_sizes$N.10000, g(x), 10000)
+qq_plot(pred_normalised_10000)
+normal_plot(pred_normalised_10000)
+# 5.770484
+# 0.238531
+
+# conclusion: the forest seems to become asymptotically normal, even for very small data samples, but
+# the bias grows in n (except for n = 10000, but up until then a clear tendency), the variance also grows
+# in n but slowly. overall the forest seems to be asymptotically normal, but not unbiased with the scaling
+# factor sqrt(k_n)
