@@ -191,7 +191,6 @@ for (j in 1:n_forests) {
 
 df_min_node_size_errors = cbind(data.frame(forest = 1:n_forests), as.data.frame(mse_sizes), as.data.frame(R2_sizes), as.data.frame(mse_sizes_honest), as.data.frame(R2_sizes_honest))
 
-# change column names!
 write.table(df_min_node_size_errors, file = "DecisionTreePlots/df_min_node_size_errors.txt", sep = "\t", row.names = FALSE)
 
 # already saved, no need to run again
@@ -499,16 +498,410 @@ get_node_size <- function(tree, x) {
 }
 
 # here we need a density satisfying Assumption 1, so start with Unif[0, 1]^d for simplicity
+g <- function(x) {
+    2 * x[1] + 3 * sin(x[2])
+}
+
+# testing normality when the true data-generating distribution is known
+n <- 2500
+B <- 2000
+x <- c(1/2, 1/2, 1/2, 1/2)
+new_data = data.frame(X1 = x[1], X2 = x[2], X3 = x[3], X4 = x[4])
+result <- rep(0, B)
+result_honest <- rep(0, B)
+(k_n <- sqrt(n))
+
 set.seed(2026)
-n <- 1000
+for (b in 1:B) {
+    # simulate data
+    X1 <- runif(n)
+    X2 <- runif(n)
+    X3 <- runif(n)  # noise
+    X4 <- runif(n)  # noise
+    Y <- g(c(X1, X2, X3, X4)) + rnorm(n)
+    train_data <- data.frame(Y = Y, X1 = X1, X2 = X2, X3 = X3, X4 = X4)
+
+    cat("Fitting tree", b, "\n")
+    tree <- jftree(Y ~ X1 + X2, data = train_data, min_node_size = k_n)
+    tree_honest <- jftree(Y ~ X1 + X2, data = train_data, honest = TRUE, min_node_size = k_n)
+    n_L <- get_node_size(tree, x)
+    n_L_honest <- get_node_size(tree_honest, x)
+    result[b] <- sqrt(n_L) * (jftree.predict(tree, new_data = new_data) - g(x))
+    result_honest[b] <- sqrt(n_L_honest) * (jftree.predict(tree_honest, new_data = new_data) - g(x))
+}
+
+# results for when data is resampled in each loop
+df_normality_resim <- data.frame(N = result, N.honest = result_honest)
+write.table(df_normality_resim, file = "DecisionTreePlots/df_normality_resim.txt", sep = "\t", row.names = TRUE)
+
+# plots
+df_normality_resim <- read.table("DecisionTreePlots/df_normality_resim.txt", header = TRUE)
+head(df_normality_resim)
+
+qqnorm(df_normality_resim$N)
+qqline(df_normality_resim$N)
+
+qqnorm(df_normality_resim$N.honest)
+qqline(df_normality_resim$N.honest)
+
+# findings:
+# for standard terminal node size (5), not asymptotically normal (around the true regression function)
+# for k_n = sqrt(n), still not asymptotically normal
+
+# maybe just an asymptotic bias? or it doesn't hold for a single tree?
+# or it needs to be on the same dataset for each tree?
+
+# try with same dataset for each tree
+n <- 2500
+B <- 2000
+x <- c(1/2, 1/2, 1/2, 1/2)
+new_data = data.frame(X1 = x[1], X2 = x[2], X3 = x[3], X4 = x[4])
+result <- rep(0, B)
+result_honest <- rep(0, B)
+(k_n <- sqrt(n))
+
+# simulate data
+set.seed(2026)
 X1 <- runif(n)
 X2 <- runif(n)
 X3 <- runif(n)  # noise
 X4 <- runif(n)  # noise
-
-Y <- 2 * X1 + 3 * sin(X2) + rnorm(n)
-
+Y <- g(c(X1, X2, X3, X4)) + rnorm(n)
 train_data <- data.frame(Y = Y, X1 = X1, X2 = X2, X3 = X3, X4 = X4)
 
-tree <- jftree(Y ~ X1 + X2, data = train_data)
-get_node_size(tree, as.numeric(train_data[, -1][1, ]))
+for (b in 1:B) {
+    cat("Fitting tree", b, "\n")
+    tree <- jftree(Y ~ X1 + X2, data = train_data, min_node_size = k_n)
+    tree_honest <- jftree(Y ~ X1 + X2, data = train_data, honest = TRUE, min_node_size = k_n)
+    n_L <- get_node_size(tree, x)
+    n_L_honest <- get_node_size(tree_honest, x)
+    result[b] <- sqrt(n_L) * (jftree.predict(tree, new_data = new_data) - g(x))
+    result_honest[b] <- sqrt(n_L_honest) * (jftree.predict(tree_honest, new_data = new_data) - g(x))
+}
+
+df_normality_same_data <- data.frame(N = result, N.honest = result_honest)
+write.table(df_normality_same_data, file = "DecisionTreePlots/df_normality_same_data.txt", sep = "\t", row.names = TRUE)
+
+# plots
+df_normality_same_data <- read.table("DecisionTreePlots/df_normality_same_data.txt", header = TRUE)
+head(df_normality_same_data)
+
+qqnorm(df_normality_same_data$N)
+qqline(df_normality_same_data$N)
+
+# looks normal for honest trees, no? but definitely not centred around zero
+qqnorm(df_normality_same_data$N.honest)
+qqline(df_normality_same_data$N.honest)
+
+hist(df_normality_same_data$N.honest, breaks = 50, prob = TRUE, xlab = "Honest samples", col = "gray")
+lines(density(df_normality_same_data$N.honest), lwd = 2, col = "DarkBlue")
+curve(dnorm(x, mean=mean(df_normality_same_data$N.honest), sd=sd(df_normality_same_data$N.honest)), 
+      col="DarkGreen", lwd=2, add=TRUE)
+
+# how does the bias change in n? 
+
+data_sizes <- c(50, 100, 250, 500, 1000, 2000, 5000, 10000)
+num_sizes <- length(data_sizes)
+B <- 2000
+x <- c(1/2, 1/2, 1/2, 1/2)
+new_data = data.frame(X1 = x[1], X2 = x[2], X3 = x[3], X4 = x[4])
+result <- matrix(rep(0, B * num_sizes), nrow = B)
+result_honest <- matrix(rep(0, B * num_sizes), nrow = B)
+
+set.seed(2026)
+for (j in 1:num_sizes) {
+    n <- data_sizes[j]
+    X1 <- runif(n)
+    X2 <- runif(n)
+    X3 <- runif(n)  # noise
+    X4 <- runif(n)  # noise
+    Y <- g(c(X1, X2, X3, X4)) + rnorm(n)
+    train_data <- data.frame(Y = Y, X1 = X1, X2 = X2, X3 = X3, X4 = X4)
+    k_n <- sqrt(n)
+    
+    # now fit B trees on this data
+    for (b in 1:B) {
+        cat("Fitting tree", b, "on data of size", n, "\n")
+        tree <- jftree(Y ~ X1 + X2, data = train_data, min_node_size = k_n)
+        tree_honest <- jftree(Y ~ X1 + X2, data = train_data, honest = TRUE, min_node_size = k_n)
+        n_L <- get_node_size(tree, x)
+        n_L_honest <- get_node_size(tree_honest, x)
+        result[b, j] <- sqrt(n_L) * (jftree.predict(tree, new_data = new_data) - g(x))
+        result_honest[b, j] <- sqrt(n_L_honest) * (jftree.predict(tree_honest, new_data = new_data) - g(x))
+    }
+}
+
+head(result)
+head(result_honest)
+
+df_normality_data_sizes <- data.frame(N_50 = result[,1], N_50_honest = result_honest[,1],
+                                      N_100 = result[,2], N_100_honest = result_honest[,2],
+                                      N_250 = result[,3], N_250_honest = result_honest[,3],
+                                      N_500 = result[,4], N_500_honest = result_honest[,4],
+                                      N_1000 = result[,5], N_1000_honest = result_honest[,5],
+                                      N_2000 = result[,6], N_2000_honest = result_honest[,6],
+                                      N_5000 = result[,7], N_5000_honest = result_honest[,7],
+                                      N_10000 = result[,8], N_10000_honest = result_honest[,8])
+
+write.table(df_normality_data_sizes, file = "DecisionTreePlots/df_normality_data_sizes.txt", sep = "\t", row.names = TRUE)
+
+# plots
+df_normality_data_sizes <- read.table("DecisionTreePlots/df_normality_data_sizes.txt", header = TRUE)
+head(df_normality_data_sizes)
+
+# dishonest trees
+qqnorm(df_normality_data_sizes$N_50)
+qqline(df_normality_data_sizes$N_50)
+qqnorm(df_normality_data_sizes$N_100)
+qqline(df_normality_data_sizes$N_100)
+qqnorm(df_normality_data_sizes$N_250)
+qqline(df_normality_data_sizes$N_250)
+# no
+
+# honest trees
+normal_plot <- function(vec) {
+    hist(vec, breaks = 50, prob = TRUE, xlab = "Samples", col = "gray")
+    lines(density(vec), lwd = 2, col = "DarkBlue")
+    curve(dnorm(x, mean=mean(vec), sd=sd(vec)), 
+        col="DarkGreen", lwd=2, add=TRUE)
+}
+
+qqnorm(df_normality_data_sizes$N_50_honest)
+qqline(df_normality_data_sizes$N_50_honest)
+normal_plot(df_normality_data_sizes$N_50_honest)
+mean(df_normality_data_sizes$N_50_honest)   # 2.089832
+
+qqnorm(df_normality_data_sizes$N_100_honest)
+qqline(df_normality_data_sizes$N_100_honest)
+normal_plot(df_normality_data_sizes$N_100_honest)
+mean(df_normality_data_sizes$N_100_honest)  # -1.315116
+
+qqnorm(df_normality_data_sizes$N_250_honest)
+qqline(df_normality_data_sizes$N_250_honest)
+normal_plot(df_normality_data_sizes$N_250_honest)
+mean(df_normality_data_sizes$N_250_honest)  # -1.797804
+
+qqnorm(df_normality_data_sizes$N_500_honest)
+qqline(df_normality_data_sizes$N_500_honest)
+normal_plot(df_normality_data_sizes$N_500_honest)
+mean(df_normality_data_sizes$N_500_honest)  # -11.48705
+
+# judging from the QQ plots, normality has not set in just yet
+
+# better here
+qqnorm(df_normality_data_sizes$N_1000_honest)
+qqline(df_normality_data_sizes$N_1000_honest)
+normal_plot(df_normality_data_sizes$N_1000_honest)
+mean(df_normality_data_sizes$N_1000_honest)  # -0.6587944
+
+# quite good here
+qqnorm(df_normality_data_sizes$N_2000_honest)
+qqline(df_normality_data_sizes$N_2000_honest)
+normal_plot(df_normality_data_sizes$N_2000_honest)
+mean(df_normality_data_sizes$N_2000_honest)  # -5.454237
+
+qqnorm(df_normality_data_sizes$N_5000_honest)
+qqline(df_normality_data_sizes$N_5000_honest)
+normal_plot(df_normality_data_sizes$N_5000_honest)
+mean(df_normality_data_sizes$N_5000_honest)  # 5.67846
+
+# now it gets worse?
+qqnorm(df_normality_data_sizes$N_10000_honest)
+qqline(df_normality_data_sizes$N_10000_honest)
+normal_plot(df_normality_data_sizes$N_10000_honest)
+mean(df_normality_data_sizes$N_10000_honest)  # 12.59814
+
+# try without honesty
+qqnorm(df_normality_data_sizes$N_10000)
+qqline(df_normality_data_sizes$N_10000)
+normal_plot(df_normality_data_sizes$N_10000)
+mean(df_normality_data_sizes$N_10000)  # 12.94885
+
+# not sure if we can even conclude anything, honesty initially seemed somewhat promising,
+# ignoring the growing bias, but since normality "fades" for larger n, I am not sure it
+# is even worth pursuing further for single trees
+
+# last ditch effort with whole forests: I expect that the effective sample size is on the
+# order ntrees * k_n, and we choose the subsampling size s_n = n^(1 - 1/(1 + d/4))
+
+devtools::load_all()
+library(Rcpp)
+library(randomForestSRC)
+library(ranger)
+
+n <- 2000
+num_forests <- 1000
+x <- c(1/2, 1/2, 1/2, 1/2)
+new_data = data.frame(X1 = x[1], X2 = x[2], X3 = x[3], X4 = x[4])
+result <- rep(0, B)
+result_honest <- rep(0, B)
+(k_n <- sqrt(n))
+#(s_n <- sqrt(n))
+#(sample_rate <- s_n/n)  # 0.02236068 (very very small, experiment with more reasonable sample sizes)
+ntrees <- 500
+
+# simulate data
+set.seed(2026)
+X1 <- runif(n)
+X2 <- runif(n)
+X3 <- runif(n)  # noise
+X4 <- runif(n)  # noise
+g <- function(x) {
+    2 * x[1] + 3 * sin(x[2])
+}
+Y <- g(c(X1, X2, X3, X4)) + rnorm(n)
+train_data <- data.frame(Y = Y, X1 = X1, X2 = X2, X3 = X3, X4 = X4)
+
+pred <- rep(0, num_forests)
+pred_honest <- rep(0, num_forests)
+
+for (i in 1:num_forests) {
+    cat("Fitting forest", i, "\n")
+    forest <- jfforest(Y ~ X1 + X2, data = train_data, min_node_size = k_n, ntrees = ntrees, sample_rate = 0.2)
+    pred[i] <- jfforest.predict(forest, new_data = new_data)
+
+    forest_honest <- jfforest(Y ~ X1 + X2, data = train_data, min_node_size = k_n, ntrees = ntrees, 
+                              sample_rate = 0.4, honest = TRUE, double_bootstrap = TRUE)
+    pred_honest[i] <- jfforest.predict(forest_honest, new_data = new_data)
+
+    # free memory
+    rm(forest, forest_honest)
+    gc()
+}
+
+normalised <- sqrt(k_n) * (pred - g(x))
+normalised_honest <- sqrt(k_n) * (pred_honest - g(x))
+
+df_forest_normality <- data.frame(N = normalised, N.honest = normalised_honest)
+write.table(df_forest_normality, "DecisionTreePlots/df_forest_normality.txt", sep = "\t", row.names = TRUE)
+
+df_forest_normality <- read.table("DecisionTreePlots/df_forest_normality.txt", header = TRUE)
+
+normal_plot <- function(vec) {
+    hist(vec, breaks = 30, prob = TRUE, xlab = "Samples", col = "gray")
+    lines(density(vec), lwd = 2, col = "DarkBlue")
+    curve(dnorm(x, mean=mean(vec), sd=sd(vec)), 
+        col="DarkGreen", lwd=2, add=TRUE)
+}
+
+qqnorm(df_forest_normality$N)
+qqline(df_forest_normality$N)
+normal_plot(df_forest_normality$N)
+mean(df_forest_normality$N)    # 3.788769
+var(df_forest_normality$N)     # 0.002633281
+
+qqnorm(df_forest_normality$N.honest)
+qqline(df_forest_normality$N.honest)
+normal_plot(df_forest_normality$N.honest)
+mean(df_forest_normality$N.honest)     # 3.740768
+var(df_forest_normality$N.honest)      # 0.001369785
+
+# looks quite good, but how does it change with n?
+data_sizes <- c(50, 100, 250, 500, 1000, 2000, 5000, 10000)
+num_sizes <- length(data_sizes)
+num_forests <- 1000
+x <- c(1/2, 1/2, 1/2, 1/2)
+new_data = data.frame(X1 = x[1], X2 = x[2], X3 = x[3], X4 = x[4])
+pred <- matrix(rep(0, num_forests * num_sizes), nrow = num_forests)
+pred_honest <- matrix(rep(0, num_forests * num_sizes), nrow = num_forests)
+
+# this takes at least two hours to run
+set.seed(2026)
+for (j in 1:num_sizes) {
+    n <- data_sizes[j]
+    X1 <- runif(n)
+    X2 <- runif(n)
+    X3 <- runif(n)  # noise
+    X4 <- runif(n)  # noise
+    Y <- g(c(X1, X2, X3, X4)) + rnorm(n)
+    train_data <- data.frame(Y = Y, X1 = X1, X2 = X2, X3 = X3, X4 = X4)
+    k_n <- sqrt(n)
+    
+    # now fit B trees on this data
+    for (i in 1:num_forests) {
+        cat("Fitting forest", i, "on data of size", n, "\n")
+        forest <- jfforest(Y ~ X1 + X2, data = train_data, min_node_size = k_n, sample_rate = 0.2, ntrees = ntrees)
+        pred[i, j] <- jfforest.predict(forest, new_data = new_data)
+
+        forest_honest <- jfforest(Y ~ X1 + X2, data = train_data, min_node_size = k_n, ntrees = ntrees, 
+                              sample_rate = 0.4, honest = TRUE, double_bootstrap = TRUE)
+        pred_honest[i, j] <- jfforest.predict(forest_honest, new_data = new_data)
+
+        # free memory
+        rm(forest, forest_honest)
+        gc()
+    }
+}
+
+df_forest_normality_sizes <- data.frame(forest = 1:num_forests, N.50 = pred[,1], N.100 = pred[,2], N.250 = pred[,3],
+                                        N.500 = pred[,4], N.1000 = pred[,5], N.2000 = pred[,6], N.5000 = pred[,7],
+                                        N.10000 = pred[,8], N.50.honest = pred_honest[,1], N.100.honest = pred_honest[,2],
+                                        N.250.honest = pred_honest[,3], N.500.honest = pred_honest[,4], 
+                                        N.1000.honest = pred_honest[,5], N.2000.honest = pred_honest[,6], N.5000.honest = pred_honest[,7],
+                                        N.10000.honest = pred_honest[,8])
+
+write.table(df_forest_normality_sizes, "DecisionTreePlots/df_forest_normality_sizes.png", sep = "\t", row.names = TRUE)
+
+# plots
+df_forest_normality_sizes <- read.table("DecisionTreePlots/df_forest_normality_sizes.png", header = TRUE)
+head(df_forest_normality_sizes)
+
+normalise <- function(vec, g_val, n) {
+    sqrt(n) * (vec - g_val)
+}
+
+qq_plot <- function(pred_normalised) {
+    qqnorm(pred_normalised)
+    qqline(pred_normalised)
+    print(mean(pred_normalised))
+    print(var(pred_normalised))
+}
+
+# n = 50
+pred_normalised_50 <- normalise(df_forest_normality_sizes$N.50, g(x), 50)
+qq_plot(pred_normalised_50)
+normal_plot(pred_normalised_50)
+# mean = 0.935132
+# var = 0.005425842
+
+# n = 100
+pred_normalised_100 <- normalise(df_forest_normality_sizes$N.100, g(x), 100)
+qq_plot(pred_normalised_100)
+normal_plot(pred_normalised_100)
+# mean = -16.86048
+# var = 0.01458967
+
+# n = 250
+pred_normalised_250 <- normalise(df_forest_normality_sizes$N.250, g(x), 250)
+qq_plot(pred_normalised_250)
+normal_plot(pred_normalised_250)
+# mean = 8.245285
+# var = 0.03343723
+
+# n = 500 (becomes slightly less normal?)
+pred_normalised_500 <- normalise(df_forest_normality_sizes$N.500, g(x), 500)
+qq_plot(pred_normalised_500)
+normal_plot(pred_normalised_500)
+# mean = -12.18641
+# var = 0.05482315
+
+# n = 1000, okay becomes approximately normal again
+pred_normalised_1000 <- normalise(df_forest_normality_sizes$N.1000, g(x), 1000)
+qq_plot(pred_normalised_1000)
+normal_plot(pred_normalised_1000)
+# mean = -18.07773
+# var = 0.09566616
+
+# n = 2000
+pred_normalised_2000 <- normalise(df_forest_normality_sizes$N.2000, g(x), 2000)
+qq_plot(pred_normalised_2000)
+normal_plot(pred_normalised_2000)
+# mean = -45.189
+# var = 0.1351436
+
+# n = 5000, looks very nicely normal
+pred_normalised_5000 <- normalise(df_forest_normality_sizes$N.5000, g(x), 5000)
+qq_plot(pred_normalised_5000)
+normal_plot(pred_normalised_5000)
+# 68.69215
+# 0.2029284
