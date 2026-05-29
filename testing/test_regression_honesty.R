@@ -477,7 +477,7 @@ ggplot() +
 
 # same conclusion as before, honesty with double bootstrap seems to work a lot better
 
-# honesty MSE/R^2 compared to dishonesty for various datasets
+# honesty MSE/R^2 compared to dishonesty for various datasets (should not include)
 #-------------------------------------------------------------------------------------------------
 
 data("BostonHousing", package = "mlbench")

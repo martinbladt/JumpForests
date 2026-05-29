@@ -48,7 +48,7 @@ private:
   
   // splitting rules
   double Gini(const vector<double>& class_prop_left, const vector<double>& class_prop_right, size_t num_obs_left, size_t num_obs_right, size_t split_id = 0);
-  double Entropy(const vector<double>& class_prop_left, const vector<double>& class_prop_right, size_t num_obs_left, size_t num_obs_right, const vector<double>& class_prop_parent, size_t split_id = 0);
+  double Entropy(const vector<double>& class_prop_left, const vector<double>& class_prop_right, size_t num_obs_left, size_t num_obs_right, size_t split_id = 0);
   double Misclassification(const vector<double>& class_prop_left, const vector<double>& class_prop_right, size_t num_obs_left, size_t num_obs_right, size_t split_id = 0);
   double Twoing(const vector<double>& class_prop_left, const vector<double>& class_prop_right, size_t num_obs_left, size_t num_obs_right, size_t split_id = 0);
   double Hellinger(const vector<double>& class_prop_left, const vector<double>& class_prop_right, size_t split_id = 0);

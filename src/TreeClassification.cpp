@@ -7,6 +7,7 @@ Functions for classification trees
 #include "TreeClassification.h"
 
 #include <cmath>
+#include <limits>
 
 namespace {
 size_t encodedResponseToClassIndex(double response, size_t num_classes) {
@@ -16,6 +17,10 @@ size_t encodedResponseToClassIndex(double response, size_t num_classes) {
     throw runtime_error("Classification response values must be encoded as 1, ..., num_classes");
   }
   return static_cast<size_t>(rounded_response) - 1;
+}
+
+double proportionLog2(double proportion) {
+  return proportion > 0 ? proportion * log2(proportion) : 0;
 }
 }
 
@@ -138,8 +143,7 @@ void ClassificationTree::bestSplitContinuous(size_t node_index, size_t feature, 
       split_val = Gini(class_prop_left, class_prop_right, num_obs_left, num_obs_right[s]);
     }
     if (splitrule == "entropy") {
-      const vector<double>& class_prop_parent = classCountsToProportions(class_counts_parent, num_classes, num_obs_parent);
-      split_val = Entropy(class_prop_left, class_prop_right, num_obs_left, num_obs_right[s], class_prop_parent);
+      split_val = Entropy(class_prop_left, class_prop_right, num_obs_left, num_obs_right[s]);
     }
     if (splitrule == "misc") {
       split_val = Misclassification(class_prop_left, class_prop_right, num_obs_left, num_obs_right[s]);
@@ -222,8 +226,7 @@ void ClassificationTree::bestSplitCategorical(size_t node_index, size_t feature,
       split_val = Gini(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
     }
     if (splitrule == "entropy") {
-      const vector<double>& class_prop_parent = classCountsToProportions(class_counts_parent, num_classes, num_obs_left + num_obs_right);
-      split_val = Entropy(class_prop_left, class_prop_right, num_obs_left, num_obs_right, class_prop_parent);
+      split_val = Entropy(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
     }
     if (splitrule == "misc") {
       split_val = Misclassification(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
@@ -282,7 +285,7 @@ bool ClassificationTree::createSplit(size_t node_index) {
       return true;
     }
 
-    double best_split_val = -1.0;
+    double best_split_val = -std::numeric_limits<double>::infinity();
     size_t best_feature = 0;
     vector<double> best_threshold;
     vector<size_t> best_left_indices;
@@ -318,7 +321,7 @@ bool ClassificationTree::createSplit(size_t node_index) {
     }
 
     // if no best split is found, make the node a leaf
-    if (best_split_val < 0) {
+    if (!std::isfinite(best_split_val)) {
       if (!honest) {
         // for dishonest trees, use the earlier computed class counts
         pair<double, vector<double>> predictions = computePredictedClass(class_counts_node[node_index], node_sizes[node_index]);
@@ -419,20 +422,18 @@ double ClassificationTree::Gini(const vector<double>& class_prop_left, const vec
   return num_obs_left * sum_left + num_obs_right * sum_right;
 }
 
-// there may be an optimisation of entropy where the split value is always positive without including the parent term
-double ClassificationTree::Entropy(const vector<double>& class_prop_left, const vector<double>& class_prop_right, size_t num_obs_left, size_t num_obs_right, const vector<double>& class_prop_parent, size_t split_id) {
+double ClassificationTree::Entropy(const vector<double>& class_prop_left, const vector<double>& class_prop_right, size_t num_obs_left, size_t num_obs_right, size_t split_id) {
   size_t num_classes = data->getNumClasses();
   double sum_left = 0;
   double sum_right = 0;
-  double sum_parent = 0;
   size_t index = split_id * num_classes;
 
   for (size_t c = 0; c < num_classes; ++c) {
-    sum_left += class_prop_left[c] * log2(class_prop_left[c]);
-    sum_right += class_prop_right[index + c] * log2(class_prop_right[index + c]);
-    sum_parent += class_prop_parent[c] * log2(class_prop_parent[c]);
+    sum_left += proportionLog2(class_prop_left[c]);
+    sum_right += proportionLog2(class_prop_right[index + c]);
   }
-  return sum_parent - (num_obs_left * sum_left + num_obs_right * sum_right) / (num_obs_left + num_obs_right);
+  // Parent entropy is constant within a node, so this has the same argmax as information gain.
+  return num_obs_left * sum_left + num_obs_right * sum_right;
 }
 
 double ClassificationTree::Misclassification(const vector<double>& class_prop_left, const vector<double>& class_prop_right, size_t num_obs_left, size_t num_obs_right, size_t split_id) {

@@ -89,7 +89,7 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
     // check validity of splitrule argument
     vector<string> valid_splitrules = {"gini", "entropy", "misc", "twoing", "hellinger"};
     if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-      throw runtime_error("Invalid splitrule, please choose between gini, entropy, misc, twoing og hellinger");
+      throw runtime_error("Invalid splitrule, please choose between gini, entropy, misc, twoing or hellinger");
     }
 
     ClassificationTree* tree;
