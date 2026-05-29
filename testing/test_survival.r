@@ -157,7 +157,6 @@ jfforest.error(veteran_forest)  # need to compute errors from scratch if save_pr
 jfforest.error(veteran_forest, new_data = veteran)  # since veteran is the training data, this just yields the training error, at least when honest = FALSE
 
 # observation: on new data, the IBS is very comparable to a single tree (but here we also use the training data)
-# some numerical instability when computing the OOB Brier score error
 
 min(veteran_forest$censoring.oob)
 which(veteran_forest$censoring.oob == min(veteran_forest$censoring.oob))
@@ -189,7 +188,7 @@ for (b in 1:nrows) {
     VIMP[b, 4] <- jfforest.vimp(veteran_forest, feature = "diagtime")
     VIMP[b, 5] <- jfforest.vimp(veteran_forest, feature = "age")
     VIMP[b, 6] <- jfforest.vimp(veteran_forest, feature = "prior")
-    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(veteran_forest_SRC, method = "random", vimp.measure = "concordance")$importance)
+    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(veteran_forest_SRC, method = "permute", vimp.measure = "concordance", block.size = 1)$importance)
     veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation")
     VIMP_ranger[b, ] <- as.numeric(importance(veteran_forest_ranger))
     cat("Iteration", b, "\n")

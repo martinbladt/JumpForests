@@ -637,7 +637,7 @@ jfforest.vimp <- function(forest_list, feature = NULL, seed = NULL, method = "pe
     JFCppForestVIMP(forest_list, seed, method, loss)
     #forest_list$vimp <- unlist(forest_list$vimp)
   } else {
-    JFCppForestVIMPFeature(forest_list, feature, seed, method)
+    JFCppForestVIMPFeature(forest_list, feature, seed, method, loss)
   }
 }
 
