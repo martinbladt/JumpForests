@@ -263,8 +263,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // JFCppForestVIMPFeature
-double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name, int feature_seed, CharacterVector method);
-RcppExport SEXP _JumpForests_JFCppForestVIMPFeature(SEXP JFForestSEXP, SEXP feature_nameSEXP, SEXP feature_seedSEXP, SEXP methodSEXP) {
+double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name, int feature_seed, CharacterVector method, CharacterVector loss);
+RcppExport SEXP _JumpForests_JFCppForestVIMPFeature(SEXP JFForestSEXP, SEXP feature_nameSEXP, SEXP feature_seedSEXP, SEXP methodSEXP, SEXP lossSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -272,20 +272,22 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< CharacterVector >::type feature_name(feature_nameSEXP);
     Rcpp::traits::input_parameter< int >::type feature_seed(feature_seedSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type method(methodSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppForestVIMPFeature(JFForest, feature_name, feature_seed, method));
+    Rcpp::traits::input_parameter< CharacterVector >::type loss(lossSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestVIMPFeature(JFForest, feature_name, feature_seed, method, loss));
     return rcpp_result_gen;
 END_RCPP
 }
 // JFCppForestVIMP
-List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method);
-RcppExport SEXP _JumpForests_JFCppForestVIMP(SEXP JFForestSEXP, SEXP seedSEXP, SEXP methodSEXP) {
+List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method, CharacterVector loss);
+RcppExport SEXP _JumpForests_JFCppForestVIMP(SEXP JFForestSEXP, SEXP seedSEXP, SEXP methodSEXP, SEXP lossSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< List& >::type JFForest(JFForestSEXP);
     Rcpp::traits::input_parameter< int >::type seed(seedSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type method(methodSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppForestVIMP(JFForest, seed, method));
+    Rcpp::traits::input_parameter< CharacterVector >::type loss(lossSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestVIMP(JFForest, seed, method, loss));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -480,8 +482,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppForestPredictMM", (DL_FUNC) &_JumpForests_JFCppForestPredictMM, 6},
     {"_JumpForests_JFCppForestErrorSurvivalExternal", (DL_FUNC) &_JumpForests_JFCppForestErrorSurvivalExternal, 1},
     {"_JumpForests_JFCppForestError", (DL_FUNC) &_JumpForests_JFCppForestError, 6},
-    {"_JumpForests_JFCppForestVIMPFeature", (DL_FUNC) &_JumpForests_JFCppForestVIMPFeature, 4},
-    {"_JumpForests_JFCppForestVIMP", (DL_FUNC) &_JumpForests_JFCppForestVIMP, 3},
+    {"_JumpForests_JFCppForestVIMPFeature", (DL_FUNC) &_JumpForests_JFCppForestVIMPFeature, 5},
+    {"_JumpForests_JFCppForestVIMP", (DL_FUNC) &_JumpForests_JFCppForestVIMP, 4},
     {"_JumpForests_getTreeTable", (DL_FUNC) &_JumpForests_getTreeTable, 1},
     {"_JumpForests_df_test", (DL_FUNC) &_JumpForests_df_test, 5},
     {"_JumpForests_testData", (DL_FUNC) &_JumpForests_testData, 5},

@@ -70,8 +70,8 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
                                  LogicalVector categorical, NumericVector unique, NumericVector response_indices);
 
 // VIMP for forests
-double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name, int feature_seed, CharacterVector method);
-List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method);
+double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name, int feature_seed, CharacterVector method, CharacterVector loss);
+List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method, CharacterVector loss);
 
 // misc. functions
 List getTreeTable(SEXP tree_sexp);

@@ -628,13 +628,13 @@ jfforest.error <- function(forest_list, new_data = NULL) {
 #' @return Variable importance values.
 #' @export
 #'
-jfforest.vimp <- function(forest_list, feature = NULL, seed = NULL, method = "permute") {
+jfforest.vimp <- function(forest_list, feature = NULL, seed = NULL, method = "permute", loss = "default") {
   if (is.null(seed)) {
     seed <- runif(n = 1, min = 1, max = 10^6)
   }
   # if no feature is supplied, compute VIMP for all features in the forest
   if (is.null(feature)) {
-    JFCppForestVIMP(forest_list, seed, method)
+    JFCppForestVIMP(forest_list, seed, method, loss)
     #forest_list$vimp <- unlist(forest_list$vimp)
   } else {
     JFCppForestVIMPFeature(forest_list, feature, seed, method)

@@ -57,12 +57,12 @@ JFCppForestError <- function(JFForest, df, feature_indices, categorical, unique,
     .Call(`_JumpForests_JFCppForestError`, JFForest, df, feature_indices, categorical, unique, response_indices)
 }
 
-JFCppForestVIMPFeature <- function(JFForest, feature_name, feature_seed, method) {
-    .Call(`_JumpForests_JFCppForestVIMPFeature`, JFForest, feature_name, feature_seed, method)
+JFCppForestVIMPFeature <- function(JFForest, feature_name, feature_seed, method, loss) {
+    .Call(`_JumpForests_JFCppForestVIMPFeature`, JFForest, feature_name, feature_seed, method, loss)
 }
 
-JFCppForestVIMP <- function(JFForest, seed, method) {
-    .Call(`_JumpForests_JFCppForestVIMP`, JFForest, seed, method)
+JFCppForestVIMP <- function(JFForest, seed, method, loss) {
+    .Call(`_JumpForests_JFCppForestVIMP`, JFForest, seed, method, loss)
 }
 
 getTreeTable <- function(tree_sexp) {

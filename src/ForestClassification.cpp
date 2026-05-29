@@ -225,68 +225,79 @@ pair<vector<double>, vector<double>> ClassificationForest::computePredictions(co
 */
 
 vector<double> ClassificationForest::computeVIMPPermute(size_t feature, int feature_seed, string error_type) {
-    size_t num_obs = data->getNumberOfObs();
     size_t num_classes = data->getNumClasses();
     const vector<double> y = data->get_y();
     vector<double> result(num_classes + 1, 0);  // one VIMP value for each class plus one aggregated value
     vector<double> tree_vimp(ntrees * (num_classes + 1), 0);
+    vector<size_t> tree_has_oob(ntrees, 0);
 
-    // shuffle feature values for all trees among the oob covariates
     vector<vector<size_t>> oob_indices_non_bool;
     OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
-    const vector<vector<double>>& shuffled_values_feature = shuffledFeatureValues(oob_indices_non_bool, feature, feature_seed);
 
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t i = 0; i < ntrees; ++i) {
         ClassificationTree* tree = dynamic_cast<ClassificationTree*>(trees[i].get());
-        size_t num_oob_obs = oob_indices_non_bool[i].size();
+        const vector<size_t>& tree_oob_indices = oob_indices_non_bool[i];
+        size_t num_oob_obs = tree_oob_indices.size();
+        if (num_oob_obs == 0) {
+            continue;
+        }
+        tree_has_oob[i] = 1;
+
+        vector<double> shuffled_oob_values;
+        shuffled_oob_values.reserve(num_oob_obs);
+        for (size_t obs_id : tree_oob_indices) {
+            shuffled_oob_values.push_back(data->get_x(obs_id, feature));
+        }
+        mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
+        shuffle(shuffled_oob_values.begin(), shuffled_oob_values.end(), local_rng);
+
         vector<double> tree_oob_error(num_classes + 1, 0);
         vector<double> tree_oob_error_shuffled(num_classes + 1, 0);
 
-        for (size_t j = 0; j < num_obs; ++j) {
-            if (oob_indices[i][j]) {
-                size_t response_class = encodedResponseToClassIndex(y[j], num_classes);
+        for (size_t j = 0; j < num_oob_obs; ++j) {
+            size_t obs_id = tree_oob_indices[j];
+            size_t response_class = encodedResponseToClassIndex(y[obs_id], num_classes);
 
-                // fetch tree predictions without shuffled values for 'feature'
-                vector<double> x = data->get_x_row(j);
-                size_t leaf_id = tree->predictionLeafID(x);
-                double tree_pred_class = tree->getClasses()[leaf_id];
-                vector<double> tree_pred_probs = tree->getClassProportions()[leaf_id];
+            // fetch tree predictions without shuffled values for 'feature'
+            vector<double> x = data->get_x_row(obs_id);
+            size_t leaf_id = tree->predictionLeafID(x);
+            double tree_pred_class = tree->getClasses()[leaf_id];
+            vector<double> tree_pred_probs = tree->getClassProportions()[leaf_id];
 
-                // fetch tree predictions with shuffled values for 'feature'
-                x[feature] = shuffled_values_feature[i][j];
-                size_t leaf_id_shuffled = tree->predictionLeafID(x);
-                double tree_pred_class_shuffled = tree->getClasses()[leaf_id_shuffled];
-                vector<double> tree_pred_probs_shuffled = tree->getClassProportions()[leaf_id_shuffled];
+            // fetch tree predictions with shuffled values for 'feature'
+            x[feature] = shuffled_oob_values[j];
+            size_t leaf_id_shuffled = tree->predictionLeafID(x);
+            double tree_pred_class_shuffled = tree->getClasses()[leaf_id_shuffled];
+            vector<double> tree_pred_probs_shuffled = tree->getClassProportions()[leaf_id_shuffled];
 
-                if (error_type == "brier") {                        // Brier score
-                    for (size_t c = 0; c < num_classes; ++c) {
-                        double error;
-                        double error_shuffled;
-                        if (c == response_class) {
-                            error = (1 - tree_pred_probs[c]) * (1 - tree_pred_probs[c]);
-                            error_shuffled = (1 - tree_pred_probs_shuffled[c]) * (1 - tree_pred_probs_shuffled[c]);
-                        } else {
-                            error = tree_pred_probs[c] * tree_pred_probs[c];
-                            error_shuffled = tree_pred_probs_shuffled[c] * tree_pred_probs_shuffled[c];
-                        }
-                        tree_oob_error[c] += error;
-                        tree_oob_error[num_classes] += error;
-                        tree_oob_error_shuffled[c] += error_shuffled;
-                        tree_oob_error_shuffled[num_classes] += error_shuffled;
+            if (error_type == "brier") {                        // Brier score
+                for (size_t c = 0; c < num_classes; ++c) {
+                    double error;
+                    double error_shuffled;
+                    if (c == response_class) {
+                        error = (1 - tree_pred_probs[c]) * (1 - tree_pred_probs[c]);
+                        error_shuffled = (1 - tree_pred_probs_shuffled[c]) * (1 - tree_pred_probs_shuffled[c]);
+                    } else {
+                        error = tree_pred_probs[c] * tree_pred_probs[c];
+                        error_shuffled = tree_pred_probs_shuffled[c] * tree_pred_probs_shuffled[c];
                     }
-                } else if (error_type == "misc") {                   // misclassification error
-                    if (encodedResponseToClassIndex(tree_pred_class, num_classes) != response_class) {
-                        ++tree_oob_error[response_class];
-                        ++tree_oob_error[num_classes];
-                    }
-                    if (encodedResponseToClassIndex(tree_pred_class_shuffled, num_classes) != response_class) {
-                        ++tree_oob_error_shuffled[response_class];
-                        ++tree_oob_error_shuffled[num_classes];
-                    }
-                } else {
-                    throw("Unknown choice of loss function. Choose either 'brier' or 'misc' (misclassification)");
+                    tree_oob_error[c] += error;
+                    tree_oob_error[num_classes] += error;
+                    tree_oob_error_shuffled[c] += error_shuffled;
+                    tree_oob_error_shuffled[num_classes] += error_shuffled;
                 }
+            } else if (error_type == "misc") {                   // misclassification error
+                if (encodedResponseToClassIndex(tree_pred_class, num_classes) != response_class) {
+                    ++tree_oob_error[response_class];
+                    ++tree_oob_error[num_classes];
+                }
+                if (encodedResponseToClassIndex(tree_pred_class_shuffled, num_classes) != response_class) {
+                    ++tree_oob_error_shuffled[response_class];
+                    ++tree_oob_error_shuffled[num_classes];
+                }
+            } else {
+                throw runtime_error("Unknown choice of loss function. Choose either 'brier' or 'misc' (misclassification)");
             }
         }
         // add VIMP contribution from the tree for each class and in total
@@ -295,15 +306,23 @@ vector<double> ClassificationForest::computeVIMPPermute(size_t feature, int feat
             tree_vimp[index + c] = (tree_oob_error_shuffled[c] - tree_oob_error[c]) / (double) num_oob_obs;
         }
     }
+    size_t valid_trees = 0;
     for (size_t i = 0; i < ntrees; ++i) {
+        if (tree_has_oob[i] == 0) {
+            continue;
+        }
+        ++valid_trees;
         size_t index = i * (num_classes + 1);
         for (size_t c = 0; c < num_classes + 1; ++c) {
             result[c] += tree_vimp[index + c];
         }
     }
+    if (valid_trees == 0) {
+        throw runtime_error("Cannot compute VIMP without OOB observations");
+    }
     // average VIMP over all trees and return final forest VIMP
     for (size_t c = 0; c < num_classes + 1; ++c) {
-        result[c] /= (double) ntrees;
+        result[c] /= (double) valid_trees;
     }
     if (error_type == "brier") {    // use the adjusted Brier score as in the vignette https://www.randomforestsrc.org/articles/rfsrc-subsample.html
         result[num_classes] *= (double) num_classes / (double) (num_classes - 1);
@@ -318,64 +337,69 @@ vector<double> ClassificationForest::computeVIMPPermute(size_t feature, int feat
 */
 
 vector<double> ClassificationForest::computeVIMPRandom(size_t feature, int feature_seed, string error_type) {
-    size_t num_obs = data->getNumberOfObs();
     size_t num_classes = data->getNumClasses();
     const vector<double> y = data->get_y();
     vector<double> result(num_classes + 1, 0);  // one VIMP value for each class plus one aggregated value
     vector<double> tree_vimp(ntrees * (num_classes + 1), 0);
+    vector<size_t> tree_has_oob(ntrees, 0);
+
+    vector<vector<size_t>> oob_indices_non_bool;
+    OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
 
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t i = 0; i < ntrees; ++i) {
         ClassificationTree* tree = dynamic_cast<ClassificationTree*>(trees[i].get());
         mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
-        size_t num_oob_obs = 0;
+        const vector<size_t>& tree_oob_indices = oob_indices_non_bool[i];
+        size_t num_oob_obs = tree_oob_indices.size();
+        if (num_oob_obs == 0) {
+            continue;
+        }
+        tree_has_oob[i] = 1;
         vector<double> tree_oob_error(num_classes + 1, 0);
         vector<double> tree_oob_error_random(num_classes + 1, 0);
 
-        for (size_t j = 0; j < num_obs; ++j) {
-            if (oob_indices[i][j]) {
-                ++num_oob_obs;
-                size_t response_class = encodedResponseToClassIndex(y[j], num_classes);
+        for (size_t j : tree_oob_indices) {
+            size_t response_class = encodedResponseToClassIndex(y[j], num_classes);
 
-                // fetch tree predictions without random daughter assignment
-                vector<double> x = data->get_x_row(j);
-                size_t leaf_id = tree->predictionLeafID(x);
-                double tree_pred_class = tree->getClasses()[leaf_id];
-                vector<double> tree_pred_probs = tree->getClassProportions()[leaf_id];
+            // fetch tree predictions without random daughter assignment
+            vector<double> x = data->get_x_row(j);
+            size_t leaf_id = tree->predictionLeafID(x);
+            double tree_pred_class = tree->getClasses()[leaf_id];
+            vector<double> tree_pred_probs = tree->getClassProportions()[leaf_id];
 
-                // fetch predictions with random daughter assignment
-                size_t leaf_id_vimp = tree->predictionLeafIDVIMP(x, feature, local_rng);
-                double tree_pred_class_random = tree->getClasses()[leaf_id_vimp];
-                vector<double> tree_pred_probs_random = tree->getClassProportions()[leaf_id_vimp];
+            // fetch predictions with random daughter assignment
+            size_t leaf_id_vimp = tree->predictionLeafIDVIMP(x, feature, local_rng);
+            double tree_pred_class_random = tree->getClasses()[leaf_id_vimp];
+            vector<double> tree_pred_probs_random = tree->getClassProportions()[leaf_id_vimp];
 
-                if (error_type == "brier") {                        // Brier score
-                    for (size_t c = 0; c < num_classes; ++c) {
-                        double error;
-                        double error_random;
-                        if (c == response_class) {
-                            error = (1 - tree_pred_probs[c]) * (1 - tree_pred_probs[c]);
-                            error_random = (1 - tree_pred_probs_random[c]) * (1 - tree_pred_probs_random[c]);
-                        } else {
-                            error = tree_pred_probs[c] * tree_pred_probs[c];
-                            error_random = tree_pred_probs_random[c] * tree_pred_probs_random[c];
-                        }
-                        tree_oob_error[c] += error;
-                        tree_oob_error[num_classes] += error;
-                        tree_oob_error_random[c] += error_random;
-                        tree_oob_error_random[num_classes] += error_random;
+            if (error_type == "brier") {                        // Brier score
+                for (size_t c = 0; c < num_classes; ++c) {
+                    double error;
+                    double error_random;
+                    if (c == response_class) {
+                        error = (1 - tree_pred_probs[c]) * (1 - tree_pred_probs[c]);
+                        error_random = (1 - tree_pred_probs_random[c]) * (1 - tree_pred_probs_random[c]);
+                    } else {
+                        error = tree_pred_probs[c] * tree_pred_probs[c];
+                        error_random = tree_pred_probs_random[c] * tree_pred_probs_random[c];
                     }
-                } else if (error_type == "misc") {                   // misclassification error
-                    if (encodedResponseToClassIndex(tree_pred_class, num_classes) != response_class) {
-                        ++tree_oob_error[response_class];
-                        ++tree_oob_error[num_classes];
-                    }
-                    if (encodedResponseToClassIndex(tree_pred_class_random, num_classes) != response_class) {
-                        ++tree_oob_error_random[response_class];
-                        ++tree_oob_error_random[num_classes];
-                    }
-                } else {
-                    throw("Unknown choice of loss function. Choose either 'brier' or 'misc' (misclassification)");
+                    tree_oob_error[c] += error;
+                    tree_oob_error[num_classes] += error;
+                    tree_oob_error_random[c] += error_random;
+                    tree_oob_error_random[num_classes] += error_random;
                 }
+            } else if (error_type == "misc") {                   // misclassification error
+                if (encodedResponseToClassIndex(tree_pred_class, num_classes) != response_class) {
+                    ++tree_oob_error[response_class];
+                    ++tree_oob_error[num_classes];
+                }
+                if (encodedResponseToClassIndex(tree_pred_class_random, num_classes) != response_class) {
+                    ++tree_oob_error_random[response_class];
+                    ++tree_oob_error_random[num_classes];
+                }
+            } else {
+                throw runtime_error("Unknown choice of loss function. Choose either 'brier' or 'misc' (misclassification)");
             }
         }
         // add VIMP contribution from the tree for each class and in total
@@ -384,15 +408,23 @@ vector<double> ClassificationForest::computeVIMPRandom(size_t feature, int featu
             tree_vimp[index + c] = (tree_oob_error_random[c] - tree_oob_error[c]) / (double) num_oob_obs;
         }
     }
+    size_t valid_trees = 0;
     for (size_t i = 0; i < ntrees; ++i) {
+        if (tree_has_oob[i] == 0) {
+            continue;
+        }
+        ++valid_trees;
         size_t index = i * (num_classes + 1);
         for (size_t c = 0; c < num_classes + 1; ++c) {
             result[c] += tree_vimp[index + c];
         }
     }
+    if (valid_trees == 0) {
+        throw runtime_error("Cannot compute VIMP without OOB observations");
+    }
     // average VIMP over all trees and return final forest VIMP
     for (size_t c = 0; c < num_classes + 1; ++c) {
-        result[c] /= (double) ntrees;
+        result[c] /= (double) valid_trees;
     }
     if (error_type == "brier") {    // use the adjusted Brier score as in the vignette https://www.randomforestsrc.org/articles/rfsrc-subsample.html
         result[num_classes] *= (double) num_classes / (double) (num_classes - 1);

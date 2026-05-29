@@ -1705,9 +1705,10 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
 
 // computes VIMP for a specific feature after the forest is grown
 // [[Rcpp::export]]
-double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name, int feature_seed, CharacterVector method) {
+double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name, int feature_seed, CharacterVector method, CharacterVector loss) {
   string type = as<string>(JFForest["tree.type"]);
   string method_cpp = as<string>(method);
+  string loss_cpp = as<string>(loss);
   //size_t num_obs = as<size_t>(JFForest["num.obs"]);
 
   // translate from feature name to feature index
@@ -1716,6 +1717,16 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
   if (type == "Regression") {
     RegressionForest* forest = ((XPtr<RegressionForest>) JFForest["Forest"]).get();
     size_t feature = forest->getData()->getFeatureID(feature_name_cpp);
+    if (loss_cpp == "default") {
+      loss_cpp = "mse";
+    }
+
+    // check validity of loss function
+    vector<string> valid_loss_functions = {"mse"};
+    if (find(valid_loss_functions.begin(), valid_loss_functions.end(), loss_cpp) == valid_loss_functions.end()) {
+      throw runtime_error("Invalid loss function, only 'mse' is implemented so far");
+    }
+
     if (method_cpp == "permute") {
       return forest->computeVIMPPermute(feature, feature_seed);
     } else if (method_cpp == "random") {
@@ -1725,11 +1736,41 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     }
   }
   if (type == "Classification") {
+    ClassificationForest* forest = ((XPtr<ClassificationForest>) JFForest["Forest"]).get();
+    size_t feature = forest->getData()->getFeatureID(feature_name_cpp);
+    if (loss_cpp == "default") {
+      loss_cpp = "misc";
+    }
 
+    // check validity of loss function
+    vector<string> valid_loss_functions = {"brier", "misc"};
+    if (find(valid_loss_functions.begin(), valid_loss_functions.end(), loss_cpp) == valid_loss_functions.end()) {
+      throw runtime_error("Invalid loss function, please choose between 'brier' or 'misc'");
+    }
+
+    vector<double> vimp;
+    if (method_cpp == "permute") {
+      vimp = forest->computeVIMPPermute(feature, feature_seed, loss_cpp);
+    } else if (method_cpp == "random") {
+      vimp = forest->computeVIMPRandom(feature, feature_seed, loss_cpp);
+    } else {
+      throw runtime_error("Type of VIMP computation method not recognised, use 'permute' or 'random'");
+    }
+    return vimp.back();
   }
   if (type == "Survival") {
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
     size_t feature = forest->getData()->getFeatureID(feature_name_cpp);
+    if (loss_cpp == "default") {
+      loss_cpp = "misc";
+    }
+
+    // check validity of loss function
+    vector<string> valid_loss_functions = {"brier", "misc"};
+    if (find(valid_loss_functions.begin(), valid_loss_functions.end(), loss_cpp) == valid_loss_functions.end()) {
+      throw runtime_error("Invalid loss function, please choose between 'brier' or 'misc'");
+    }
+    
     if (method_cpp == "permute") {
       return forest->computeVIMPPermute(feature, feature_seed);
     } else if (method_cpp == "random") {
@@ -1773,23 +1814,24 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
   if (type == "Multi-state") {
     
   }
+  throw runtime_error("Type of forest not recognised");
 }
 
 // computes VIMP for every variable and saves the list of VIMP-values in JFForest (set seed for reproducibility)
 // [[Rcpp::export]]
-List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method) {
+List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method, CharacterVector loss) {
   mt19937 random_number_generator(seed);
   Forest* forest = ((XPtr<Forest>) JFForest["Forest"]).get();
   size_t num_features = forest->getData()->getNumberOfFeatures();
   vector<string> feature_names = forest->getData()->getFeatureNames();
 
   // for generating feature specific seeds in VIMP computations
-  uniform_int_distribution<size_t> compute_feature_seed(0, numeric_limits<size_t>::max());
+  uniform_int_distribution<int> compute_feature_seed(0, numeric_limits<int>::max());
 
   List VIMP;
   for (size_t i = 0; i < num_features; ++i) {
-    size_t feature_seed = compute_feature_seed(random_number_generator);
-    VIMP[feature_names[i]] = JFCppForestVIMPFeature(JFForest, feature_names[i], feature_seed, method);
+    int feature_seed = compute_feature_seed(random_number_generator);
+    VIMP[feature_names[i]] = JFCppForestVIMPFeature(JFForest, feature_names[i], feature_seed, method, loss);
   }
   
   // why does this not work?
