@@ -524,10 +524,15 @@ gbsg_forest_SRC$predicted.oob[1:10]
 
 # simulation study
 #--------------------------------------------------------------------
+devtools::load_all()
+library(Rcpp)
+library(randomForestSRC)
+library(ranger)
+require(survival)
 
 # try an exponential variable with only two groups being predictive
-set.seed(2025)
-n <- 500
+set.seed(2026)
+n <- 1000
 X1 <- rbinom(n, 1, 0.3)
 T0 <- rexp(n, rate = 1 + X1) * 50
 mean(T0)
@@ -543,7 +548,7 @@ X4 <- rnorm(n)
 X5 <- rnorm(n)
 X6 <- rnorm(n)
 
-sim_data <- data.frame(time = time, status = status, X1 = X1)
+sim_data <- data.frame(time = time, status = status, X1 = X1, X2 = X2, X3 = X3, X4 = X4, X5 = X5, X6 = X6)
 forest <- jfforest(Surv(time, status) ~ ., data = sim_data)
 print_forest(forest)
 forest_SRC <- rfsrc(Surv(time, status) ~ ., data = sim_data, samptype = "swr")
@@ -551,9 +556,8 @@ forest_SRC
 forest_ranger <- ranger(Surv(time, status) ~ ., data = sim_data)
 forest_ranger
 
-library(tidyverse)
 # group 1: X1 = 1, group 2: X1 = 0
-new_data <- data.frame(X1 = c(1, 0))
+new_data <- data.frame(X1 = c(1, 0), X2 = c(0, 0), X3 = c(0, 0), X4 = c(0, 0), X5 = c(0, 0), X6 = c(0, 0))
 pred_SRC <- predict.rfsrc(forest_SRC, newdata = new_data)
 pred_ranger <- predict(forest_ranger, new_data)
 pred <- jfforest.predict(forest, new_data = new_data)
@@ -561,6 +565,7 @@ true_chf_group1 <- 2 * sort(unique(time[status == 1])) / 50
 true_chf_group2 <- sort(unique(time[status == 1])) / 50
 
 # blue: randomForestSRC, purple: ranger, green: my implementation, red: true
+library(tidyverse)
 ggplot() +
   geom_abline(mapping = aes(slope = 2 / 50, intercept = 0), colour = "red") +
   geom_step(mapping = aes(x = forest_SRC$time.interest, y = pred_SRC$chf[1, ]), colour = "blue") + 
@@ -581,6 +586,23 @@ ggplot() +
 
 forest$outcomes.oob[1:10]
 forest_SRC$predicted.oob[1:10]
+
+# now test VIMP, only X1 should be notacibly different from zero
+options(scipen = 999) # I want decimals
+
+# permute
+unlist(jfforest.vimp(forest, seed = 2026, method = "permute",loss = "concordance")$vimp)
+vimp.rfsrc(forest_SRC, importance = "permute", block.size = 1, seed = 2026, vimp.measure = "concordance")$importance
+unlist(jfforest.vimp(forest, seed = 2026, method = "permute",loss = "brier")$vimp)
+vimp.rfsrc(forest_SRC, importance = "permute", block.size = 1, seed = 2026, vimp.measure = "brier")$importance
+# random
+unlist(jfforest.vimp(forest, seed = 2026, method = "random",loss = "concordance")$vimp)
+vimp.rfsrc(forest_SRC, importance = "random", block.size = 1, seed = 2026, vimp.measure = "concordance")$importance
+unlist(jfforest.vimp(forest, seed = 2026, method = "random",loss = "brier")$vimp)
+vimp.rfsrc(forest_SRC, importance = "random", block.size = 1, seed = 2026, vimp.measure = "brier")$importance
+
+# across all runs, it seems that the only important variable, X1, has an approx. 10 times higher VIMP than the others
+# and the values concur in magnitude across methods and loss functions for our implementation and RF-SRC
 
 # peakVO2
 #--------------------------------------------------------------------
