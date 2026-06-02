@@ -485,13 +485,15 @@ void SurvivalTree::computeCensoringKM() {
     vector<double>KM_censoring(num_unique_event_times, 1);
     
     // now compute the Kaplan-Meier estimator
-    double num_censored;
-    for (size_t i = 1; i < num_unique_event_times; ++i) {
-        if (num_at_risk[i] - num_deaths[i] > 0) {
-            num_censored = num_at_risk[i] - num_at_risk[i + 1] - num_deaths[i];
-            KM_censoring[i] = KM_censoring[i - 1] * (1 - num_censored / double(num_at_risk[i] - num_deaths[i]));    // may be other ways of handling ties
+    for (size_t i = 0; i < num_unique_event_times; ++i) {
+        double previous_KM = i == 0 ? 1.0 : KM_censoring[i - 1];
+        double denominator = static_cast<double>(num_at_risk[i]) - static_cast<double>(num_deaths[i]);
+        if (denominator > 0) {
+            double next_at_risk = i + 1 < num_unique_event_times ? static_cast<double>(num_at_risk[i + 1]) : 0.0;
+            double num_censored = static_cast<double>(num_at_risk[i]) - next_at_risk - static_cast<double>(num_deaths[i]);
+            KM_censoring[i] = previous_KM * (1 - num_censored / denominator);    // may be other ways of handling ties
         } else {
-            KM_censoring[i] = KM_censoring[i - 1];
+            KM_censoring[i] = previous_KM;
         }
     }
     // for debugging
@@ -508,13 +510,15 @@ void SurvivalTree::computeCensoringKMExternal(const vector<size_t>& indices, siz
     vector<double> KM(num_unique_event_times, 1);
     
     // now compute the Kaplan-Meier estimator
-    double num_censored;
-    for (size_t i = 1; i < num_unique_event_times; ++i) {
-        if (num_at_risk[i] - num_deaths[i] > 0) {
-            num_censored = num_at_risk[i] - num_at_risk[i + 1] - num_deaths[i];
-            KM[i] = KM[i - 1] * (1 - num_censored / double(num_at_risk[i] - num_deaths[i]));    // may be other ways of handling ties
+    for (size_t i = 0; i < num_unique_event_times; ++i) {
+        double previous_KM = i == 0 ? 1.0 : KM[i - 1];
+        double denominator = static_cast<double>(num_at_risk[i]) - static_cast<double>(num_deaths[i]);
+        if (denominator > 0) {
+            double next_at_risk = i + 1 < num_unique_event_times ? static_cast<double>(num_at_risk[i + 1]) : 0.0;
+            double num_censored = static_cast<double>(num_at_risk[i]) - next_at_risk - static_cast<double>(num_deaths[i]);
+            KM[i] = previous_KM * (1 - num_censored / denominator);    // may be other ways of handling ties
         } else {
-            KM[i] = KM[i - 1];
+            KM[i] = previous_KM;
         }
     }
     //printVector(KM);
@@ -688,7 +692,8 @@ vector<double> SurvivalTree::computePredictions(const Data& new_data) {
     size_t num_obs = new_data.getNumberOfObs();
     vector<double> predictions(num_obs * num_unique_event_times);
     for (size_t i = 0; i < num_obs; ++i) {
-        const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));
+        size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
+        const vector<double>& pred = chf[leaf_id];
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             predictions[i * num_unique_event_times + j] = pred[j];
         }
@@ -777,8 +782,6 @@ vector<double> computeIPCW(const vector<double>& ind, const vector<double>& uniq
     size_t num_unique_event_times = unique_event_times.size();
     vector<double> weights(num_obs * num_unique_event_times, 0);    // result is a flattened vector
 
-    cout << "multi_state = " << multi_state << endl;
-
     for (size_t i = 0; i < num_obs; ++i) {
         // when determining the index for the corresponding unique event time for the given observation,
         // we need to take the id for the last observed time for a multi-state tree/forest
@@ -793,10 +796,11 @@ vector<double> computeIPCW(const vector<double>& ind, const vector<double>& uniq
         }
         //cout << "index_obs = " << index_obs << endl;
         //cout << "Dimensions of KM_cens: " << KM_cens.nrow() << ", " << KM_cens.ncol() << endl;
+        size_t event_censoring_index = event_time_index == 0 ? 0 : event_time_index - 1;
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             if (times[obs_index] <= unique_event_times[j] && ind[i] == 1) {
-               if (KM_cens(i, event_time_index) > 0) {
-                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, event_time_index));   // possibly index - 1 here, check!
+               if (KM_cens(i, event_censoring_index) > 0) {
+                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, event_censoring_index));
                }
             }
             else if (times[obs_index] > unique_event_times[j]) {
@@ -834,36 +838,53 @@ vector<double> computeBrierScore(const vector<double>& times, const vector<doubl
 // the following functions are identical except that they accept KM_cens and KM_pred as flattened arrays instead of NumericMatrices
 
 // computes the IPCW weights for each observation and event time (useful if one wants to extend to other error metrics)
-vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times,
-                              const vector<size_t>& response_event_time_ids, const vector<double>& KM_cens, const vector<size_t>& last_observed_time_ids) {
-    size_t num_obs = times.size();
-    size_t num_unique_event_times = unique_event_times.size();
-    vector<double> weights(num_obs * num_unique_event_times, 0);    // result is a flattened vector
-    bool multi_state;
-    if (last_observed_time_ids.empty()) {
-        multi_state = false;                // survival model
+vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, 
+                              const vector<double>& KM_cens, vector<size_t> obs_indices, const vector<size_t>& last_observed_time_ids) {
+    // if obs_indices is not provided, it means that all observations should be used
+    bool multi_state = !last_observed_time_ids.empty();
+    size_t num_obs;
+    if (obs_indices.empty()) {
+        num_obs = multi_state ? last_observed_time_ids.size() : times.size();
+        obs_indices.resize(num_obs);
+        for (size_t i = 0; i < num_obs; ++i) {
+            obs_indices[i] = i;
+        }
     } else {
-        multi_state = true;                 // multi-state model
+        num_obs = obs_indices.size();
     }
 
-    for (size_t i = 0; i < num_obs; ++i) {
+    size_t num_unique_event_times = unique_event_times.size();
+    vector<double> weights(num_obs * num_unique_event_times, 0);    // result is a flattened vector
+
+    for (size_t row = 0; row < num_obs; ++row) {
+        size_t obs_id = obs_indices[row];
         // when determining the index for the corresponding unique event time for the given observation,
         // we need to take the id for the last observed time for a multi-state tree/forest
-        size_t index_obs;
+        size_t event_time_index;
+        double time;
+        double indicator;
         if (multi_state) {
-            index_obs = response_event_time_ids[last_observed_time_ids[i]];
+            size_t last_observed_time_id = last_observed_time_ids[obs_id];
+            event_time_index = response_event_time_ids[last_observed_time_id];
+            time = times[last_observed_time_id];
+            indicator = ind[obs_id];
         } else {
-            index_obs = response_event_time_ids[i];
+            event_time_index = response_event_time_ids[obs_id];
+            time = times.size() == num_obs ? times[row] : times[obs_id];
+            indicator = ind.size() == num_obs ? ind[row] : ind[obs_id];
         }
+
+        size_t event_censoring_index = event_time_index == 0 ? 0 : event_time_index - 1;
         for (size_t j = 0; j < num_unique_event_times; ++j) {
-            if (times[i] <= unique_event_times[j] && ind[i] == 1) {
-               if (KM_cens[i * num_unique_event_times + index_obs] > 0) {
-                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens[i * num_unique_event_times + index_obs]);   // possibly index_obs - 1 here, check!
+            size_t index = row * num_unique_event_times + j;
+            if (time <= unique_event_times[j] && indicator == 1) {
+               if (KM_cens[row * num_unique_event_times + event_censoring_index] > 0) {
+                 weights[index] = 1 / (num_obs * KM_cens[row * num_unique_event_times + event_censoring_index]);
                }
             }
-            else if (times[i] > unique_event_times[j]) {
-                if (KM_cens[i * num_unique_event_times + j] > 0) {
-                    weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens[i * num_unique_event_times + j]);
+            else if (time > unique_event_times[j]) {
+                if (KM_cens[index] > 0) {
+                    weights[index] = 1 / (num_obs * KM_cens[index]);
                 }
             }
             // the third case (censored before the event time) has weight zero

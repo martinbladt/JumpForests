@@ -48,7 +48,7 @@ public:
   // for computing OOB predictions for VIMP
   vector<double> computePredictionsVIMPRandom(size_t feature, int feature_seed);
   vector<double> computePredictionsVIMPPermute(size_t feature, int feature_seed);
-  double computeVIMPPermute(size_t feature, int feature_seed);
+  double computeVIMPPermute(size_t feature, int feature_seed, string error_type);
   double computeVIMPRandom(size_t feature, int feature_seed);
 
 private:

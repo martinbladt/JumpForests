@@ -650,6 +650,7 @@ qqline(df_normality_same_data$N)
 # looks normal for honest trees, no? but definitely not centred around zero
 qqnorm(df_normality_same_data$N.honest)
 qqline(df_normality_same_data$N.honest)
+mean(df_normality_same_data$N.honest)
 
 hist(df_normality_same_data$N.honest, breaks = 50, prob = TRUE, xlab = "Honest samples", col = "gray")
 lines(density(df_normality_same_data$N.honest), lwd = 2, col = "DarkBlue")
@@ -975,3 +976,12 @@ normal_plot(pred_normalised_10000)
 # the bias grows in n (except for n = 10000, but up until then a clear tendency), the variance also grows
 # in n but slowly. overall the forest seems to be asymptotically normal, but not unbiased with the scaling
 # factor sqrt(k_n)
+
+pred_normalised_10000_honest <- normalise(df_forest_normality_sizes$N.10000.honest, g(x), 10000)
+qq_plot(pred_normalised_10000_honest)
+normal_plot(pred_normalised_10000_honest)
+
+pred_normalised_1000_honest <- normalise(df_forest_normality_sizes$N.1000.honest, g(x), 1000)
+qq_plot(pred_normalised_1000_honest)
+normal_plot(pred_normalised_1000_honest)
+

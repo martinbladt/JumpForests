@@ -123,8 +123,8 @@ length(veteran_tree$unique.event.times)
 head(veteran)
 test_data_functions(veteran, c(3, 4), c(2, 1, 8, 6, 5, 7))
 
-veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = FALSE, save_predictions = TRUE, double_bootstrap = FALSE)
-(veteran_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = veteran, seed = 2025, samptype = "swr", importance = "permute"))
+veteran_forest <- jfforest(Surv(time, status) ~ ., data = veteran, nsplits = 10, ntrees = 500, seed = 2025, honest = FALSE, swr = TRUE, save_predictions = TRUE, double_bootstrap = FALSE)
+(veteran_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = veteran, seed = 2025, samptype = "swr", importance = "permute", use.uno = FALSE))
 (veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation"))
 
 print_forest(veteran_forest)
@@ -169,7 +169,7 @@ which(censoring_predictions == min(censoring_predictions))
 censoring_predictions[95,]
 
 # VIMP
-jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "permute")
+jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "permute", loss = "brier")
 veteran_forest <- jfforest.vimp(veteran_forest, seed = 2025, method = "permute")
 unlist(veteran_forest$vimp)
 vimp.rfsrc(veteran_forest_SRC, importance = "permute", vimp.measure = "concordance")$importance
@@ -196,7 +196,8 @@ for (b in 1:nrows) {
 
 # something has to be different in the computation
 # I have tried to debug for some time but have not found anything
-# I have tried per-tree permute, whole forest permute and random, nothing aligns
+# I have tried per-tree permute, whole forest permute and random, nothing aligns with RF-SRC (but okay with ranger)
+# but the results are not completely non-sensical for 'concordance'
 colMeans(VIMP)
 colMeans(VIMP_SRC)
 colMeans(VIMP_ranger)
@@ -223,7 +224,7 @@ for (b in 1:nrows) {
     VIMP[b, 4] <- jfforest.vimp(veteran_forest, feature = "diagtime", method = "random")
     VIMP[b, 5] <- jfforest.vimp(veteran_forest, feature = "age", method = "random")
     VIMP[b, 6] <- jfforest.vimp(veteran_forest, feature = "prior", method = "random")
-    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(veteran_forest_SRC, method = "random", vimp.measure = "concordance")$importance)
+    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(veteran_forest_SRC, importance = "random", vimp.measure = "concordance", block.size = 1)$importance)
     #veteran_forest_ranger <- ranger(Surv(time, status) ~ ., data = veteran, importance = "permutation")
     VIMP_ranger[b, ] <- as.numeric(importance(veteran_forest_ranger))
     cat("Iteration", b, "\n")
@@ -251,6 +252,144 @@ quantile(VIMP[,6], c(0.025, 0.975))
 quantile(VIMP_SRC[,6], c(0.025, 0.975))
 quantile(VIMP_ranger[,6], c(0.025, 0.975))
 
+# now test with Brier score instead
+set.seed(2026)
+nrows <- 100
+VIMP <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_ranger <- matrix(0, ncol = 6, nrow = nrows)
+for (b in 1:nrows) {
+    VIMP[b, 1] <- jfforest.vimp(veteran_forest, feature = "trt", method = "random", loss = "brier")
+    VIMP[b, 2] <- jfforest.vimp(veteran_forest, feature = "celltype", method = "random", loss = "brier")
+    VIMP[b, 3] <- jfforest.vimp(veteran_forest, feature = "karno", method = "random", loss = "brier")
+    VIMP[b, 4] <- jfforest.vimp(veteran_forest, feature = "diagtime", method = "random", loss = "brier")
+    VIMP[b, 5] <- jfforest.vimp(veteran_forest, feature = "age", method = "random", loss = "brier")
+    VIMP[b, 6] <- jfforest.vimp(veteran_forest, feature = "prior", method = "random", loss = "brier")
+    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(veteran_forest_SRC, method = "random", vimp.measure = "brier", block.size = 1)$importance)
+    VIMP_ranger[b, ] <- as.numeric(importance(veteran_forest_ranger))
+    cat("Iteration", b, "\n")
+}
+
+colMeans(VIMP)
+colMeans(VIMP_SRC)
+colMeans(VIMP_ranger)
+
+# according to codex, this is what I should do
+VIMP <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
+for (b in seq_len(nrows)) {
+  s <- 2025 + b
+
+  jf <- unlist(jfforest.vimp(
+    veteran_forest,
+    seed = s,
+    method = "permute",
+    loss = "concordance"
+  )$vimp)
+
+  src <- vimp.rfsrc(
+    veteran_forest_SRC,
+    importance = "permute",
+    block.size = 1,
+    seed = -s
+  )$importance
+
+  VIMP[b, ] <- jf
+  VIMP_SRC[b, ] <- src
+}
+options(scipen = 999) # I want decimals
+colMeans(VIMP)
+colMeans(VIMP_SRC)
+
+# okay, it actually makes sense now, try with 'random'
+VIMP <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
+for (b in seq_len(nrows)) {
+  s <- 2025 + b
+
+  jf <- unlist(jfforest.vimp(
+    veteran_forest,
+    seed = s,
+    method = "random",
+    loss = "concordance"
+  )$vimp)
+
+  src <- vimp.rfsrc(
+    veteran_forest_SRC,
+    importance = "random",
+    block.size = 1,
+    seed = -s,
+  )$importance
+
+  VIMP[b, ] <- jf
+  VIMP_SRC[b, ] <- src
+  print(b)
+}
+colMeans(VIMP)
+colMeans(VIMP_SRC)
+
+# concurs nicely
+
+# now try both with Brier instead of concordance
+VIMP <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
+for (b in seq_len(nrows)) {
+  s <- 2025 + b
+
+  jf <- unlist(jfforest.vimp(
+    veteran_forest,
+    seed = s,
+    method = "permute",
+    loss = "brier"
+  )$vimp)
+
+  src <- vimp.rfsrc(
+    veteran_forest_SRC,
+    importance = "permute",
+    block.size = 1,
+    seed = -s,
+    vimp.measure = "brier"
+  )$importance
+
+  VIMP[b, ] <- jf
+  VIMP_SRC[b, ] <- src
+  print(b)
+}
+options(scipen = 999) # I want decimals
+colMeans(VIMP)
+colMeans(VIMP_SRC)
+
+# concurs fine
+
+VIMP <- matrix(0, ncol = 6, nrow = nrows)
+VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
+for (b in seq_len(nrows)) {
+  s <- 2025 + b
+
+  jf <- unlist(jfforest.vimp(
+    veteran_forest,
+    seed = s,
+    method = "random",
+    loss = "brier"
+  )$vimp)
+
+  src <- vimp.rfsrc(
+    veteran_forest_SRC,
+    importance = "random",
+    block.size = 1,
+    seed = -s,
+    vimp.measure = "brier"
+  )$importance
+
+  VIMP[b, ] <- jf
+  VIMP_SRC[b, ] <- src
+  print(b)
+}
+colMeans(VIMP)
+colMeans(VIMP_SRC)
+
+# concurs nicely
+
 # retinopathy
 #--------------------------------------------------------------------
 
@@ -259,7 +398,8 @@ head(retinopathy)
 retinopathy_tree <- jftree(Surv(futime, status) ~ ., data = retinopathy)
 
 retinopathy_forest <- jfforest(Surv(futime, status) ~ ., data = retinopathy, splitrule = "logrank", seed = 2025, min_node_size = 20)
-(retinopathy_forest_SRC <- rfsrc(Surv(futime, status) ~ ., data = retinopathy, seed = 2025, samptype = "swr"))
+# for VIMP below, should use use.uno = FALSE
+(retinopathy_forest_SRC <- rfsrc(Surv(futime, status) ~ ., data = retinopathy, seed = 2025, samptype = "swr", min_node_size = 20, use.uno = FALSE))
 (retinopathy_forest_ranger <- ranger(Surv(futime, status) ~., data = retinopathy, seed = 2025))
 
 print_forest(retinopathy_forest)
@@ -284,19 +424,63 @@ jfforest.vimp(retinopathy_forest, seed = 2025)
 VIMP <- matrix(0, ncol = 6, nrow = 100)
 VIMP_SRC <- matrix(0, ncol = 6, nrow = 100)
 for (b in 1:100) {
-    VIMP[b, 1] <- jfforest.vimp(retinopathy_forest, feature = "laser")
-    VIMP[b, 2] <- jfforest.vimp(retinopathy_forest, feature = "eye")
-    VIMP[b, 3] <- jfforest.vimp(retinopathy_forest, feature = "age")
-    VIMP[b, 4] <- jfforest.vimp(retinopathy_forest, feature = "type")
-    VIMP[b, 5] <- jfforest.vimp(retinopathy_forest, feature = "trt")
-    VIMP[b, 6] <- jfforest.vimp(retinopathy_forest, feature = "risk")
-    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(retinopathy_forest_SRC, method = "random")$importance)
+    VIMP[b, 1] <- jfforest.vimp(retinopathy_forest, feature = "laser", method = "permute")
+    VIMP[b, 2] <- jfforest.vimp(retinopathy_forest, feature = "eye", method = "permute")
+    VIMP[b, 3] <- jfforest.vimp(retinopathy_forest, feature = "age", method = "permute")
+    VIMP[b, 4] <- jfforest.vimp(retinopathy_forest, feature = "type", method = "permute")
+    VIMP[b, 5] <- jfforest.vimp(retinopathy_forest, feature = "trt", method = "permute")
+    VIMP[b, 6] <- jfforest.vimp(retinopathy_forest, feature = "risk", method = "permute")
+    VIMP_SRC[b, ] <- as.numeric(vimp.rfsrc(retinopathy_forest_SRC, method = "permute", block.size = 1)$importance)
     cat("Iteration", b, "\n")
 }
 
 # some of them are quite similar
 colMeans(VIMP)
 colMeans(VIMP_SRC)
+
+# try codex's approach (first 'concordance')
+compute_vimp <- function(method, loss, num_replications) {
+  VIMP <- matrix(0, ncol = 6, nrow = num_replications)
+  VIMP_SRC <- matrix(0, ncol = 6, nrow = num_replications)
+  result <- matrix(rep(0, 12), nrow = 2)
+  for (b in seq_len(num_replications)) {
+    s <- 2025 + b
+
+    jf <- unlist(jfforest.vimp(
+      retinopathy_forest,
+      seed = s,
+      method = method,
+      loss = loss
+    )$vimp)
+
+    src <- vimp.rfsrc(
+      retinopathy_forest_SRC,
+      importance = method,
+      block.size = 1,
+      seed = -s,
+      vimp.measure = loss
+    )$importance
+
+    VIMP[b, ] <- as.numeric(jf)
+    VIMP_SRC[b, ] <- as.numeric(src)
+    print(b)
+  }
+  result[1, ] <- colMeans(VIMP)
+  result[2, ] <- colMeans(VIMP_SRC)
+  result
+}
+
+vimp_permute_C <- compute_vimp("permute", "concordance", 100)  
+vimp_random_C <- compute_vimp("random", "concordance", 100) 
+vimp_permute_B <- compute_vimp("permute", "brier", 100)   
+vimp_random_B <- compute_vimp("random", "brier", 100)
+
+df_retinopathy_vimp <- data.frame(C_permute_JF = vimp_permute_C[1,], C_permute_SRC = vimp_permute_C[2,],
+                                  C_random_JF = vimp_random_C[1,], C_random_SRC = vimp_random_C[2,],
+                                  B_permute_JF = vimp_permute_B[1,], B_permute_SRC = vimp_permute_B[2,],
+                                  B_random_JF = vimp_random_B[1,], B_random_SRC = vimp_random_B[2,])
+df_retinopathy_vimp
+write.table(df_retinopathy_vimp, file = "df_retinopathy_vimp.txt", sep = "\t", row.names = TRUE)
 
 # cancer
 #--------------------------------------------------------------------
@@ -307,15 +491,19 @@ head(cancer_final)
 
 cancer_forest <- jfforest(Surv(time, status) ~ ., data = cancer_final, splitrule = "logrank", seed = 2025)
 print_forest(cancer_forest)
-cancer_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = cancer_final, samptype = "swr", seed = 2025)
+cancer_forest_SRC <- rfsrc(Surv(time, status) ~ ., data = cancer_final, samptype = "swr", seed = 2025, use.uno = FALSE)
 cancer_forest_SRC
+cancer_forest_ranger <- ranger(Surv(time, status) ~ ., data = cancer_final, importance = "permutation")
 
 # almost identical, also in terms of OOB error
 cancer_forest$outcomes.oob[1:10]
 cancer_forest_SRC$predicted.oob[1:10]
 
-vimp.rfsrc(cancer_forest_SRC, method = "permute")$importance
-jfforest.vimp(cancer_forest)
+vimp.rfsrc(cancer_forest_SRC, importance = "permute", block.size = 1)$importance
+unlist(jfforest.vimp(cancer_forest)$vimp)
+importance(cancer_forest_ranger)
+
+# concurs quite well all in all
 
 # gbsg
 #--------------------------------------------------------------------

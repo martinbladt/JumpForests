@@ -1,5 +1,7 @@
 #include "ForestSurvival.h"
 
+#include <cmath>
+
 namespace {
 mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
     seed_seq::result_type seed_data[2] = {
@@ -8,7 +10,16 @@ mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
     };
     seed_seq tree_seed(seed_data, seed_data + 2);
     return mt19937(tree_seed);
+}
+
+vector<double> eventTimesAtIDs(const vector<double>& event_times, const vector<size_t>& ids) {
+    vector<double> selected_event_times;
+    selected_event_times.reserve(ids.size());
+    for (size_t id : ids) {
+        selected_event_times.push_back(event_times[id]);
     }
+    return selected_event_times;
+}
 }
 
 // constructor for survival forests
@@ -298,45 +309,125 @@ void SurvivalForest::computePredictionsCensoring() {
     save_predictions = true;
 }
 
-double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
+double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, string error_type) {
     /*
     for each tree, compute the difference in the sums of errors, 
     then divide by the number of OOB samples for that tree
     finally, take the average VIMP over all trees
      */
 
-    size_t num_obs = data->getNumberOfObs();
     const vector<double>& times = data->get_y_col(0);
     const vector<double>& ind = data->get_y_col(1);
 
+    vector<double> brier_event_times;
+    vector<size_t> brier_response_event_time_ids;
+    size_t num_brier_event_times = num_unique_event_times;
+    if (error_type == "brier") {
+        if (!save_predictions) {
+            computePredictionsCensoring();
+        }
+        brier_event_times = eventTimesAtIDs(unique_event_times, true_event_time_ids);
+        if (brier_event_times.empty()) {
+            throw runtime_error("Cannot compute Brier VIMP without observed event times");
+        }
+        brier_response_event_time_ids = computeResponseEventTimeIDs(brier_event_times, times);
+        num_brier_event_times = brier_event_times.size();
+    }
+
     double total_vimp = 0;
-    double total_oob = 0;   // for proper weighting by number of OOB observations
+    size_t valid_trees = 0;
     
     // shuffle feature values for all trees among the oob covariates
     vector<vector<size_t>> oob_indices_non_bool;
     OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
-    const vector<vector<double>>& shuffled_values_feature = shuffledFeatureValues(oob_indices_non_bool, feature, feature_seed);
+    //const vector<vector<double>>& shuffled_values_feature = shuffledFeatureValues(oob_indices_non_bool, feature, feature_seed);
     
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers) reduction(+:total_vimp,total_oob)
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers) reduction(+:total_vimp,valid_trees)
     for (size_t i = 0; i < ntrees; ++i) {
         SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[i].get());
-        size_t num_oob_obs = oob_indices_non_bool[i].size();
-        
-        // initialise vectors of outcomes
+        const vector<size_t>& tree_oob_indices = oob_indices_non_bool[i];
+        size_t num_oob_obs = tree_oob_indices.size();
+        if (num_oob_obs == 0) {
+            continue;
+        }
+
+        // shuffle values for this tree
+        vector<double> shuffled_oob_values;
+        shuffled_oob_values.reserve(num_oob_obs);
+        for (size_t obs_id : tree_oob_indices) {
+            shuffled_oob_values.push_back(data->get_x(obs_id, feature));
+        }
+        mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
+        shuffle(shuffled_oob_values.begin(), shuffled_oob_values.end(), local_rng);
+
+        // initialise vectors of outcomes when the loss is C-index
         vector<double> tree_outcomes;
         vector<double> tree_outcomes_shuffled;
-        tree_outcomes.reserve(num_obs);
-        tree_outcomes_shuffled.reserve(num_obs);
-        tree_outcomes.reserve(num_oob_obs);
-        tree_outcomes_shuffled.reserve(num_oob_obs);
+        if (error_type == "concordance") {
+            tree_outcomes.reserve(num_oob_obs);
+            tree_outcomes_shuffled.reserve(num_oob_obs);
+        }
+
+        // initialise vectors of KM estimators
+        vector<double> tree_KM_predictions;
+        vector<double> tree_KM_censoring;
+        vector<double> tree_KM_predictions_shuffled;
+        if (error_type == "brier") {
+            tree_KM_predictions.assign(num_oob_obs * num_brier_event_times, 0);
+            tree_KM_censoring.assign(num_oob_obs * num_brier_event_times, 0);
+            tree_KM_predictions_shuffled.assign(num_oob_obs * num_brier_event_times, 0);
+        }
 
         // initialise vectors of times and indicators belonging to the OOB
         // observations of this tree
         vector<double> times_tree;
         vector<double> ind_tree;
+        vector<size_t> obs_indices_tree;
         times_tree.reserve(num_oob_obs);
         ind_tree.reserve(num_oob_obs);
+        obs_indices_tree.reserve(num_oob_obs);
 
+        for (size_t j = 0; j < num_oob_obs; ++j) {
+            size_t obs_id = tree_oob_indices[j];
+            times_tree.push_back(times[obs_id]);
+            ind_tree.push_back(ind[obs_id]);
+            obs_indices_tree.push_back(obs_id);
+
+            // fetch tree predictions without shuffled values for 'feature'
+            vector<double> x = data->get_x_row(obs_id);
+            size_t leaf_id = tree->predictionLeafID(x);
+            vector<double> tree_pred = tree->getCHF()[leaf_id];
+
+            // fetch tree predictions with shuffled values for 'feature'
+            x[feature] = shuffled_oob_values[j];
+            size_t leaf_id_shuffled = tree->predictionLeafID(x);
+            vector<double> tree_pred_shuffled = tree->getCHF()[leaf_id_shuffled];
+
+            if (error_type == "brier") {
+                // fetch KM estimators for the CHF and censoring for the tree
+                const vector<double> tree_KM_pred = KaplanMeier(tree_pred);
+                const vector<double>& tree_KM_cens = tree->getKMCensoring()[leaf_id];
+                const vector<double> tree_KM_pred_shuffled = KaplanMeier(tree_pred_shuffled);
+
+                // now save in the flattened vectors
+                size_t obs_index = num_brier_event_times * j;
+                for (size_t t = 0; t < num_brier_event_times; ++t) {
+                    size_t source_time = true_event_time_ids[t];
+                    tree_KM_predictions[obs_index + t] = tree_KM_pred[source_time];
+                    tree_KM_censoring[obs_index + t] = tree_KM_cens[source_time];
+                    tree_KM_predictions_shuffled[obs_index + t] = tree_KM_pred_shuffled[source_time];
+                }
+
+            } else if (error_type == "concordance") {
+                // update outcomes
+                tree_outcomes.push_back(vector_sum(tree_pred));
+                tree_outcomes_shuffled.push_back(vector_sum(tree_pred_shuffled));
+            } else {
+                throw runtime_error("Unknown choice of loss function. Choose either 'brier' or 'concordance'");
+            }
+        }
+
+        /*
         for (size_t j = 0; j < num_obs; ++j) {
             if (oob_indices[i][j]) {
                 vector<double> x = data->get_x_row(j);
@@ -345,28 +436,53 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed) {
                 vector<double> tree_pred_shuffled = get<vector<double>>(tree->predict(x));
 
                 // update outcomes
-                //tree_outcomes.push_back(vector_sum(tree_pred));
-                //tree_outcomes_shuffled.push_back(vector_sum(tree_pred_shuffled));
+                tree_outcomes.push_back(vector_sum(tree_pred));
+                tree_outcomes_shuffled.push_back(vector_sum(tree_pred_shuffled));
 
                 // test using the final chf value instead of the sum (I think the outcome should be the sum of the CHF actually)
-                tree_outcomes.push_back(tree_pred[num_unique_event_times - 1]);
-                tree_outcomes_shuffled.push_back(tree_pred_shuffled[num_unique_event_times - 1]);
+                //tree_outcomes.push_back(tree_pred[num_unique_event_times - 1]);
+                //tree_outcomes_shuffled.push_back(tree_pred_shuffled[num_unique_event_times - 1]);
 
                 // update times
                 times_tree.push_back(times[j]);
                 ind_tree.push_back(ind[j]);
             }
         }
+        */
 
         // now compute and save tree VIMP
-        total_oob += num_oob_obs;
-        total_vimp += (computeConcordanceIndex(tree_outcomes, times_tree, ind_tree) - computeConcordanceIndex(tree_outcomes_shuffled, times_tree, ind_tree)) * num_oob_obs;
-        //total_vimp += (computeConcordanceIndex(tree_outcomes, times_tree, ind_tree) - computeConcordanceIndex(tree_outcomes_shuffled, times_tree, ind_tree));
+        if (error_type == "brier") {
+            // Keep the loss fixed: only the survival prediction is permuted.
+            vector<double> ipcw = computeIPCWCpp(times_tree, ind_tree, brier_event_times, brier_response_event_time_ids, tree_KM_censoring, obs_indices_tree);
+
+            // compute vector of Brier scores
+            vector<double> brier = computeBrierScoreCpp(times_tree, ipcw, brier_event_times, tree_KM_predictions);
+            vector<double> brier_shuffled = computeBrierScoreCpp(times_tree, ipcw, brier_event_times, tree_KM_predictions_shuffled);
+
+            // we use the normalised integrated Brier score
+            double ibs_normalised = computeIBS(brier, brier_event_times).second;
+            double ibs_normalised_shuffled = computeIBS(brier_shuffled, brier_event_times).second;
+
+            total_vimp += ibs_normalised_shuffled - ibs_normalised;
+            ++valid_trees;
+            
+        } else if (error_type == "concordance") {
+            double cindex = computeConcordanceIndex(tree_outcomes, times_tree, ind_tree);
+            double cindex_shuffled = computeConcordanceIndex(tree_outcomes_shuffled, times_tree, ind_tree);
+            if (std::isfinite(cindex) && std::isfinite(cindex_shuffled)) {
+                total_vimp += cindex - cindex_shuffled;
+                ++valid_trees;
+            }
+        }
+        //total_vimp += (computeConcordanceIndex(tree_outcomes, times_tree, ind_tree) - computeConcordanceIndex(tree_outcomes_shuffled, times_tree, ind_tree)) * num_oob_obs;
     }
     
+    if (valid_trees == 0) {
+        throw runtime_error("Cannot compute VIMP without OOB observations and comparable survival pairs");
+    }
+
     // return forest VIMP
-    return total_vimp / total_oob;
-    //return total_vimp / ntrees;
+    return total_vimp / (double) valid_trees;
 }
 
 double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed) {
@@ -410,8 +526,10 @@ double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed) {
             vector<double> tree_pred_random = get<vector<double>>(tree->predictVIMP(x, feature, local_rng));
 
             // Keep the same risk score currently used by permutation VIMP.
-            tree_outcomes.push_back(tree_pred[num_unique_event_times - 1]);
-            tree_outcomes_random.push_back(tree_pred_random[num_unique_event_times - 1]);
+            //tree_outcomes.push_back(tree_pred[num_unique_event_times - 1]);
+            //tree_outcomes_random.push_back(tree_pred_random[num_unique_event_times - 1]);
+            tree_outcomes.push_back(vector_sum(tree_pred));
+            tree_outcomes_random.push_back(vector_sum(tree_pred_random));
             times_tree.push_back(times[j]);
             ind_tree.push_back(ind[j]);
         }
@@ -425,7 +543,7 @@ double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed) {
     return total_vimp / total_oob;
 }
 
-// computes VIMP predictions by random daughter assignments
+// computes VIMP predictions by random daughter assignments (this function is no longer used)
 vector<double> SurvivalForest::computePredictionsVIMPRandom(size_t feature, int feature_seed) {
     size_t num_obs = data->getNumberOfObs();
     vector<double> vimp_predictions(num_obs * num_unique_event_times, 0);

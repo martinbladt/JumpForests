@@ -830,14 +830,13 @@ preprocess_data <- function(data, categorical_levels = NULL) {
   names(new_categorical_levels) <- names(data)
 
   for (i in 1:ncol(data)) {
-    if (inherits(data[, i], "character") || inherits(data[, i], "factor")) {
-      current_levels <- categorical_levels[[names(data)[i]]]
-      if (is.null(current_levels)) {
-        if (inherits(data[, i], "factor")) {
-          current_levels <- levels(data[, i])
-        } else {
-          current_levels <- sort(unique(data[, i]))
-        }
+    current_levels <- categorical_levels[[names(data)[i]]]
+    has_training_levels <- !is.null(current_levels)
+    if (has_training_levels || inherits(data[, i], "character") || inherits(data[, i], "factor")) {
+      if (is.null(current_levels) && inherits(data[, i], "factor")) {
+        current_levels <- levels(data[, i])
+      } else if (is.null(current_levels)) {
+        current_levels <- sort(unique(data[, i]))
       }
       encoded <- match(as.character(data[, i]), current_levels)
       unknown <- is.na(encoded) & !is.na(data[, i])
@@ -849,10 +848,7 @@ preprocess_data <- function(data, categorical_levels = NULL) {
       unique_values[i] <- length(current_levels)
       new_categorical_levels[[i]] <- current_levels
     } else if (inherits(data[, i], "logical")) {
-      current_levels <- categorical_levels[[names(data)[i]]]
-      if (is.null(current_levels)) {
-        current_levels <- c("FALSE", "TRUE")
-      }
+      current_levels <- c("FALSE", "TRUE")
       encoded <- match(as.character(data[, i]), current_levels)
       unknown <- is.na(encoded) & !is.na(data[, i])
       if (any(unknown)) {

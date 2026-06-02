@@ -244,6 +244,7 @@ vector<double> ClassificationForest::computeVIMPPermute(size_t feature, int feat
         }
         tree_has_oob[i] = 1;
 
+        // shuffle values for this tree
         vector<double> shuffled_oob_values;
         shuffled_oob_values.reserve(num_oob_obs);
         for (size_t obs_id : tree_oob_indices) {

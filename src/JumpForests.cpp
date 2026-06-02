@@ -1789,17 +1789,17 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
     size_t feature = forest->getData()->getFeatureID(feature_name_cpp);
     if (loss_cpp == "default") {
-      loss_cpp = "misc";
+      loss_cpp = "concordance";
     }
 
     // check validity of loss function
-    vector<string> valid_loss_functions = {"brier", "misc"};
+    vector<string> valid_loss_functions = {"brier", "concordance"};
     if (find(valid_loss_functions.begin(), valid_loss_functions.end(), loss_cpp) == valid_loss_functions.end()) {
-      throw runtime_error("Invalid loss function, please choose between 'brier' or 'misc'");
+      throw runtime_error("Invalid loss function, please choose between 'brier' or 'concordance'");
     }
     
     if (method_cpp == "permute") {
-      return forest->computeVIMPPermute(feature, feature_seed);
+      return forest->computeVIMPPermute(feature, feature_seed, loss_cpp);
     } else if (method_cpp == "random") {
       return forest->computeVIMPRandom(feature, feature_seed);
     } else {

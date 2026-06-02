@@ -19,8 +19,6 @@ public:
                shared_ptr<vector<size_t>> true_event_time_ids, const vector<size_t>& subset_indices, bool save_predictions, 
                const vector<size_t>& estimation_indices = {});
 
-  //void grow();  // grows the survival tree
-
   const vector<double> getEventTimes() const {
     return *unique_event_times;
   }
@@ -31,10 +29,10 @@ public:
     return *response_event_time_ids;
   }
 
-  const vector<vector<double>> getCHF() const {
+  const vector<vector<double>>& getCHF() const {
     return chf;
   }
-  const vector<vector<double>> getKMCensoring() const {
+  const vector<vector<double>>& getKMCensoring() const {
     return KM_censoring;
   }
 
@@ -129,11 +127,11 @@ vector<double> computeOutcomes(const vector<double>& predictions, size_t num_uni
 vector<double> computeIPCW(const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
                            const NumericMatrix& KM_cens, const vector<double>& times, const vector<size_t>& last_observed_time_ids = {});
 vector<double> computeBrierScore(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const NumericMatrix& KM_pred);
-vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& KM_cens, const vector<size_t>& last_observed_time_ids = {});
+vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& KM_cens, vector<size_t> obs_indices = {}, const vector<size_t>& last_observed_time_ids = {});
 vector<double> computeBrierScoreCpp(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const vector<double>& KM_pred);
 pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& unique_event_times, bool multi_state = false);
 vector<double> computeUniqueEventTimes(const vector<double>& times, const vector<size_t>& ind);
-vector<double> KaplanMeier(const vector<double>& na, size_t num_estimators = 0);
+vector<double> KaplanMeier(const vector<double>& na, size_t num_estimators = 1);
 NumericMatrix KaplanMeier(const NumericMatrix& na);
 double computeConcordanceIndex(const vector<double>& outcomes, const vector<double>& times, const vector<double>& ind);
 
