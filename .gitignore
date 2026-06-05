@@ -5,3 +5,5 @@
 src/*.o
 src/*.so
 src/*.dll
+DecisionTreePlots/df_normality_tree_predictions.txt
+DecisionTreePlots/df_normality_tree_tests.txt

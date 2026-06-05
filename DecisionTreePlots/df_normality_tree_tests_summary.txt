@@ -1,49 +1,193 @@
-"num.obs"	"min.node.size"	"type"	"test"	"statistic"	"p.value"	"reject"
-100	10	"Dishonest"	"Anderson-Darling"	0.406248729322823	0.445937053799186	0.1
-250	15.8113883008419	"Dishonest"	"Anderson-Darling"	0.422111995950482	0.432751985851908	0.1
-500	22.3606797749979	"Dishonest"	"Anderson-Darling"	0.435162817973153	0.474863410291606	0.1
-1000	31.6227766016838	"Dishonest"	"Anderson-Darling"	0.305206181855007	0.623272686721473	0
-2000	44.7213595499958	"Dishonest"	"Anderson-Darling"	0.401622738338143	0.435789147610987	0
-5000	70.7106781186548	"Dishonest"	"Anderson-Darling"	0.514958595785021	0.372909422821073	0.2
-100	10	"Honest"	"Anderson-Darling"	0.457020783115612	0.454567002022443	0.2
-250	15.8113883008419	"Honest"	"Anderson-Darling"	0.368993023892275	0.493984433006871	0
-500	22.3606797749979	"Honest"	"Anderson-Darling"	0.379585492705061	0.518632857617673	0.1
-1000	31.6227766016838	"Honest"	"Anderson-Darling"	0.385410541040194	0.487113534669494	0
-2000	44.7213595499958	"Honest"	"Anderson-Darling"	0.40324323719312	0.433094684077632	0.1
-5000	70.7106781186548	"Honest"	"Anderson-Darling"	0.327989307719268	0.568344993052285	0
-100	10	"Dishonest"	"Cramer-von Mises"	0.0646313529943983	0.432743407502905	0.1
-250	15.8113883008419	"Dishonest"	"Cramer-von Mises"	0.062341129510551	0.445917107294122	0
-500	22.3606797749979	"Dishonest"	"Cramer-von Mises"	0.0689231112994221	0.490180400795304	0.1
-1000	31.6227766016838	"Dishonest"	"Cramer-von Mises"	0.0430438860485272	0.657913089969045	0
-2000	44.7213595499958	"Dishonest"	"Cramer-von Mises"	0.0621739906900388	0.440022943835627	0
-5000	70.7106781186548	"Dishonest"	"Cramer-von Mises"	0.0842606533909606	0.382625755854657	0.3
-100	10	"Honest"	"Cramer-von Mises"	0.0735567996685927	0.440807948432938	0.2
-250	15.8113883008419	"Honest"	"Cramer-von Mises"	0.0574395550731917	0.499496961717856	0
-500	22.3606797749979	"Honest"	"Cramer-von Mises"	0.0599485213088367	0.525041627076242	0.1
-1000	31.6227766016838	"Honest"	"Cramer-von Mises"	0.0610897946665231	0.486884296895546	0.1
-2000	44.7213595499958	"Honest"	"Cramer-von Mises"	0.0580416799843793	0.463309613608849	0
-5000	70.7106781186548	"Honest"	"Cramer-von Mises"	0.0472476752989994	0.593945952907566	0
-100	10	"Dishonest"	"Kolmogorov-Smirnov"	0.193049109082968	0.771794643561269	0
-250	15.8113883008419	"Dishonest"	"Kolmogorov-Smirnov"	0.185420587519048	0.798714736275824	0
-500	22.3606797749979	"Dishonest"	"Kolmogorov-Smirnov"	0.186845041319529	0.801758914779545	0
-1000	31.6227766016838	"Dishonest"	"Kolmogorov-Smirnov"	0.160332062169934	0.895207011500789	0
-2000	44.7213595499958	"Dishonest"	"Kolmogorov-Smirnov"	0.192400355421613	0.760323657335528	0
-5000	70.7106781186548	"Dishonest"	"Kolmogorov-Smirnov"	0.20941877176286	0.677833677349596	0
-100	10	"Honest"	"Kolmogorov-Smirnov"	0.190733516854324	0.763101756695883	0
-250	15.8113883008419	"Honest"	"Kolmogorov-Smirnov"	0.172660665046544	0.844432271039866	0
-500	22.3606797749979	"Honest"	"Kolmogorov-Smirnov"	0.191059495095515	0.781657722704639	0
-1000	31.6227766016838	"Honest"	"Kolmogorov-Smirnov"	0.183802583216466	0.795330385473368	0
-2000	44.7213595499958	"Honest"	"Kolmogorov-Smirnov"	0.164736337938691	0.885737598073347	0
-5000	70.7106781186548	"Honest"	"Kolmogorov-Smirnov"	0.160304350567173	0.881188507893241	0
-100	10	"Dishonest"	"Shapiro-Wilk"	0.92311970042079	0.470665013457871	0.1
-250	15.8113883008419	"Dishonest"	"Shapiro-Wilk"	0.91405345687072	0.449117391889457	0.2
-500	22.3606797749979	"Dishonest"	"Shapiro-Wilk"	0.91860389396645	0.496098854380828	0.2
-1000	31.6227766016838	"Dishonest"	"Shapiro-Wilk"	0.942059091850847	0.604884117535668	0
-2000	44.7213595499958	"Dishonest"	"Shapiro-Wilk"	0.923156967655272	0.449566673926355	0
-5000	70.7106781186548	"Dishonest"	"Shapiro-Wilk"	0.901323125237796	0.368698793996199	0.3
-100	10	"Honest"	"Shapiro-Wilk"	0.911727473098827	0.478135461545639	0.2
-250	15.8113883008419	"Honest"	"Shapiro-Wilk"	0.935257786967523	0.552855731987088	0
-500	22.3606797749979	"Honest"	"Shapiro-Wilk"	0.929780386273973	0.530711941016017	0.1
-1000	31.6227766016838	"Honest"	"Shapiro-Wilk"	0.929995176947901	0.508426078862421	0
-2000	44.7213595499958	"Honest"	"Shapiro-Wilk"	0.913789034205195	0.407818525098669	0.1
-5000	70.7106781186548	"Honest"	"Shapiro-Wilk"	0.935027972928136	0.546030011912194	0
+"num.obs"	"min.node.size"	"min.node.size.power"	"type"	"scaling"	"scaling.base"	"scaling.power"	"test"	"statistic"	"p.value"	"reject"
+100	10	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	1.25945123843491	0.0307824118463311	0.836
+250	15	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	0.730891836942816	0.165182055407458	0.396
+500	22	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	0.511949972588133	0.345214058037599	0.164
+1000	31	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	0.45314724330177	0.402060743788386	0.108
+2000	44	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	0.563725295459847	0.28908855348217	0.196
+5000	70	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	0.56948937097173	0.291978285261458	0.216
+100	10	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	0.593674273927847	0.215562541231999	0.204
+250	15	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	1.27709096316432	0.035527770309571	0.848
+500	22	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	1.66107165968403	0.0103901713332526	0.968
+1000	31	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	1.34990779551834	0.0210582143375136	0.908
+2000	44	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	0.955216883743788	0.0819986077210214	0.656
+5000	70	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Anderson-Darling"	0.998363710090206	0.0649209862046753	0.716
+100	21	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	3.5142995454103	5.46233163274428e-07	1
+250	39	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	0.908757040556689	0.0614680324204248	0.64
+500	62	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	6.44894734882623	1.41916578316175e-11	1
+1000	99	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	8.16072065292983	1.96857283764105e-14	1
+2000	158	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	6.88793283898236	1.09285445560708e-12	1
+5000	292	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	3.04606296243997	4.3253823628942e-05	1
+100	21	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	11.9719443367474	3.02909927925989e-22	1
+250	39	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	15.6195019859425	1.28076681044457e-29	1
+500	62	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	4.28296063679357	1.74040636738173e-08	1
+1000	99	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	9.40726502877773	1.01237488811658e-18	1
+2000	158	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	2.69876786927858	1.38492004769439e-05	1
+5000	292	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Anderson-Darling"	10.7442988210684	1.68965821134205e-19	1
+100	39	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	30.7257336154378	0	1
+250	82	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	43.7026383161271	0	1
+500	144	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	17.9878069444603	1.2420882503071e-32	1
+1000	251	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	6.06742294721518	8.49196502529416e-13	1
+2000	437	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	16.3634864751556	0	1
+5000	910	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	18.0407281333516	0	1
+100	39	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	0.379525570134746	0.491208019093724	0.044
+250	82	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	0.370694551398054	0.517889130906943	0.052
+500	144	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	0.384202738166713	0.495034827153321	0.044
+1000	251	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	0.373961029300708	0.508081292560765	0.04
+2000	437	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	47.2913828781505	0	1
+5000	910	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Anderson-Darling"	73.0015488086942	0	1
+100	10	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	1.03776498692193	0.060973311800264	0.72
+250	15	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.596167933025791	0.256985475342296	0.236
+500	22	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.435226114381863	0.42195373508729	0.08
+1000	31	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.402038865822399	0.4656818345272	0.056
+2000	44	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.46519556239562	0.391391992245488	0.12
+5000	70	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.450944547147688	0.413305323378198	0.104
+100	10	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.665530865157467	0.172611484683151	0.324
+250	15	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.992799096681438	0.0831301667956804	0.672
+500	22	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	1.14623082844171	0.0547917553172856	0.768
+1000	31	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.852620240745283	0.113664341585806	0.544
+2000	44	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.603294945559375	0.260894778595117	0.288
+5000	70	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Anderson-Darling"	0.630706730381134	0.233690915415872	0.272
+100	10	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.212484343782375	0.0331564744812023	0.828
+250	15	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.115670135525178	0.190723861814589	0.376
+500	22	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.0781603258915013	0.366275923257417	0.152
+1000	31	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.072006635229658	0.405548737544662	0.116
+2000	44	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.0881288091342821	0.309333196906941	0.18
+5000	70	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.0897653330639741	0.309994406297861	0.18
+100	10	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.0849776654298439	0.291115108179967	0.14
+250	15	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.207272513382549	0.0443871142906782	0.808
+500	22	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.272792365356388	0.0138990552070297	0.932
+1000	31	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.214982877462126	0.0282702014616219	0.852
+2000	44	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.145763953137716	0.114673339250701	0.552
+5000	70	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Cramer-von Mises"	0.156338948031665	0.0832482650878297	0.628
+100	21	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	0.557225142235878	2.00904086024101e-05	1
+250	39	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	0.114192951058435	0.172270083988482	0.348
+500	62	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	1.12500182263856	3.65998168355319e-09	1
+1000	99	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	1.40174215559784	1.32823229102996e-10	1
+2000	158	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	1.16267967324464	1.83686211341676e-09	1
+5000	292	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	0.443217990994407	0.000351019257082543	1
+100	21	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	2.18428865337393	0	1
+250	39	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	2.81218304001716	0	1
+500	62	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	0.659737732417261	1.41779886985908e-06	1
+1000	99	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	1.29548905722691	1.36492867059963e-10	1
+2000	158	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	0.234422792854448	0.00571433008797325	0.988
+5000	292	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Cramer-von Mises"	1.82653390007799	0	1
+100	39	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	5.60627125488906	0	1
+250	82	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	7.87601287784704	0	1
+500	144	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	2.98459569258899	0	1
+1000	251	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	0.846858352754909	2.73720775078322e-08	1
+2000	437	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	2.40334410683149	0	1
+5000	910	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	2.54432389554638	0	1
+100	39	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	0.0579874692603313	0.50705779026215	0.036
+250	82	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	0.0581889341598937	0.512393528574774	0.048
+500	144	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	0.0595552458095096	0.49908943016656	0.052
+1000	251	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	0.057633020209702	0.513282740877464	0.032
+2000	437	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	7.84162896032273	0	1
+5000	910	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Cramer-von Mises"	13.1449211594343	0	1
+100	10	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.175283823692206	0.0660597513806368	0.716
+250	15	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.0930714116716125	0.282257803899485	0.204
+500	22	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.0657041807085016	0.447152006783968	0.06
+1000	31	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.0624930583086655	0.469190286957152	0.048
+2000	44	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.0717334801839053	0.411095718390293	0.104
+5000	70	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.0707434222112753	0.423078710921523	0.1
+100	10	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.100712163990114	0.225043144391633	0.24
+250	15	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.16486466635626	0.0893804457519315	0.636
+500	22	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.192585566844552	0.0605339012705467	0.764
+1000	31	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.138245129121591	0.125838051819345	0.52
+2000	44	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.094192302378097	0.287254365344285	0.26
+5000	70	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Cramer-von Mises"	0.10125816509007	0.243516097363651	0.284
+100	10	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.044762756784085	0.316015720589083	0.036
+250	15	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.035104184199845	0.584490866930862	0.008
+500	22	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0306779600856853	0.714200582700039	0
+1000	31	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0296895081051497	0.745629547692682	0
+2000	44	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0316159023810978	0.69109595996824	0
+5000	70	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0324132206128292	0.664098790467714	0
+100	10	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0320371526734857	0.677316069827298	0
+250	15	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0439397291394004	0.338682892458424	0.04
+500	22	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0488056018556676	0.233690098592281	0.084
+1000	31	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0441231417672261	0.331045889363535	0.04
+2000	44	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0382116681264561	0.492984335738872	0.008
+5000	70	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0393167630481217	0.455527272517953	0.012
+100	21	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.064055533428124	0.0489280573469478	0.664
+250	39	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0359833776442288	0.556144668121858	0
+500	62	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0891970775387814	0.00207066182937688	1
+1000	99	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0959382076052873	0.000801411555967623	1
+2000	158	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0848964308162778	0.00331735315540001	1
+5000	292	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0600047963728936	0.0797551573969046	0.436
+100	21	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.120942977846879	7.13401927152949e-06	1
+250	39	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.141360447595181	1.06665515383903e-07	1
+500	62	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0689959746379098	0.0262488967322121	0.872
+1000	99	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.104520979214269	0.000136877493649872	1
+2000	158	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0540789346381188	0.125936605758671	0.132
+5000	292	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.110720857501366	4.14691127846965e-05	1
+100	39	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.193348974135642	1.38031744446995e-14	1
+250	82	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.243097721234733	2.56827026012303e-22	1
+500	144	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.171790864448187	1.05263073251971e-10	1
+1000	251	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0775881540924697	0.00783601203113629	0.996
+2000	437	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.138571161123201	7.60296214517816e-08	1
+5000	910	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.160830434813068	7.52474341797907e-10	1
+100	39	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0278257824531648	0.801172276416679	0
+250	82	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0278543748263555	0.794542866138939	0
+500	144	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0279015567129812	0.797063057247952	0
+1000	251	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.0281206985192873	0.792175246681702	0
+2000	437	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.236641420072713	2.87871911835036e-22	1
+5000	910	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Kolmogorov-Smirnov"	0.33438112404668	7.46506722854608e-44	1
+100	10	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0420162025033329	0.386742800908515	0.024
+250	15	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0326473426718674	0.658303290339094	0
+500	22	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0289053302702775	0.771421340903286	0
+1000	31	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0287275512746365	0.775011610774237	0
+2000	44	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.029721594219131	0.745411149601191	0
+5000	70	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0298474101232023	0.739661126546464	0
+100	10	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0339629100765669	0.616790564995261	0
+250	15	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0408480936282858	0.421268457406579	0.012
+500	22	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0431504947873707	0.363036591198212	0.056
+1000	31	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0377922872939256	0.504226231867441	0.008
+2000	44	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0328421267153719	0.649186960341256	0.008
+5000	70	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Kolmogorov-Smirnov"	0.0337781981395174	0.621249542721074	0
+100	10	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.991939737386586	0.0518240200901627	0.764
+250	15	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.994511130067481	0.179171089703163	0.332
+500	22	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.995809566740104	0.345888204838704	0.188
+1000	31	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.996405679530311	0.431656619096156	0.068
+2000	44	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.995538911369028	0.30110502462513	0.208
+5000	70	0.5	"Dishonest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.995454768944111	0.284736137766804	0.244
+100	10	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.9947167514092	0.166020091118677	0.312
+250	15	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.990927903877112	0.0352215873596909	0.852
+500	22	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.988315941967339	0.0116686758666521	0.972
+1000	31	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.989867235869941	0.0164322922254419	0.94
+2000	44	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.992186304098785	0.049264219976304	0.744
+5000	70	0.5	"Honest"	"sqrt(k_n), k_n = n^(1/2)"	"k_n"	0.5	"Shapiro-Wilk"	0.992173960784124	0.0512697528625273	0.748
+100	21	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.978614452414617	3.7535470105165e-06	1
+250	39	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.989002619832389	0.00429664102126056	0.988
+500	62	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.965560779940177	2.3743365297677e-08	1
+1000	99	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.951667658329597	1.2482099772761e-10	1
+2000	158	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.958093045910934	7.55139758289415e-10	1
+5000	292	0.666666666666667	"Dishonest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.976761833201554	6.6634389242631e-06	1
+100	21	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.941407315655155	2.74774862038419e-12	1
+250	39	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.927572851257433	5.9068878709357e-14	1
+500	62	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.971569311469234	1.19527267047406e-07	1
+1000	99	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.941356383426249	1.05381662040784e-12	1
+2000	158	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.97025729633057	7.66757734308896e-08	1
+5000	292	0.666666666666667	"Honest"	"sqrt(k_n), k_n = n^(2/3)"	"k_n"	0.5	"Shapiro-Wilk"	0.939897771157329	1.78157817465014e-12	1
+100	39	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.863081893061751	3.24547856180318e-20	1
+250	82	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.812092324075829	1.64910628111828e-23	1
+500	144	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.914675014657487	2.36954530898815e-15	1
+1000	251	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.956303182034149	1.71070580994658e-10	1
+2000	437	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.906347831364261	8.9601481480075e-17	1
+5000	910	0.8	"Dishonest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.89496290369525	1.01912406744496e-17	1
+100	39	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.996732959533668	0.481830719893934	0.044
+250	82	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.996901152247995	0.531355369053286	0.052
+500	144	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.996706227129472	0.494987846845949	0.064
+1000	251	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.996797311482661	0.511613391225101	0.048
+2000	437	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.785599189970944	5.81134091390671e-25	1
+5000	910	0.8	"Honest"	"sqrt(k_n), k_n = n^(4/5)"	"k_n"	0.5	"Shapiro-Wilk"	0.698476106563536	8.28500728326508e-29	1
+100	10	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.993127248600037	0.0884144299557185	0.58
+250	15	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.995162869277979	0.242435445650221	0.248
+500	22	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.996204375495633	0.393275931861328	0.112
+1000	31	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.996725835636925	0.489328089948485	0.052
+2000	44	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.996061091340567	0.382180997145085	0.14
+5000	70	0.5	"Dishonest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.99624600952814	0.408122260521215	0.116
+100	10	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.994641856388097	0.160813128487643	0.344
+250	15	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.993355277583257	0.116047408816463	0.54
+500	22	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.991976469200352	0.0590473292744503	0.748
+1000	31	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.993702251685615	0.117202834942083	0.496
+2000	44	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.995145857699811	0.238153564874003	0.252
+5000	70	0.5	"Honest"	"sqrt(leaf.size)"	"leaf.size"	0.5	"Shapiro-Wilk"	0.995067481600898	0.239881126119987	0.284

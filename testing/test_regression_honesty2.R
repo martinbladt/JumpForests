@@ -18,11 +18,11 @@ if (!exists("run_normality_simulation")) {
 }
 
 if (!exists("B")) {
-    B <- 1000
+    B <- 500
 }
 
 if (!exists("K")) {
-    K <- 1000
+    K <- 250
 }
 
 if (!exists("data_sizes")) {
@@ -170,6 +170,22 @@ if (!exists("normality_min_node_size_powers")) {
     normality_min_node_size_powers <- c(1/2, 2/3, 4/5)
 }
 
+if (!exists("normality_leaf_size_power")) {
+    normality_leaf_size_power <- 1/2
+}
+
+if (!exists("normality_parallel")) {
+    normality_parallel <- TRUE
+}
+
+if (!exists("normality_num_cores")) {
+    normality_num_cores <- max(1, parallel::detectCores() - 1)
+}
+
+if (!exists("normality_seed")) {
+    normality_seed <- 2026
+}
+
 format_scaling_power <- function(power) {
     if (abs(power - 1/2) < 10^(-12)) {
         return("1/2")
@@ -184,14 +200,29 @@ format_scaling_power <- function(power) {
     as.character(power)
 }
 
-make_scaling_rows <- function(leaf_size, min_node_size, min_node_size_power) {
-    data.frame(
-        scaling = c("leaf.size^(1/2)", "k_n^(1/2)"),
-        scaling.base = c("leaf.size", "k_n"),
-        scaling.power = c(1/2, 1/2),
-        scaling.factor = c(sqrt(leaf_size), sqrt(min_node_size)),
+make_scaling_rows <- function(leaf_size, min_node_size, min_node_size_power, include_leaf_size = TRUE) {
+    scaling_rows <- data.frame(
+        scaling = paste0("sqrt(k_n), k_n = n^(", format_scaling_power(min_node_size_power), ")"),
+        scaling.base = "k_n",
+        scaling.power = 1/2,
+        scaling.factor = sqrt(min_node_size),
         min.node.size.power = min_node_size_power
     )
+
+    if (include_leaf_size) {
+        scaling_rows <- rbind(
+            data.frame(
+                scaling = "sqrt(leaf.size)",
+                scaling.base = "leaf.size",
+                scaling.power = 1/2,
+                scaling.factor = sqrt(leaf_size),
+                min.node.size.power = min_node_size_power
+            ),
+            scaling_rows
+        )
+    }
+
+    scaling_rows
 }
 
 make_normality_test_rows <- function() {
@@ -284,7 +315,7 @@ run_normality_tests <- function(values) {
     )
 }
 
-simulate_centered_scaled_tree_predictions <- function(B, n, x, min_node_size, min_node_size_powers) {
+simulate_centered_scaled_tree_predictions <- function(B, n, x, min_node_size, min_node_size_power, include_leaf_size = TRUE) {
     new_data <- data.frame(X1 = x[1], X2 = x[2], X3 = x[3], X4 = x[4])
     true_value <- g(x)
 
@@ -292,14 +323,14 @@ simulate_centered_scaled_tree_predictions <- function(B, n, x, min_node_size, mi
     row <- 1
 
     for (b in 1:B) {
-        cat("Data size", n, "normality simulation", b, "\n")
+        #cat("Data size", n, "normality simulation", b, "\n")
         train_data <- simulate_data(n)
 
         tree <- jftree(Y ~ X1 + X2, data = train_data, min_node_size = min_node_size)
         n_L <- getNodeSize(tree, x)
         prediction <- as.numeric(jftree.predict(tree, new_data = new_data))
         raw_error <- prediction - true_value
-        scaling_rows <- make_scaling_rows(n_L, min_node_size, min_node_size_powers)
+        scaling_rows <- make_scaling_rows(n_L, min_node_size, min_node_size_power, include_leaf_size)
         results[[row]] <- data.frame(
             simulation = b,
             type = "Dishonest",
@@ -315,7 +346,7 @@ simulate_centered_scaled_tree_predictions <- function(B, n, x, min_node_size, mi
         n_L_honest <- getNodeSize(tree_honest, x)
         prediction_honest <- as.numeric(jftree.predict(tree_honest, new_data = new_data))
         raw_error_honest <- prediction_honest - true_value
-        scaling_rows_honest <- make_scaling_rows(n_L_honest, min_node_size, min_node_size_powers)
+        scaling_rows_honest <- make_scaling_rows(n_L_honest, min_node_size, min_node_size_power, include_leaf_size)
         results[[row]] <- data.frame(
             simulation = b,
             type = "Honest",
@@ -334,53 +365,84 @@ simulate_centered_scaled_tree_predictions <- function(B, n, x, min_node_size, mi
     do.call(rbind, results)
 }
 
-run_asymptotic_normality_study <- function(B, K, data_sizes, x, min_node_size_powers) {
-    prediction_results <- list()
+run_asymptotic_normality_task <- function(task, B, x, leaf_size_power) {
+    set.seed(task$seed)
+
+    n <- task$num.obs
+    current_power <- task$min.node.size.power
+    min_node_size <- task$min.node.size
+    include_leaf_size <- abs(current_power - leaf_size_power) < 10^(-12)
+    cat("Normality test batch", task$batch, "on data of size", n, "with minimal node size", min_node_size, "\n")
+
+    current_predictions <- simulate_centered_scaled_tree_predictions(B, n, x, min_node_size, current_power, include_leaf_size)
+    current_predictions$batch <- task$batch
+    current_predictions$num.obs <- n
+    current_predictions$min.node.size <- min_node_size
+    current_predictions$min.node.size.power <- current_power
+
     test_results <- list()
-    prediction_row <- 1
     test_row <- 1
-
-    for (k in 1:K) {
-        for (j in 1:length(data_sizes)) {
-            n <- data_sizes[j]
-            for (current_power in min_node_size_powers) {
-                min_node_size <- floor(n^current_power)
-                cat("Normality test batch", k, "on data of size", n, "with minimal node size", min_node_size, "\n")
-
-                current_predictions <- simulate_centered_scaled_tree_predictions(B, n, x, min_node_size, current_power)
-                current_predictions$batch <- k
-                current_predictions$num.obs <- n
-                current_predictions$min.node.size <- min_node_size
-                current_predictions$min.node.size.power <- current_power
-                prediction_results[[prediction_row]] <- current_predictions
-                prediction_row <- prediction_row + 1
-
-                for (current_type in c("Dishonest", "Honest")) {
-                    for (current_scaling in unique(current_predictions$scaling)) {
-                        current_subset <- current_predictions[current_predictions$type == current_type &
-                                                                  current_predictions$scaling == current_scaling, ]
-                        current_values <- current_subset$centered.scaled
-                        current_tests <- run_normality_tests(current_values)
-                        current_tests$batch <- k
-                        current_tests$num.obs <- n
-                        current_tests$min.node.size <- min_node_size
-                        current_tests$min.node.size.power <- current_power
-                        current_tests$type <- current_type
-                        current_tests$scaling <- current_scaling
-                        current_tests$scaling.base <- current_subset$scaling.base[1]
-                        current_tests$scaling.power <- current_subset$scaling.power[1]
-                        current_tests$B <- B
-                        test_results[[test_row]] <- current_tests
-                        test_row <- test_row + 1
-                    }
-                }
-            }
+    for (current_type in c("Dishonest", "Honest")) {
+        for (current_scaling in unique(current_predictions$scaling)) {
+            current_subset <- current_predictions[current_predictions$type == current_type &
+                                                      current_predictions$scaling == current_scaling, ]
+            current_values <- current_subset$centered.scaled
+            current_tests <- run_normality_tests(current_values)
+            current_tests$batch <- task$batch
+            current_tests$num.obs <- n
+            current_tests$min.node.size <- min_node_size
+            current_tests$min.node.size.power <- current_power
+            current_tests$type <- current_type
+            current_tests$scaling <- current_scaling
+            current_tests$scaling.base <- current_subset$scaling.base[1]
+            current_tests$scaling.power <- current_subset$scaling.power[1]
+            current_tests$B <- B
+            test_results[[test_row]] <- current_tests
+            test_row <- test_row + 1
         }
     }
 
     list(
-        predictions = do.call(rbind, prediction_results),
+        predictions = current_predictions,
         tests = do.call(rbind, test_results)
+    )
+}
+
+run_asymptotic_normality_study <- function(B, K, data_sizes, x, min_node_size_powers, leaf_size_power = 1/2,
+                                           parallel = TRUE, num_cores = 1, seed = 2026) {
+    tasks <- expand.grid(
+        batch = 1:K,
+        num.obs = data_sizes,
+        min.node.size.power = min_node_size_powers,
+        KEEP.OUT.ATTRS = FALSE
+    )
+    tasks$min.node.size <- floor(tasks$num.obs^tasks$min.node.size.power)
+
+    set.seed(seed)
+    tasks$seed <- sample.int(.Machine$integer.max, nrow(tasks))
+
+    use_parallel <- isTRUE(parallel) && num_cores > 1 && nrow(tasks) > 1 && .Platform$OS.type != "windows"
+    if (use_parallel) {
+        num_cores <- min(num_cores, nrow(tasks))
+        cat("Running", nrow(tasks), "normality tasks in parallel using", num_cores, "cores\n")
+        task_results <- parallel::mclapply(
+            X = 1:nrow(tasks),
+            FUN = function(i) run_asymptotic_normality_task(tasks[i, ], B, x, leaf_size_power),
+            mc.cores = num_cores,
+            mc.set.seed = FALSE,
+            mc.preschedule = FALSE
+        )
+    } else {
+        cat("Running", nrow(tasks), "normality tasks serially\n")
+        task_results <- lapply(
+            X = 1:nrow(tasks),
+            FUN = function(i) run_asymptotic_normality_task(tasks[i, ], B, x, leaf_size_power)
+        )
+    }
+
+    list(
+        predictions = do.call(rbind, lapply(task_results, function(result) result$predictions)),
+        tests = do.call(rbind, lapply(task_results, function(result) result$tests))
     )
 }
 
@@ -394,13 +456,23 @@ summarise_normality_tests <- function(df, alpha = 0.05) {
 }
 
 if (isTRUE(run_normality_simulation)) {
-    set.seed(2026)
+    set.seed(normality_seed)
 
     if (!dir.exists("DecisionTreePlots")) {
         dir.create("DecisionTreePlots")
     }
 
-    normality_results <- run_asymptotic_normality_study(B, K, data_sizes, normality_x, normality_min_node_size_powers)
+    normality_results <- run_asymptotic_normality_study(
+        B,
+        K,
+        data_sizes,
+        normality_x,
+        normality_min_node_size_powers,
+        normality_leaf_size_power,
+        normality_parallel,
+        normality_num_cores,
+        normality_seed
+    )
     df_normality_tree_predictions <- normality_results$predictions
     df_normality_tree_tests <- normality_results$tests
     df_normality_tree_tests_summary <- summarise_normality_tests(df_normality_tree_tests, normality_alpha)
@@ -413,11 +485,8 @@ if (isTRUE(run_normality_simulation)) {
     head(df_normality_tree_tests_summary)
 }
 
-# plan for 3/6:
-# - ask codex to augment the code by adding additional scaled and centred values where N_L is replaced by powers of k_n
-# - test the code for small values (e.g. B = 10 and K = 10)
-# - run the code for B = 1000 and K = 1000 (will take several hours, run code during SPS and lunch break)
-
+# important note: K = 10 and B = 500 takes 40 minutes, so K = 250 and B = 500 should take
+# about 17 hours (it actually took 26)
 
 if (file.exists("DecisionTreePlots/df_normality_tree_predictions.txt") &&
     file.exists("DecisionTreePlots/df_normality_tree_tests.txt") &&
@@ -434,3 +503,14 @@ if (file.exists("DecisionTreePlots/df_normality_tree_predictions.txt") &&
     head(df_normality_tree_tests_summary)
     dim(df_normality_tree_tests_summary)
 }
+
+
+dim(df_normality_tree_predictions)
+head(df_normality_tree_predictions)
+
+
+dim(df_normality_tree_tests)
+head(df_normality_tree_tests)
+dim(df_normality_tree_tests_summary)
+head(df_normality_tree_tests_summary)
+
