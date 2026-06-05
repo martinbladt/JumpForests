@@ -14,7 +14,11 @@ if (!exists("run_full_simulation")) {
 }
 
 if (!exists("run_normality_simulation")) {
-    run_normality_simulation <- TRUE
+    run_normality_simulation <- FALSE
+}
+
+if (!exists("run_normality_postprocessing")) {
+    run_normality_postprocessing <- TRUE
 }
 
 if (!exists("B")) {
@@ -98,18 +102,58 @@ run_min_node_size_simulation <- function(B, data_sizes, node_sizes) {
     data.frame(simulation = simulation, num.obs = num_obs, min.node.size = min_node_size, type = type, mse = mse)
 }
 
+null_model_mse <- function() {
+    mean_sin_x2 <- 1 - cos(1)
+    mean_sin2_x2 <- 1/2 - sin(2)/4
+    var_2x1 <- 4/12
+    var_3sin_x2 <- 9 * (mean_sin2_x2 - mean_sin_x2^2)
+
+    var_2x1 + var_3sin_x2 + 1
+}
+
+make_min_node_size_colours <- function(data_sizes) {
+    data_sizes <- sort(unique(data_sizes))
+    dishonest_colours <- colorRampPalette(c("#8DB4E2", "DarkBlue"))(length(data_sizes))
+    honest_colours <- colorRampPalette(c("#78C679", "DarkGreen"))(length(data_sizes))
+
+    c(
+        setNames(dishonest_colours, paste("Dishonest, n =", data_sizes)),
+        setNames(honest_colours, paste("Honest, n =", data_sizes))
+    )
+}
+
 plot_min_node_size_mse <- function(df, node_sizes) {
+    df$curve <- paste(df$type, ", n = ", df$num.obs, sep = "")
+    df$curve <- factor(df$curve, levels = names(make_min_node_size_colours(df$num.obs)))
+
+    df_null_model <- data.frame(mse = null_model_mse(), model = "Null model")
+
     ggplot(data = df) +
-        geom_line(aes(x = min.node.size, y = mse, colour = type, linetype = as.factor(num.obs),
+        geom_hline(data = df_null_model, aes(yintercept = mse, linetype = model),
+                   colour = "black", linewidth = 0.8) +
+        geom_line(aes(x = min.node.size, y = mse, colour = curve,
                       group = interaction(type, num.obs)), linewidth = 1) +
-        geom_point(aes(x = min.node.size, y = mse, colour = type, shape = type,
+        geom_point(aes(x = min.node.size, y = mse, colour = curve, shape = type,
                        group = interaction(type, num.obs)), size = 1.5) +
         scale_x_continuous(breaks = node_sizes, trans = "log2") +
         xlab("Minimal node size") + ylab("Average MSE") + theme_bw() +
-        scale_colour_manual(name = "Type", values = c("Dishonest" = "DarkBlue", "Honest" = "DarkGreen")) +
+        scale_colour_manual(name = "Tree and data size", values = make_min_node_size_colours(df$num.obs)) +
         scale_shape_manual(name = "Type", values = c("Dishonest" = 16, "Honest" = 17)) +
-        scale_linetype_discrete(name = "Size of dataset") +
-        theme(legend.position = "bottom")
+        scale_linetype_manual(name = "", values = c("Null model" = "dashed")) +
+        theme(
+            legend.position = "bottom",
+            legend.box = "vertical",
+            legend.text = element_text(size = 8),
+            legend.title = element_text(size = 9),
+            legend.key.width = grid::unit(1.4, "lines"),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank()
+        ) +
+        guides(
+            linetype = guide_legend(order = 1),
+            colour = guide_legend(order = 2, nrow = 3, byrow = TRUE),
+            shape = "none"
+        )
 }
 
 # this actually perfoms the simulations
@@ -132,6 +176,7 @@ if (isTRUE(run_full_simulation)) {
     write.table(df_min_node_size_errors, file = "DecisionTreePlots/df_min_node_size_tree_errors_avg.txt", sep = "\t", row.names = FALSE)
 
     min_node_size_mse_plot <- plot_min_node_size_mse(df_min_node_size_errors, node_sizes)
+    ggsave("DecisionTreePlots/min_node_size_tree_mse_plot.png", min_node_size_mse_plot, width = 11, height = 6.5, units = "in")
     min_node_size_mse_plot
 }
 
@@ -147,7 +192,9 @@ if (file.exists("DecisionTreePlots/df_min_node_size_tree_errors.txt") &&
     head(df_min_node_size_tree_errors_avg)
     dim(df_min_node_size_tree_errors_avg)
 
-    plot_min_node_size_mse(df_min_node_size_tree_errors_avg, node_sizes)
+    min_node_size_mse_plot <- plot_min_node_size_mse(df_min_node_size_tree_errors_avg, node_sizes)
+    ggsave("DecisionTreePlots/min_node_size_tree_mse_plot.png", min_node_size_mse_plot, width = 11, height = 6.5, units = "in")
+    min_node_size_mse_plot
 }
 
 # Testing asymptotic normality
@@ -488,29 +535,164 @@ if (isTRUE(run_normality_simulation)) {
 # important note: K = 10 and B = 500 takes 40 minutes, so K = 250 and B = 500 should take
 # about 17 hours (it actually took 26)
 
-if (file.exists("DecisionTreePlots/df_normality_tree_predictions.txt") &&
+normality_plot_theme <- function() {
+    theme_bw() +
+        theme(
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            legend.position = "bottom"
+        )
+}
+
+make_normality_file_name <- function(prefix, label, extension = "png") {
+    safe_label <- gsub("[^A-Za-z0-9]+", "_", label)
+    safe_label <- gsub("^_|_$", "", safe_label)
+    file.path("DecisionTreePlots", paste0(prefix, "_", safe_label, ".", extension))
+}
+
+make_p_value_qq_data <- function(df) {
+    df %>%
+        filter(!is.na(p.value)) %>%
+        group_by(test, scaling, num.obs, type) %>%
+        arrange(p.value, .by_group = TRUE) %>%
+        mutate(uniform.quantile = (row_number() - 0.5) / n()) %>%
+        ungroup()
+}
+
+make_p_value_qq_plot <- function(df_qq, current_test) {
+    ggplot(
+        df_qq %>% filter(test == current_test),
+        aes(x = uniform.quantile, y = p.value, colour = type)
+    ) +
+        geom_abline(intercept = 0, slope = 1, colour = "grey35", linewidth = 0.6) +
+        geom_point(alpha = 0.55, size = 0.8) +
+        facet_grid(scaling ~ num.obs) +
+        scale_colour_manual(values = c("Honest" = "DarkGreen", "Dishonest" = "DarkBlue")) +
+        labs(
+            title = paste(current_test, "p-value QQ plot"),
+            x = "Uniform quantiles",
+            y = "Observed p-values",
+            colour = "Tree"
+        ) +
+        normality_plot_theme()
+}
+
+make_rejection_rate_tables <- function(df, alpha = 0.05) {
+    df_rejection_rates <- df %>%
+        mutate(reject = p.value < alpha) %>%
+        group_by(num.obs, min.node.size, min.node.size.power, scaling, scaling.base, scaling.power, test, type) %>%
+        summarise(
+            rejection.rate = mean(reject, na.rm = TRUE),
+            num.batches = sum(!is.na(reject)),
+            .groups = "drop"
+        ) %>%
+        arrange(scaling, num.obs, test, type)
+
+    split(df_rejection_rates, df_rejection_rates$scaling)
+}
+
+make_normality_bias_summary <- function(df) {
+    df %>%
+        group_by(batch, num.obs, min.node.size, min.node.size.power, scaling, scaling.base, scaling.power, type) %>%
+        summarise(batch.bias = mean(centered.scaled, na.rm = TRUE), .groups = "drop") %>%
+        group_by(num.obs, min.node.size, min.node.size.power, scaling, scaling.base, scaling.power, type) %>%
+        summarise(avg.bias = mean(batch.bias, na.rm = TRUE), .groups = "drop") %>%
+        arrange(scaling, num.obs, type)
+}
+
+make_normality_bias_plot <- function(df_bias, current_scaling) {
+    ggplot(
+        df_bias %>% filter(scaling == current_scaling),
+        aes(
+            x = num.obs,
+            y = avg.bias,
+            colour = type,
+            linetype = factor(min.node.size.power),
+            group = interaction(type, min.node.size.power)
+        )
+    ) +
+        geom_hline(yintercept = 0, colour = "grey35", linewidth = 0.5) +
+        geom_line(linewidth = 0.9) +
+        geom_point(size = 2) +
+        scale_x_continuous(trans = "log10", breaks = sort(unique(df_bias$num.obs))) +
+        scale_colour_manual(values = c("Honest" = "DarkGreen", "Dishonest" = "DarkBlue")) +
+        scale_linetype_discrete(
+            labels = function(x) vapply(as.numeric(x), format_scaling_power, character(1))
+        ) +
+        labs(
+            title = paste("Bias for", current_scaling),
+            x = "Size of dataset",
+            y = "Average centered/scaled bias",
+            colour = "Tree",
+            linetype = "Power"
+        ) +
+        normality_plot_theme()
+}
+
+if (isTRUE(run_normality_postprocessing) &&
+    file.exists("DecisionTreePlots/df_normality_tree_predictions.txt") &&
     file.exists("DecisionTreePlots/df_normality_tree_tests.txt") &&
     file.exists("DecisionTreePlots/df_normality_tree_tests_summary.txt")) {
-    # read in data after simulating
     df_normality_tree_predictions <- read.table("DecisionTreePlots/df_normality_tree_predictions.txt", header = TRUE)
     df_normality_tree_tests <- read.table("DecisionTreePlots/df_normality_tree_tests.txt", header = TRUE)
     df_normality_tree_tests_summary <- read.table("DecisionTreePlots/df_normality_tree_tests_summary.txt", header = TRUE)
 
-    head(df_normality_tree_predictions)
-    dim(df_normality_tree_predictions)
-    head(df_normality_tree_tests)
-    dim(df_normality_tree_tests)
-    head(df_normality_tree_tests_summary)
-    dim(df_normality_tree_tests_summary)
+    df_normality_p_value_qq <- make_p_value_qq_data(df_normality_tree_tests)
+    normality_p_value_qq_plots <- lapply(
+        sort(unique(df_normality_p_value_qq$test)),
+        function(current_test) make_p_value_qq_plot(df_normality_p_value_qq, current_test)
+    )
+    names(normality_p_value_qq_plots) <- sort(unique(df_normality_p_value_qq$test))
+
+    for (current_test in names(normality_p_value_qq_plots)) {
+        ggsave(
+            filename = make_normality_file_name("normality_p_value_qq", current_test),
+            plot = normality_p_value_qq_plots[[current_test]],
+            width = 13,
+            height = 9,
+            units = "in"
+        )
+    }
+
+    normality_rejection_rate_tables <- make_rejection_rate_tables(df_normality_tree_tests, normality_alpha)
+    for (current_scaling in names(normality_rejection_rate_tables)) {
+        write.table(
+            normality_rejection_rate_tables[[current_scaling]],
+            file = make_normality_file_name("normality_rejection_rates", current_scaling, "txt"),
+            sep = "\t",
+            row.names = FALSE
+        )
+    }
+
+    normality_bias_summary <- make_normality_bias_summary(df_normality_tree_predictions)
+    normality_bias_plots <- lapply(
+        sort(unique(normality_bias_summary$scaling)),
+        function(current_scaling) make_normality_bias_plot(normality_bias_summary, current_scaling)
+    )
+    names(normality_bias_plots) <- sort(unique(normality_bias_summary$scaling))
+
+    for (current_scaling in names(normality_bias_plots)) {
+        ggsave(
+            filename = make_normality_file_name("normality_bias", current_scaling),
+            plot = normality_bias_plots[[current_scaling]],
+            width = 8,
+            height = 5.5,
+            units = "in"
+        )
+    }
 }
 
+# some comments on the QQ plots:
+# Regarding the QQ plots, there is a very natural explanation for the behaviour in the two middle rows: For honest trees, it is almost
+# impossible to split at all for low sample sizes with k_n equal to a high power of n, so here the behaviour is as a sample mean
+# (which is of course asymptotically normal). But after that, when splits are possible, normality breaks down completely.
 
-dim(df_normality_tree_predictions)
-head(df_normality_tree_predictions)
+# Maybe only include the QQ-plots for sqrt(k_n) when k_n = sqrt(n) and sqrt(leaf size), since these are the most comparable ones. These
+# are made separately. But all bias plots are relevant. We should discuss coloring etc. I included legends and titles for now only to
+# make it easier for myself. When we have decided what should be included, I will remove them.
 
-
-dim(df_normality_tree_tests)
-head(df_normality_tree_tests)
-dim(df_normality_tree_tests_summary)
-head(df_normality_tree_tests_summary)
-
+# read in tables with rejection rates
+normality_rejection_rates_sqrt_k_n_k_n_n_1_2 <- read.table("DecisionTreePlots/normality_rejection_rates_sqrt_k_n_k_n_n_1_2.txt", header = TRUE)
+normality_rejection_rates_sqrt_k_n_k_n_n_2_3 <- read.table("DecisionTreePlots/normality_rejection_rates_sqrt_k_n_k_n_n_2_3.txt", header = TRUE)
+normality_rejection_rates_sqrt_k_n_k_n_n_4_5 <- read.table("DecisionTreePlots/normality_rejection_rates_sqrt_k_n_k_n_n_4_5.txt", header = TRUE)
+normality_rejection_rates_sqrt_leaf_size <- read.table("DecisionTreePlots/normality_rejection_rates_sqrt_leaf_size.txt", header = TRUE)
