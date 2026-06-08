@@ -13,6 +13,10 @@ if (!exists("run_full_simulation")) {
     run_full_simulation <- FALSE
 }
 
+if (!exists("run_test_mse_simulation")) {
+    run_test_mse_simulation <- FALSE
+}
+
 if (!exists("run_normality_simulation")) {
     run_normality_simulation <- FALSE
 }
@@ -90,6 +94,58 @@ run_min_node_size_simulation <- function(B, data_sizes, node_sizes) {
                 min_node_size[row] <- node_sizes[i]
                 type[row] <- "Honest"
                 mse[row] <- tree_honest$mse.error
+                row <- row + 1
+
+                rm(tree, tree_honest)
+            }
+
+            gc()
+        }
+    }
+
+    data.frame(simulation = simulation, num.obs = num_obs, min.node.size = min_node_size, type = type, mse = mse)
+}
+
+run_min_node_size_test_simulation <- function(B, data_sizes, node_sizes) {
+    num_data_sizes <- length(data_sizes)
+    num_node_sizes <- length(node_sizes)
+    num_rows <- B * num_data_sizes * num_node_sizes * 2
+
+    simulation <- rep(0, num_rows)
+    num_obs <- rep(0, num_rows)
+    min_node_size <- rep(0, num_rows)
+    type <- rep("", num_rows)
+    mse <- rep(0, num_rows)
+    row <- 1
+
+    for (j in 1:num_data_sizes) {
+        n <- data_sizes[j]
+
+        for (b in 1:B) {
+            cat("Test MSE data size", n, "simulation", b, "\n")
+            train_data <- simulate_data(n)
+            test_data <- simulate_data(n)
+            test_x <- test_data[, c("X1", "X2", "X3", "X4")]
+
+            for (i in 1:num_node_sizes) {
+                # dishonest tree
+                tree <- jftree(Y ~ X1 + X2, data = train_data, min_node_size = node_sizes[i])
+                prediction <- as.numeric(jftree.predict(tree, new_data = test_x))
+                simulation[row] <- b
+                num_obs[row] <- n
+                min_node_size[row] <- node_sizes[i]
+                type[row] <- "Dishonest"
+                mse[row] <- mean((test_data$Y - prediction)^2)
+                row <- row + 1
+
+                # honest tree
+                tree_honest <- jftree(Y ~ X1 + X2, data = train_data, honest = TRUE, min_node_size = node_sizes[i])
+                prediction_honest <- as.numeric(jftree.predict(tree_honest, new_data = test_x))
+                simulation[row] <- b
+                num_obs[row] <- n
+                min_node_size[row] <- node_sizes[i]
+                type[row] <- "Honest"
+                mse[row] <- mean((test_data$Y - prediction_honest)^2)
                 row <- row + 1
 
                 rm(tree, tree_honest)
@@ -180,6 +236,32 @@ if (isTRUE(run_full_simulation)) {
     min_node_size_mse_plot
 }
 
+if (isTRUE(run_test_mse_simulation)) {
+    set.seed(2026)
+    df_min_node_size_tree_test_errors <- run_min_node_size_test_simulation(B, data_sizes, node_sizes)
+
+    if (!dir.exists("DecisionTreePlots")) {
+        dir.create("DecisionTreePlots")
+    }
+
+    write.table(df_min_node_size_tree_test_errors,
+                file = "DecisionTreePlots/df_min_node_size_tree_test_errors.txt", sep = "\t", row.names = FALSE)
+
+    df_min_node_size_test_errors <- aggregate(
+        mse ~ num.obs + min.node.size + type,
+        data = df_min_node_size_tree_test_errors,
+        FUN = mean
+    )
+
+    write.table(df_min_node_size_test_errors,
+                file = "DecisionTreePlots/df_min_node_size_tree_test_errors_avg.txt", sep = "\t", row.names = FALSE)
+
+    min_node_size_test_mse_plot <- plot_min_node_size_mse(df_min_node_size_test_errors, node_sizes)
+    ggsave("DecisionTreePlots/min_node_size_tree_test_mse_plot.png", min_node_size_test_mse_plot,
+           width = 11, height = 6.5, units = "in")
+    min_node_size_test_mse_plot
+}
+
 # do the below to plot
 if (file.exists("DecisionTreePlots/df_min_node_size_tree_errors.txt") &&
     file.exists("DecisionTreePlots/df_min_node_size_tree_errors_avg.txt")) {
@@ -195,6 +277,22 @@ if (file.exists("DecisionTreePlots/df_min_node_size_tree_errors.txt") &&
     min_node_size_mse_plot <- plot_min_node_size_mse(df_min_node_size_tree_errors_avg, node_sizes)
     ggsave("DecisionTreePlots/min_node_size_tree_mse_plot.png", min_node_size_mse_plot, width = 11, height = 6.5, units = "in")
     min_node_size_mse_plot
+}
+
+if (file.exists("DecisionTreePlots/df_min_node_size_tree_test_errors.txt") &&
+    file.exists("DecisionTreePlots/df_min_node_size_tree_test_errors_avg.txt")) {
+    df_min_node_size_tree_test_errors <- read.table("DecisionTreePlots/df_min_node_size_tree_test_errors.txt", header = TRUE)
+    head(df_min_node_size_tree_test_errors)
+    dim(df_min_node_size_tree_test_errors)
+
+    df_min_node_size_tree_test_errors_avg <- read.table("DecisionTreePlots/df_min_node_size_tree_test_errors_avg.txt", header = TRUE)
+    head(df_min_node_size_tree_test_errors_avg)
+    dim(df_min_node_size_tree_test_errors_avg)
+
+    min_node_size_test_mse_plot <- plot_min_node_size_mse(df_min_node_size_tree_test_errors_avg, node_sizes)
+    ggsave("DecisionTreePlots/min_node_size_tree_test_mse_plot.png", min_node_size_test_mse_plot,
+           width = 11, height = 6.5, units = "in")
+    min_node_size_test_mse_plot
 }
 
 # Testing asymptotic normality
