@@ -197,19 +197,19 @@ plot_min_node_size_mse <- function(df, node_sizes) {
         scale_shape_manual(name = "Type", values = c("Dishonest" = 16, "Honest" = 17)) +
         scale_linetype_manual(name = "", values = c("Null model" = "dashed")) +
         theme(
-            legend.position = "bottom",
-            legend.box = "vertical",
-            legend.text = element_text(size = 8),
-            legend.title = element_text(size = 9),
-            legend.key.width = grid::unit(1.4, "lines"),
+            legend.position = "none",
             panel.grid.major = element_blank(),
             panel.grid.minor = element_blank()
-        ) +
-        guides(
-            linetype = guide_legend(order = 1),
-            colour = guide_legend(order = 2, nrow = 3, byrow = TRUE),
-            shape = "none"
         )
+}
+
+plot_min_node_size_mse_side_by_side <- function(df_train, df_test, node_sizes) {
+    train_plot <- plot_min_node_size_mse(df_train, node_sizes) +
+        theme(aspect.ratio = 1)
+    test_plot <- plot_min_node_size_mse(df_test, node_sizes) +
+        theme(aspect.ratio = 1)
+
+    gridExtra::arrangeGrob(train_plot, test_plot, ncol = 2)
 }
 
 # this actually perfoms the simulations
@@ -293,6 +293,21 @@ if (file.exists("DecisionTreePlots/df_min_node_size_tree_test_errors.txt") &&
     ggsave("DecisionTreePlots/min_node_size_tree_test_mse_plot.png", min_node_size_test_mse_plot,
            width = 11, height = 6.5, units = "in")
     min_node_size_test_mse_plot
+}
+
+if (file.exists("DecisionTreePlots/df_min_node_size_tree_errors_avg.txt") &&
+    file.exists("DecisionTreePlots/df_min_node_size_tree_test_errors_avg.txt")) {
+    df_min_node_size_tree_errors_avg <- read.table("DecisionTreePlots/df_min_node_size_tree_errors_avg.txt", header = TRUE)
+    df_min_node_size_tree_test_errors_avg <- read.table("DecisionTreePlots/df_min_node_size_tree_test_errors_avg.txt", header = TRUE)
+
+    min_node_size_mse_side_by_side_plot <- plot_min_node_size_mse_side_by_side(
+        df_min_node_size_tree_errors_avg,
+        df_min_node_size_tree_test_errors_avg,
+        node_sizes
+    )
+    ggsave("DecisionTreePlots/min_node_size_tree_mse_side_by_side_plot.png",
+           min_node_size_mse_side_by_side_plot, width = 12, height = 6, units = "in")
+    min_node_size_mse_side_by_side_plot
 }
 
 # Testing asymptotic normality
@@ -638,7 +653,9 @@ normality_plot_theme <- function() {
         theme(
             panel.grid.major = element_blank(),
             panel.grid.minor = element_blank(),
-            legend.position = "bottom"
+            legend.position = "none",
+            plot.title = element_blank(),
+            plot.subtitle = element_blank()
         )
 }
 
@@ -667,7 +684,6 @@ make_p_value_qq_plot <- function(df_qq, current_test) {
         facet_grid(scaling ~ num.obs) +
         scale_colour_manual(values = c("Honest" = "DarkGreen", "Dishonest" = "DarkBlue")) +
         labs(
-            title = paste(current_test, "p-value QQ plot"),
             x = "Uniform quantiles",
             y = "Observed p-values",
             colour = "Tree"
@@ -708,7 +724,7 @@ make_normality_bias_plot <- function(df_bias, current_scaling) {
             linetype = factor(min.node.size.power),
             group = interaction(type, min.node.size.power)
         )
-    ) +
+        ) +
         geom_hline(yintercept = 0, colour = "grey35", linewidth = 0.5) +
         geom_line(linewidth = 0.9) +
         geom_point(size = 2) +
@@ -718,7 +734,6 @@ make_normality_bias_plot <- function(df_bias, current_scaling) {
             labels = function(x) vapply(as.numeric(x), format_scaling_power, character(1))
         ) +
         labs(
-            title = paste("Bias for", current_scaling),
             x = "Size of dataset",
             y = "Average centered/scaled bias",
             colour = "Tree",
