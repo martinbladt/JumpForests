@@ -212,6 +212,20 @@ plot_min_node_size_mse_side_by_side <- function(df_train, df_test, node_sizes) {
     gridExtra::arrangeGrob(train_plot, test_plot, ncol = 2)
 }
 
+plot_min_node_size_mse_side_by_side_common_y <- function(df_train, df_test, node_sizes) {
+    y_max <- max(c(df_train$mse, df_test$mse, null_model_mse()), na.rm = TRUE)
+    y_limits <- c(0, y_max * 1.02)
+
+    train_plot <- plot_min_node_size_mse(df_train, node_sizes) +
+        coord_cartesian(ylim = y_limits) +
+        theme(aspect.ratio = 1)
+    test_plot <- plot_min_node_size_mse(df_test, node_sizes) +
+        coord_cartesian(ylim = y_limits) +
+        theme(aspect.ratio = 1)
+
+    gridExtra::arrangeGrob(train_plot, test_plot, ncol = 2)
+}
+
 # this actually perfoms the simulations
 if (isTRUE(run_full_simulation)) {
     set.seed(2026)
@@ -308,6 +322,15 @@ if (file.exists("DecisionTreePlots/df_min_node_size_tree_errors_avg.txt") &&
     ggsave("DecisionTreePlots/min_node_size_tree_mse_side_by_side_plot.png",
            min_node_size_mse_side_by_side_plot, width = 12, height = 6, units = "in")
     min_node_size_mse_side_by_side_plot
+
+    min_node_size_mse_side_by_side_common_y_plot <- plot_min_node_size_mse_side_by_side_common_y(
+        df_min_node_size_tree_errors_avg,
+        df_min_node_size_tree_test_errors_avg,
+        node_sizes
+    )
+    ggsave("DecisionTreePlots/min_node_size_tree_mse_side_by_side_common_y_plot.png",
+           min_node_size_mse_side_by_side_common_y_plot, width = 12, height = 6, units = "in")
+    min_node_size_mse_side_by_side_common_y_plot
 }
 
 # Testing asymptotic normality
@@ -691,6 +714,24 @@ make_p_value_qq_plot <- function(df_qq, current_test) {
         normality_plot_theme()
 }
 
+make_p_value_qq_top_bottom_data <- function(df_qq) {
+    scaling_levels <- sort(unique(as.character(df_qq$scaling)))
+    top_bottom_scalings <- c(scaling_levels[1], scaling_levels[length(scaling_levels)])
+
+    df_qq %>%
+        filter(scaling %in% top_bottom_scalings) %>%
+        mutate(scaling = factor(scaling, levels = top_bottom_scalings))
+}
+
+make_p_value_qq_top_bottom_plot <- function(df_qq, current_test) {
+    make_p_value_qq_plot(df_qq, current_test) +
+        theme(
+            strip.background.y = element_blank(),
+            strip.text.y = element_blank(),
+            strip.text.y.right = element_blank()
+        )
+}
+
 make_rejection_rate_tables <- function(df, alpha = 0.05) {
     df_rejection_rates <- df %>%
         mutate(reject = p.value < alpha) %>%
@@ -742,6 +783,43 @@ make_normality_bias_plot <- function(df_bias, current_scaling) {
         normality_plot_theme()
 }
 
+make_normality_bias_combined_plot <- function(df_bias) {
+    scaling_levels <- c(
+        "sqrt(leaf.size)",
+        "sqrt(k_n), k_n = n^(1/2)",
+        "sqrt(k_n), k_n = n^(2/3)",
+        "sqrt(k_n), k_n = n^(4/5)"
+    )
+    scaling_levels <- scaling_levels[scaling_levels %in% unique(df_bias$scaling)]
+    y_limits <- range(c(0, df_bias$avg.bias), na.rm = TRUE)
+    y_padding <- 0.02 * diff(y_limits)
+    if (y_padding == 0) {
+        y_padding <- 0.1
+    }
+
+    df_bias %>%
+        mutate(scaling = factor(scaling, levels = scaling_levels)) %>%
+        ggplot(aes(x = num.obs, y = avg.bias, colour = type, group = type)) +
+        geom_hline(yintercept = 0, colour = "grey35", linewidth = 0.5) +
+        geom_line(linewidth = 0.9) +
+        geom_point(size = 2) +
+        facet_wrap(~ scaling, ncol = 2) +
+        coord_cartesian(ylim = c(y_limits[1] - y_padding, y_limits[2] + y_padding)) +
+        scale_x_continuous(trans = "log10", breaks = sort(unique(df_bias$num.obs))) +
+        scale_colour_manual(values = c("Honest" = "DarkGreen", "Dishonest" = "DarkBlue")) +
+        labs(
+            x = "Size of dataset",
+            y = "Average centered/scaled bias",
+            colour = "Tree"
+        ) +
+        normality_plot_theme() +
+        theme(
+            aspect.ratio = 1,
+            strip.background = element_blank(),
+            strip.text = element_blank()
+        )
+}
+
 if (isTRUE(run_normality_postprocessing) &&
     file.exists("DecisionTreePlots/df_normality_tree_predictions.txt") &&
     file.exists("DecisionTreePlots/df_normality_tree_tests.txt") &&
@@ -763,6 +841,23 @@ if (isTRUE(run_normality_postprocessing) &&
             plot = normality_p_value_qq_plots[[current_test]],
             width = 13,
             height = 9,
+            units = "in"
+        )
+    }
+
+    df_normality_p_value_qq_top_bottom <- make_p_value_qq_top_bottom_data(df_normality_p_value_qq)
+    normality_p_value_qq_top_bottom_plots <- lapply(
+        sort(unique(df_normality_p_value_qq_top_bottom$test)),
+        function(current_test) make_p_value_qq_top_bottom_plot(df_normality_p_value_qq_top_bottom, current_test)
+    )
+    names(normality_p_value_qq_top_bottom_plots) <- sort(unique(df_normality_p_value_qq_top_bottom$test))
+
+    for (current_test in names(normality_p_value_qq_top_bottom_plots)) {
+        ggsave(
+            filename = make_normality_file_name("normality_p_value_qq_top_bottom", current_test),
+            plot = normality_p_value_qq_top_bottom_plots[[current_test]],
+            width = 13,
+            height = 5,
             units = "in"
         )
     }
@@ -793,6 +888,15 @@ if (isTRUE(run_normality_postprocessing) &&
             units = "in"
         )
     }
+
+    normality_bias_combined_plot <- make_normality_bias_combined_plot(normality_bias_summary)
+    ggsave(
+        filename = "DecisionTreePlots/normality_bias_sqrt_combined_common_y_plot.png",
+        plot = normality_bias_combined_plot,
+        width = 10,
+        height = 10,
+        units = "in"
+    )
 }
 
 # some comments on the QQ plots:
