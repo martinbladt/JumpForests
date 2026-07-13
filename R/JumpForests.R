@@ -279,7 +279,7 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL) {
     max_response_length <- max(sapply(jump_data, function(e) length(e$states)))
     num_states <- length(tree_list$init[[1]])
 
-    return(JFCppTreeErrorMM(tree_list, max_response_length, num_states, jump_data, processed_data$data, feature_indices,
+    return(JFCppTreeErrorMultistate(tree_list, max_response_length, num_states, jump_data, processed_data$data, feature_indices,
                       processed_data$categorical, processed_data$unique_values))
   }
 
@@ -723,6 +723,8 @@ print_tree <- function(tree_list, full = FALSE) {
     if (length(tree_list$unique.event.times) <= 20) {
       cat("Unique event times:", tree_list$unique.event.times, "\n")
     }
+    cat("Training error (IBS):", tree_list$ibs, "\n")
+    cat("Training error (normalised IBS):", tree_list$ibs.normalised, "\n")
   }
 
   # print hyperparameters

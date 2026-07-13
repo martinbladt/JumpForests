@@ -3,16 +3,6 @@
 
 #include "Tree.h"
 
-// create struct to hold all necessary info for each observation when splitting
-/*
-struct ObsInfo {
-    size_t original_index;
-    double feature_value;
-    double time;
-    size_t indicator;
-};
-*/
-
 class SurvivalTree : public Tree {
 public:
   SurvivalTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids,
@@ -63,12 +53,9 @@ public:
 
 private:
   // quantities of interest to survival trees
-  //const vector<double> unique_event_times;      // vector of ordered unique event times for all data
   shared_ptr<vector<double>> unique_event_times;
   size_t num_unique_event_times;                  // number of unique event times
-  //vector<size_t> response_event_time_ids;       // the indices of unique_event_times corresponding to the response times
   shared_ptr<vector<size_t>> response_event_time_ids;
-  //const vector<size_t> true_event_time_ids;     // the indices of unique_event_times for uncensored times
   shared_ptr<vector<size_t>> true_event_time_ids;
   shared_ptr<vector<double>> censoring_times;
   size_t num_censoring_times;
@@ -76,19 +63,10 @@ private:
   vector<vector<double>> chf;               // the cumulative hazard at the unique_event_times
   vector<vector<double>> KM_censoring;      // the Kaplan-Meier estimate at the unique_event_times for the censoring distribution
   vector<vector<double>> KM_censoring_full; // the Kaplan-Meier estimate at the censoring_times for the censoring distribution
-  //const vector<size_t> subset_indices;    // indices for the data (bootstrap) (unnecessary!)
 
   // temporary quantities used in growing survival trees
   vector<size_t> num_deaths;                // the number of deaths at each event time in current node
   vector<size_t> num_at_risk;               // the number at risk at each event time in a parent (current node)
-  /*
-  unordered_map<size_t, vector<size_t>> cache_num_deaths;   
-  unordered_map<size_t, vector<size_t>> cache_num_at_risk;  
-  vector<size_t> num_deaths_left;                    // the number of deaths at each event time in left daughter
-  vector<size_t> num_at_risk_left;                   // the number at risk at each event time in left daughter
-  vector<size_t> num_deaths_right;                   // ditto for right daughter
-  vector<size_t> num_at_risk_right;
-  */
   
 
   // growing survival trees
@@ -97,19 +75,9 @@ private:
   bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
   void computeChf(size_t node_index);                             // computes the cumulative hazard in a terminal node
   void computeCensoringKM(size_t node_index);                     // computes the KM estimator for the censoring distribution in a terminal node
-  //void updateSurvivalStats(vector<size_t>& deaths, vector<size_t>& at_risk, const ObsInfo& obs, int sign);
   void computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_deaths_right, size_t nsplits_final);
   void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold);
-  /*
-  void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold,
-                           vector<size_t>& best_left_indices, vector<size_t>& best_right_indices, vector<size_t>& best_num_deaths_left, 
-                           vector<size_t>& best_num_at_risk_left, vector<size_t>& best_num_deaths_right, vector<size_t>& best_num_at_risk_right);  // computes the best split for a chosen continuous feature
-  void bestSplitContinuous(size_t node_index, size_t feature,
-                           double& best_split_val, size_t& best_feature, 
-                           vector<double>& best_threshold, vector<size_t>& best_left_indices, 
-                           vector<size_t>& best_right_indices); // computes the best split for a chosen continuous feature
-  */
   void bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
                            vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices); // computes the best split for a chosen categorical feature
 

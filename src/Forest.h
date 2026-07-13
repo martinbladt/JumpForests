@@ -10,8 +10,6 @@ inline void omp_set_num_threads(int) {}
 inline int omp_get_thread_num() { return 0; }
 #endif
 #include <thread>
-//#include <future>
-//#include <mutex>
 
 class Forest {
 public:
@@ -20,9 +18,6 @@ public:
                   unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, unsigned int seed, unsigned int nworkers);
 
   virtual ~Forest() = default;
-
-  // maybe this is not even necessary for forests, since prediction is very specific to the type
-  //ValueType virtual predict(vector<double> x) = 0;
 
   // functions to get forest info
   const double getAvgNumberOfTerminalNodes() const {

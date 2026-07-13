@@ -34,16 +34,8 @@ public:
     return save_predictions;
   }
   // for computing predictions after the forest is grown
-  // first vector is a flattened 2D array with in-bag predictions, the other with oob predictions
   vector<vector<double>> computePredictions(bool compute_initial, bool compute_censoring);
-  //pair<vector<double>, vector<double>> computePredictions();
-  // for computing initial distributions after the forest is grown, again flattened vectors
-  //pair<vector<double>, vector<double>> computePredictedInitialDistributions();
   vector<vector<double>> computePredictions(const Data& new_data, bool compute_initial, bool compute_censoring);
-  // computing predictions on a new dataset (output is a flattened array)
-  //vector<double> computePredictions(const Data& new_data);
-  // computes the initial distribution on a new dataset (output is a flattened array)
-  //vector<double> computePredictedInitialDistributions(const Data& new_data);
 private:
   // quantities of interest specific to multi-state forests
   bool save_predictions;

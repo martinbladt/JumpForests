@@ -19,17 +19,6 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, si
     size_t n = unique_event_times.size();
     if (target_size >= n) return unique_event_times;
 
-    /*
-    if (target_size == 0 && proportion_to_remove > 0 && proportion_to_remove <= 1) {
-        target_size = static_cast<size_t>(n * (1.0 - proportion_to_remove));
-    } else {
-        cout << "Error, non-valid choice of target size or proportion to remove. Leaving vector unchanged." << endl;
-        return unique_event_times;
-    }
-    //size_t target_size = static_cast<size_t>(n * (1.0 - proportion_to_remove));
-    //if (target_size < 1) target_size = 1;
-    */
-
     vector<Node> nodes(n);
     priority_queue<Gap, std::vector<Gap>, std::greater<Gap>> pq;
 
@@ -63,7 +52,6 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, si
         // update left node to the average (old)
         left.time = (left.time + right.time) / 2.0;
         // update left node to the largest time (for testing so far)
-        //left.time = right.time;
         left.version++;
 
         // remove right node from the chain
@@ -202,19 +190,6 @@ vector<size_t> sum_vectors(const vector<size_t>& vec, size_t num_vectors) {
     }
     return result;
 }
-
-/*
-vector<size_t> sum_vectors(const vector<size_t>& vec, size_t num_vectors) {
-    size_t stride_length = vec.size() / num_vectors;    // vec.size() = num_vectors * stride_length
-    vector<size_t> result(stride_length);
-    for (size_t i = 0; i < num_vectors; ++i) {
-        for (size_t j = 0; j < stride_length; ++j) {
-            result[j] += vec[i * stride_length + j];
-        }
-    }
-    return result;
-}
-*/
 
 // computes the vector of column sums of a flattened d x d matrix (by row)
 vector<int> columnSums(const vector<int>& matrix, size_t d) {
@@ -470,29 +445,6 @@ vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_no
     }
     return result;
 }
-
-// old version (not working)
-/*
-vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_nodes) {
-    vector<vector<size_t>> result(num_nodes);
-    vector<size_t> counts(num_nodes, 0);
-    for (size_t id : leaf_ids) {
-        counts[id]++;
-    }
-    // to use memory efficiently and reduce the number of resizings
-    for (size_t i = 0; i < num_nodes; ++i) {
-        if (counts[i] > 0) {
-            result[i].reserve(counts[i]);
-        }
-    }
-
-    // finally, determine the vectors
-    for (size_t i = 0; i < leaf_ids.size(); ++i) {
-        result[leaf_ids[i]].push_back(i);
-    }
-    return result;
-}
-*/
 
 // for selecting specific columns from a NumericMatrix (used to filter)
 NumericMatrix selectColumns(const NumericMatrix& matrix, const vector<size_t>& cols) {

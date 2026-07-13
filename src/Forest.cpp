@@ -77,10 +77,6 @@ vector<vector<double>> Forest::shuffledFeatureValues(const vector<vector<size_t>
 
         // shuffle OOB values
         shuffle(oob_values.begin(), oob_values.end(), local_rng);
-        
-        // shuffle indices
-        //vector<size_t> tree_oob_indices = oob_indices_non_bool[i];
-        //shuffle(tree_oob_indices.begin(), tree_oob_indices.end(), local_rng);
 
         // now select the permuted feature values
         for (size_t j = 0; j < oob_indices_non_bool[i].size(); ++j) {

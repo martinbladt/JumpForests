@@ -66,7 +66,7 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
                                          vector<double>& best_threshold, double& best_sum_left) {
   const vector<size_t>& current_node_obs = node_obs[node_index];
   size_t num_obs_parent = current_node_obs.size();
-  double parent_sum = computeSum(current_node_obs); // sum_node[node_index];
+  double parent_sum = computeSum(current_node_obs);
   double parent_absolute_deviation = 0;
   if (splitrule == "mae") {
     parent_absolute_deviation = computeAbsoluteDeviation(current_node_obs);

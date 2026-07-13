@@ -103,44 +103,11 @@ void SurvivalForest::grow() {
         tree->setRNG(local_rng);
         tree->grow();
         trees[i] = std::move(tree);
-
-        // for debugging
-        //#pragma omp critical
-        //Rcout << "Finished growing tree " << i 
-        //          << " on thread " << omp_get_thread_num() << endl;
     }
 
     // compute all quantities of interest from the vector of trees
     computeForestQuantities();
 }
-
-/*
-// old grow function that does not use multithreading
-void SurvivalForest::grow() {
-    int n = (*data).getNumberOfObs();
-    for (size_t i = 0; i < ntrees; ++i) {
-        // for now, use classical (Efron) bootstrap, later subsampling without replacement should be implemented
-        // optimisation idea: no need to allocate {0, 1, ..., n - 1} many times when n is fixed (write a separate bootstrap function)
-        vector<size_t> bootstrap_indices = sampleIndices(n, n, true, random_number_generator);
-        vector<bool> oob_indices_tree = computeOOBIndices(bootstrap_indices, n);
-        oob_indices.push_back(oob_indices_tree);
-
-        // grow each survival tree
-        Rcout << "Growing tree " << i << endl;
-        unique_ptr<SurvivalTree> tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, bootstrap_indices);
-        uniform_int_distribution<size_t> dist(0, numeric_limits<size_t>::max());
-        tree->initialise(data, mtry, min_node_size, nsplits, dist(random_number_generator));
-        tree->setRNG(random_number_generator);
-        tree->grow();
-        trees.push_back(std::move(tree));
-    }
-
-    // compute all quantities of interest from the vector of trees
-    computeForestQuantities();
-}
-*/
-
-
 
 // functions for predicting with survival forests
 //--------------------------------------------------------------------------------------
@@ -283,27 +250,17 @@ void SurvivalForest::computePredictionsCensoring() {
         // fetch tree and group all the observations by leaves
         SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
         vector<size_t> leafIDs = tree->getPredictionNodeIDs();
-        //cout << "Prediction node IDs:" << endl;
-        //printVector(leafIDs);
         size_t num_terminal_nodes = tree->getNumberOfTerminalNodes();
         size_t num_nodes = tree->getNumberOfNodes();
-        //cout << "num_nodes = " << num_nodes << endl;
-        //cout << "num_terminal_nodes = " << num_terminal_nodes << endl;
-        //cout << "About to compute leaf groups" << endl;
         vector<vector<size_t>> leaf_groups = groupByLeaf(leafIDs, num_nodes, num_terminal_nodes);
-        //cout << "Computed leaf groups in tree " << j << endl;
 
         // compute the numbers at risk and the number of deaths in each leaf and the corresponding KM estimator for the survival distribution
         tree->resizeKM();   // to ensure that the vector of Kaplan-Meier estimators for censoring is sufficiently large and initialised
         for (size_t k = 0; k < num_nodes; ++k) {
-            //cout << "Leaf group " << k << endl;
-            //printVector(leaf_groups[k]);
             if (!leaf_groups[k].empty()) {  // we are in a terminal node
-                //cout << "Leaf group " << k << " is a terminal node" << endl;
                 tree->computeCensoringKMExternal(leaf_groups[k], leafIDs[leaf_groups[k][0]]);
             }
         }
-        //cout << "Computed the KM estimator in tree " << j << endl;
     }
     // so that predictions are not needlessly recomputed later
     save_predictions = true;
@@ -311,10 +268,10 @@ void SurvivalForest::computePredictionsCensoring() {
 
 double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, string error_type) {
     /*
-    for each tree, compute the difference in the sums of errors, 
-    then divide by the number of OOB samples for that tree
-    finally, take the average VIMP over all trees
-     */
+      for each tree, compute the difference in the sums of errors, 
+      then divide by the number of OOB samples for that tree
+      finally, take the average VIMP over all trees
+    */
 
     const vector<double>& times = data->get_y_col(0);
     const vector<double>& ind = data->get_y_col(1);
@@ -340,7 +297,6 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, stri
     // shuffle feature values for all trees among the oob covariates
     vector<vector<size_t>> oob_indices_non_bool;
     OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
-    //const vector<vector<double>>& shuffled_values_feature = shuffledFeatureValues(oob_indices_non_bool, feature, feature_seed);
     
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers) reduction(+:total_vimp,valid_trees)
     for (size_t i = 0; i < ntrees; ++i) {
@@ -426,30 +382,6 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, stri
                 throw runtime_error("Unknown choice of loss function. Choose either 'brier' or 'concordance'");
             }
         }
-
-        /*
-        for (size_t j = 0; j < num_obs; ++j) {
-            if (oob_indices[i][j]) {
-                vector<double> x = data->get_x_row(j);
-                vector<double> tree_pred = get<vector<double>>(tree->predict(x));
-                x[feature] = shuffled_values_feature[i][j];
-                vector<double> tree_pred_shuffled = get<vector<double>>(tree->predict(x));
-
-                // update outcomes
-                tree_outcomes.push_back(vector_sum(tree_pred));
-                tree_outcomes_shuffled.push_back(vector_sum(tree_pred_shuffled));
-
-                // test using the final chf value instead of the sum (I think the outcome should be the sum of the CHF actually)
-                //tree_outcomes.push_back(tree_pred[num_unique_event_times - 1]);
-                //tree_outcomes_shuffled.push_back(tree_pred_shuffled[num_unique_event_times - 1]);
-
-                // update times
-                times_tree.push_back(times[j]);
-                ind_tree.push_back(ind[j]);
-            }
-        }
-        */
-
         // now compute and save tree VIMP
         if (error_type == "brier") {
             // Keep the loss fixed: only the survival prediction is permuted.
@@ -526,8 +458,6 @@ double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed) {
             vector<double> tree_pred_random = get<vector<double>>(tree->predictVIMP(x, feature, local_rng));
 
             // Keep the same risk score currently used by permutation VIMP.
-            //tree_outcomes.push_back(tree_pred[num_unique_event_times - 1]);
-            //tree_outcomes_random.push_back(tree_pred_random[num_unique_event_times - 1]);
             tree_outcomes.push_back(vector_sum(tree_pred));
             tree_outcomes_random.push_back(vector_sum(tree_pred_random));
             times_tree.push_back(times[j]);
@@ -549,9 +479,10 @@ vector<double> SurvivalForest::computePredictionsVIMPRandom(size_t feature, int 
     vector<double> vimp_predictions(num_obs * num_unique_event_times, 0);
     vector<size_t> num_oob_trees(num_obs, 0);
 
-    // Use one RNG stream per tree and advance it across that tree's OOB cases.
-    // Reseeding per observation would give every OOB case in a tree the same
-    // random daughter sequence.
+    /*
+      Use one RNG stream per tree and advance it across that tree's OOB cases.
+      Reseeding per observation would give every OOB case in a tree the same random daughter sequence.
+    */
     for (size_t j = 0; j < ntrees; ++j) {
         SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
         mt19937 local_rng = makeVIMPTreeRNG(feature_seed, j);

@@ -24,18 +24,6 @@ SurvivalTree::SurvivalTree(shared_ptr<vector<double>> unique_event_times, shared
         this->num_at_risk.resize(num_unique_event_times);
 }
 
-/*
-SurvivalTree::SurvivalTree(const vector<double> unique_event_times, const vector<size_t>& response_event_time_ids, const vector<size_t>& true_event_time_ids, const vector<size_t> subset_indices) :
-    unique_event_times {unique_event_times}, subset_indices {subset_indices}, true_event_time_ids {true_event_time_ids}, response_event_time_ids {response_event_time_ids} {
-        this->node_obs.push_back(subset_indices);
-        this->num_unique_event_times = unique_event_times.size();
-
-        // initialise the vector of deaths and individuals at risk
-        this->num_deaths.resize(num_unique_event_times);
-        this->num_at_risk.resize(num_unique_event_times);
-}
-*/
-
 // functions for growing survival trees
 //--------------------------------------------------------------------------------------
 
@@ -54,25 +42,6 @@ void SurvivalTree::computeSurvivalQuantities(const vector<size_t>& indices, vect
         times[i] = data->get_y(indices[i], 0);
         indicators[i] = data->get_y(indices[i], 1);
     }
-    
-    /*
-    for (size_t i : indices) {
-        double time = data->get_y(i, 0);
-        
-        size_t t = 0;
-        while (t < num_unique_event_times && unique_event_times[t] < time) {
-            ++at_risk[t];
-            ++t;
-        }
-
-        if (t < num_unique_event_times) {
-            ++at_risk[t];
-            if (data->get_y(i, 1) == 1) {
-                ++deaths[t];
-            }
-        }
-    }
-    */
     
     // sort the indices by their times
     vector<size_t> sorted_indices(n);
@@ -99,89 +68,6 @@ void SurvivalTree::computeSurvivalQuantities(const vector<size_t>& indices, vect
             j++;
         }
     }
-
-    // sort indices based on the times
-    /*
-    vector<size_t> sorted_indices(n);
-    iota(sorted_indices.begin(), sorted_indices.end(), 0);
-    sort(sorted_indices.begin(), sorted_indices.end(),
-        [&](size_t a, size_t b) {return times[a] < times[b]; });
-
-    size_t obs_idx = 0;
-    for (size_t t_idx = 0; t_idx < num_unique_event_times; ++t_idx) {
-        double current_event_time = unique_event_times[t_idx];
-
-        // move pointer obs_idx to the first time larger than or equal to the current event time
-        while (obs_idx < n && times[sorted_indices[obs_idx]] < current_event_time) {
-            obs_idx++;
-        }
-        at_risk[t_idx] = n - obs_idx;
-
-        // count the deaths
-        size_t j = obs_idx;
-        while (j < n && times[sorted_indices[j]] == current_event_time) {
-            if (indicators[sorted_indices[j]] == 1) {
-                deaths[t_idx]++;
-            }
-            j++;
-        }
-    }
-    */
-
-    /*
-    // compute number of deaths
-    for (size_t i = 0; i < n; ++i) {
-        if (indicators[i] == 1) {
-            size_t pos = lower_bound(unique_event_times.begin(),
-                                          unique_event_times.end(),
-                                          times[i]) - unique_event_times.begin();
-            if (pos < num_unique_event_times && unique_event_times[pos] == times[i]) {
-                num_deaths[pos] += 1;
-            }
-        }
-    }
-    // compute number at risk
-    size_t j = 0;  // index for the first observation larger than or equal to the event time
-    for (size_t i = 0; i < num_unique_event_times; ++i) {
-        double t = unique_event_times[i];
-        while (j < n && times[sorted_indices[j]] < t) {
-            ++j;
-        }
-        num_at_risk[i] = n - j;
-    }
-    */
-}
-
-/*
-void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
-                                                     vector<size_t>& num_at_risk_right, vector<size_t>& num_deaths_right, size_t nsplits_final) {
-    const vector<size_t>& current_node_obs = node_obs[node_index];
-    for (size_t i : current_node_obs) {
-        double feature_val = data->get_x(i, feature);
-        size_t time_id = (*response_event_time_ids)[i];
-
-        for (size_t j = 0; j < nsplits_final; ++j) {
-            if (feature_val > split_points[j]) {
-                ++num_obs_right[j];
-                ++num_at_risk_right[j * num_unique_event_times + time_id];
-
-                if (data->get_y(i, 1) == 1) {
-                    ++num_deaths_right[j * num_unique_event_times + time_id];
-                }
-            } else {
-                break;
-            }
-        }
-    }
-    // compute number at risk in the right node (Gemini's approach, doesn't work)
-    for (size_t i = 0; i < nsplits_final; ++i) {
-        size_t index = i * num_unique_event_times;
-        for (size_t j = num_unique_event_times - 2; j >= 0; --j) {
-            num_at_risk_right[index + j] += num_at_risk_right[index + j + 1];
-        }
-    }
-}
-*/
 
 // for computing survival quantities (number at risk and number of deaths) for all splits in a node (for splits on continuous features)
 void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
@@ -504,46 +390,6 @@ void SurvivalTree::computeCensoringKMExternal(const vector<size_t>& indices, siz
     this->KM_censoring[node_index] = selectCensoringAtTimes(KM_full, *censoring_times, *unique_event_times, 1);
 }
 
-/*
-// function to grow a survival tree
-void SurvivalTree::grow() {
-  // maybe bootstrap weights should be here if we choose to implement general bootstrap schemes
-
-  size_t num_queue = 1;
-  size_t depth = 0;
-  size_t left_most_node = 0;
-
-  // while not all nodes terminal, continue growing the tree
-  size_t i = 0;
-  depths.push_back(depth);
-  while (num_queue > 0) {
-    //Rcout << "Line 406: Current node ID:" << i << endl;
-    bool is_leaf = createSplit(i);
-    if (is_leaf) {
-        num_queue--;
-        left_daughters.push_back(0);  // 0 indicates no daughters
-        num_terminal_nodes++;
-    }
-    else {
-        num_queue++;
-        left_daughters.push_back(num_nodes);
-        num_nodes += 2;
-        if (i >= left_most_node) {
-            depth++;
-            left_most_node = num_nodes - 2;
-        }
-        // only for info, technically redundant
-        depths.push_back(depth);
-        depths.push_back(depth);
-    }
-    i++;
-  }
-
-  tree_depth = depth;
-  cleanUpTree();
-}
-*/
-
 // splitting rules for survival trees
 //--------------------------------------------------------------------------------------
 
@@ -833,8 +679,6 @@ vector<double> computeIPCW(const vector<double>& ind, const vector<double>& uniq
             obs_index = i;
             event_time_index = response_event_time_ids[i];
         }
-        //cout << "index_obs = " << index_obs << endl;
-        //cout << "Dimensions of KM_cens: " << KM_cens.nrow() << ", " << KM_cens.ncol() << endl;
         size_t event_censoring_index = event_time_index == 0 ? 0 : event_time_index - 1;
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             if (times[obs_index] <= unique_event_times[j] && ind[i] == 1) {
@@ -879,8 +723,6 @@ vector<double> computeBrierScore(const vector<double>& times, const vector<doubl
         }
     }
     // for debugging
-    //cout << "Brier scores:" << endl;
-    //printVector(brier);
     return brier;
 }
 
@@ -964,8 +806,6 @@ vector<double> computeBrierScoreCpp(const vector<double>& times, const vector<do
         }
     }
     // for debugging
-    //cout << "Brier scores:" << endl;
-    //printVector(brier);
     return brier;
 }
 
@@ -1043,15 +883,6 @@ vector<double> computeUniqueEventTimes(const vector<double>& times, const vector
     
     // sort and remove duplicated observed times
     sort(observed_times.begin(), observed_times.end());
-    /*
-    observed_times.push_back(-1); // to ensure the last observed time is included
-    for (int i = 0; i < observed_times.size() - 1; ++i) {
-      if (observed_times[i] != observed_times[i + 1]) {
-        unique_event_times.push_back(observed_times[i]);
-      }
-    }
-    return(unique_event_times);
-    */
     observed_times.erase(unique(observed_times.begin(), observed_times.end()), observed_times.end());
     return observed_times; 
 }

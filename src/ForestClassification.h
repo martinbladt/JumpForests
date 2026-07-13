@@ -15,9 +15,11 @@ public:
     return classes;
   }
 
-  // for computing predictions after the forest is grown
-  // first vector is in-bag predictions of classes, the other oob predictions of classes
-  // third and fourth vectors are flattened vectors of class probabilities
+  /*
+    for computing predictions after the forest is grown
+    first vector is in-bag predictions of classes, the other oob predictions of classes
+    third and fourth vectors are flattened vectors of class probabilities
+  */
   vector<vector<double>> computePredictions();
   // computing predictions on a new dataset
   pair<vector<double>, vector<double>> computePredictions(const Data& new_data, bool compute_probs = false);

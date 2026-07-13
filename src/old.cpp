@@ -1482,3 +1482,283 @@ void fitSurvivalTree(DataFrame df, unsigned int mtry, unsigned int min_node_size
 }
 
 */
+
+/*
+vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_time_ids, size_t num_unique_event_times) {
+    vector<bool> result(num_obs * num_unique_event_times * num_states);
+    for (size_t i = 0; i < num_obs; ++i) {
+        for (size_t j = 0; j < num_states; ++j) {
+            // remember that the observations are ordered in flattened vectors of num_obs strides of length max_response_length
+            for (size_t k = 0; k < max_response_length; ++k) {
+                size_t current_obs_index = i * max_response_length + k;
+                // recall that states are always denoted 1, 2, ..., num_states (0 indicates padding)
+                if (states[current_obs_index] == j + 1) {
+                    result[i * num_unique_event_times * num_states + response_event_time_ids[current_obs_index] * num_states + j] = true;
+                }
+            }
+        }
+    }
+    return result;
+}
+*/
+
+// the following struct handles Multi-state models
+
+/*
+struct MMData {
+  // jump_data is the response and feature_data is the DataFrame of features,
+  // hence no need to have feature_indices
+  MMData(List jump_data, uint8_t max_response_length, DataFrame feature_data,
+       const vector<bool>& categorical, const vector<size_t>& unique);
+
+  // extract data
+  double get_x(size_t row, size_t col) const {
+    return x[row * num_features + col];
+  }
+
+  vector<double> get_x_row(size_t row) const {
+    vector<double> res(num_features);
+    for (size_t i = 0; i < num_features; ++i) {
+      res[i] = x[row * num_features + i];
+    }
+    return res;
+  }
+
+  vector<double> get_x_col(size_t col) const {
+    vector<double> res(num_obs);
+    for (size_t i = 0; i < num_obs; ++i) {
+      res[i] = x[i * num_features + col];
+    }
+    return res;
+  }
+
+  // for extracting possible split values
+  vector<double> getValues(const vector<size_t>& subset_indices, size_t feature);
+
+  // for getting misc. information
+  size_t getNumberOfObs() const {
+    return num_obs;
+  }
+  size_t getNumberOfFeatures() const {
+    return num_features;
+  }
+  vector<bool> getCategorical() const {
+    return categorical;
+  }
+  vector<size_t> getUniqueValues() const {
+    return unique_values;
+  }
+  
+  vector<size_t> getResponseIndices () const {
+    return response_indices;
+  }
+  vector<size_t> getFeatureIndices () const {
+    return feature_indices;
+  }
+  vector<string> getResponseNames () const {
+    return response_names;
+  }
+  
+  vector<double> getTimes() const {
+    return times;
+  }
+  vector<uint8_t> getStates() const {
+    return states;
+  }
+
+  vector<string> getFeatureNames () const {
+    return feature_names;
+  }
+  // get the ID based on a feature name
+  size_t getFeatureID(const string& variable_name) const;
+
+private:
+  // data (new)
+  vector<double> x;       // the features are saved as a flattened 2D-array (counted by observation number)
+  vector<double> times;   // save jump times for each trajectory as flattened 2D-array
+  vector<uint8_t> states;  // save state info for each trajectory as flattened 2D-array
+
+  // data attributes
+  size_t num_obs;                   // number of observations
+  size_t num_features;              // number of features
+  vector<bool> categorical;         // for each feature, 1 if categorical, 0 otherwise
+  vector<size_t> unique_values;     // number of unique values for each feature
+  vector<string> feature_names;     // variable name for each feature
+};
+
+*/
+
+/*
+// old grow function that does not use multithreading
+void SurvivalForest::grow() {
+    int n = (*data).getNumberOfObs();
+    for (size_t i = 0; i < ntrees; ++i) {
+        // for now, use classical (Efron) bootstrap, later subsampling without replacement should be implemented
+        // optimisation idea: no need to allocate {0, 1, ..., n - 1} many times when n is fixed (write a separate bootstrap function)
+        vector<size_t> bootstrap_indices = sampleIndices(n, n, true, random_number_generator);
+        vector<bool> oob_indices_tree = computeOOBIndices(bootstrap_indices, n);
+        oob_indices.push_back(oob_indices_tree);
+
+        // grow each survival tree
+        Rcout << "Growing tree " << i << endl;
+        unique_ptr<SurvivalTree> tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, bootstrap_indices);
+        uniform_int_distribution<size_t> dist(0, numeric_limits<size_t>::max());
+        tree->initialise(data, mtry, min_node_size, nsplits, dist(random_number_generator));
+        tree->setRNG(random_number_generator);
+        tree->grow();
+        trees.push_back(std::move(tree));
+    }
+
+    // compute all quantities of interest from the vector of trees
+    computeForestQuantities();
+}
+*/
+
+
+// old version
+// for computing multi-state quantities (number at risk and number of jumps) for all splits in a node (for splits on continuous features)
+/*
+void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
+                                         vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final) {
+    // fetch states and other relevant data quantities
+    const vector<uint8_t>& states = data->getStates();
+    const vector<double>& censoring_times = data->getCensoringTimes();
+    const vector<uint8_t>& censoring_states = data->getCensoringStates();
+    uint8_t max_response_length = data->getMaxResponseLength();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+
+    // all temporary quantities used for the key decomposition (for the right node)
+    vector<size_t> censoring_contribution_right(nsplits_final * num_unique_event_times * num_states, 0);
+    vector<size_t> num_jumps_acc_right(nsplits_final * num_unique_event_times * dim, 0);
+
+    // compute initial rates, the censoring contribution C and the number of jumps across all event times and
+    // observations in the right node
+    for (size_t i : node_obs[node_index]) {
+        double feature_val = data->get_x(i, feature);
+        for (size_t s = 0; s < nsplits_final; ++s) {
+            if (feature_val > split_points[s]) {
+                // add one to the number of observations in right node for split s
+                ++num_obs_right[s];
+                // update I0
+                ++num_at_risk_right[s * num_unique_event_times * num_states + states[i * max_response_length] - 1];
+
+                // censoring contribution
+                uint8_t censoring_state = censoring_states[i];
+                if (censoring_state != 0) {     // censoring actually occurs
+                    double R  = censoring_times[i];
+                    for (size_t j = 0; j < num_unique_event_times; ++j) {
+                        if ((*unique_event_times)[j] > R) {
+                            // all following event times also satisfy > R
+                            for (size_t k = j; k < num_unique_event_times; ++k) {
+                                ++censoring_contribution_right[s * num_unique_event_times * num_states + k * num_states + censoring_state - 1];
+                            }
+                            break;
+                        }
+                    }
+                }
+                // compute the number of jumps
+                size_t j = 1;
+                size_t index = i * max_response_length + 1;
+                while(j < max_response_length && states[index] != 0) {
+                    size_t id = (*response_event_time_ids)[index];
+                    int current_state_index = states[index] - 1;
+                    int prev_state_index = states[index - 1] - 1;
+                    if (current_state_index != prev_state_index) {
+                        ++num_jumps_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index];
+                        //num_jumps_acc_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc_right[s * num_unique_event_times * dim + (id - 1) * dim + prev_state_index * num_states + current_state_index] + 1;
+                    } else {
+                        //num_jumps_acc_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc_right[s * num_unique_event_times * dim + (id - 1) * dim + prev_state_index * num_states + current_state_index];
+                    }
+                    ++j;
+                    ++index;
+                }
+
+            } else {
+                break;  // since the split points are sorted
+            }
+        }
+    }
+    
+    // compute the cumulative number of jumps across all splits
+    cumulativeMatrixSums(num_jumps_acc_right, num_jumps_right, num_states, nsplits_final);
+
+    // now compute number at risk for each possible split via the key decomposition
+    for (size_t s = 0; s < nsplits_final; ++s) {
+        size_t begin = s * num_unique_event_times * dim + dim;
+        size_t end = s * num_unique_event_times * dim + 2 * dim - 1;
+        for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above for each split
+            vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc_right, begin, end, transpose(num_jumps_acc_right, begin, end)), static_cast<size_t>(num_states));
+            begin += dim;
+            end += dim;
+            for (size_t k = 0; k < num_states; ++k) {
+                // key decomposition
+                size_t split_stride = s * num_unique_event_times * num_states;
+                num_at_risk_right[split_stride + j * num_states + k] = num_at_risk_right[split_stride + k] - censoring_contribution_right[split_stride + j * num_states + k] + jump_contributions[k];
+            }
+        }
+    }
+    
+    // for debugging
+    
+    Rcout << "Numbers of observations in right node " << endl;
+    printVector(num_obs_right);
+    Rcout << "Computed quantities for every possible split. num_at_risk_right:" << endl;
+    printVector(num_at_risk_right, num_states);
+    //Rcout << "num_at_risk:" << endl;
+    //printVector(num_at_risk, num_states);
+    //Rcout << "num_jumps_acc_right:" << endl;
+    //printVector(num_jumps_acc_right, dim);
+    Rcout << "num_jumps_right:" << endl;
+    printVector(num_jumps_right, dim);
+    
+}
+*/
+
+/*
+
+void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
+                                         vector<size_t>& num_at_risk_left, vector<size_t>& num_jumps_left, size_t nsplits_final) {
+    const vector<uint8_t>& states = data->getStates();
+    uint8_t num_states = data->getNumberOfStates();
+    uint8_t dim = num_states * num_states;
+    uint8_t max_response_length = data->getMaxResponseLength();
+    //vector<size_t> delta_num_at_risk_right(nsplits_final * num_unique_event_times * num_states);
+    
+    // initialise the number of jumps and at risk to be the ones for the parent
+    for (size_t s = 0; s < nsplits_final; ++s) {
+        copy(num_at_risk.begin(), num_at_risk.end(), num_at_risk_left.begin() + s * num_unique_event_times * num_states);
+        copy(num_jumps.begin(), num_jumps.end(), num_jumps_left.begin() + s * num_unique_event_times * dim);
+    }
+    
+    for (size_t i : node_obs[node_index]) {
+        double feature_val = data->get_x(i, feature);
+        for (size_t s = 0; s < nsplits_final; ++s) {
+            if (feature_val > split_points[s]) {
+                ++num_obs_right[s];
+                // now compute the differences in numbers at risk and count number of jumps
+                size_t j = 0;
+                size_t index = i * max_response_length;
+                while (j < max_response_length && states[index] != 0) {
+                    size_t id = (*response_time_event_ids)[index];
+                    int current_state_index = states[index] - 1;     // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
+                    int next_state_index = states[index + 1] - 1;
+                    // find jumps (we assume that max_response_length > 1 i.e. at least one jump occurs in the dataset)
+                    if (j == 0 && next_state_index != -1 || (j < max_response_length - 1 && next_state_index != -1 && current_state_index != next_state_index)) {
+                        --num_jumps_left[s * num_unique_event_times * dim + id * dim + current_state_index * num_states + next_state_index];
+                    }
+                    // find numbers at risk (j == 0 means we are at the first state of an observation/path)
+                    if (j == 0 || current_state_index != states[index - 1] - 1) {
+                        --num_at_risk_left[s * num_unique_event_times * num_states + id * num_states + current_state_index];
+                    }
+                    ++j;
+                    index = i * max_response_length + j;
+                }
+            } else {
+                break;  // since the split_points are sorted
+            }
+        }
+    }
+}
+
+*/
