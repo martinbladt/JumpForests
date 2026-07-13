@@ -158,26 +158,26 @@ veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2026, min_node_si
 print_tree(veteran_tree_mm)
 print_tree(veteran_tree)
 
-veteran_tree_mm$ibs             # 56.07324
+veteran_tree_mm$ibs             # 57.33924
 veteran_tree$ibs                # 57.51201
-veteran_tree_mm$ibs.normalised  # 0.05612937
+veteran_tree_mm$ibs.normalised  # 0.05739663
 veteran_tree$ibs.normalised     # 0.05756958
 
 # close enough
 
 # equals 999, the last event time (as it should)
-56.07324/0.05612937
+57.33924/0.05739663
 57.51201/0.05756958
 tail(veteran_tree_mm$unique.event.times)
 tail(veteran_tree$unique.event.times)
 
-# very little difference, but censoring is also extremely light for this dataset
+# concurs more or less perfectly
 veteran_tree_mm$censoring[1, ]
 veteran_tree$censoring[1, ]
-veteran_tree_mm$censoring[2, ]
-veteran_tree$censoring[2, ]
-veteran_tree_mm$censoring[5, ]
-veteran_tree$censoring[5, ]
+
+veteran_tree_mm$censoring[1, ] - veteran_tree$censoring[1, ]
+veteran_tree_mm$censoring[2, ] - veteran_tree$censoring[2, ]
+veteran_tree_mm$censoring[5, ] - veteran_tree$censoring[5, ]
 
 veteran_tree_mm$init
 unlist(lapply(veteran_tree_mm$init, function(z) sum(z)))  # works!
@@ -235,8 +235,8 @@ tree_mm <- jftree(MM ~ ., data = jump_data, feature_data = sim_data[c(3, 4)], mi
 
 # results for n = 1000, seed = 2026
 jftree.error(tree_survival) # IBS: 1.03857, normalised IBS: 0.0560871
-tree_mm$ibs                 # IBS: 0.9436641
-tree_mm$ibs.normalised      # normalised IBS: 0.05096178
+tree_mm$ibs                 # IBS: 1.048747
+tree_mm$ibs.normalised      # normalised IBS: 0.05663672
 
 tail(tree_survival$unique.event.times)
 tail(tree_mm$unique.event.times)
@@ -244,18 +244,29 @@ tail(tree_mm$unique.event.times)
 unlist(lapply(tree_mm$init, function(z) sum(z)))
 
 tree_mm$censoring[1,]
-tree_survival$censoring[1,] # extreme difference for the first observation
+tree_survival$censoring[1,]
+tree_mm$censoring[1,][-1] - tree_survival$censoring[1,] # some pretty big differences here for later times
+
 tree_mm$censoring[2,]
 tree_survival$censoring[2,]
-tree_mm$censoring[3,]
+tree_mm$censoring[2,][-1] - tree_survival$censoring[2,] # quite small difference
+
+
 tree_survival$censoring[3,] # pretty big difference
+tree_mm$censoring[3,][-1]
+tree_mm$censoring[3,][-1] - tree_survival$censoring[3,]
+
 tree_mm$censoring[4,]
-tree_survival$censoring[4,] # zero???
+tree_survival$censoring[4,]
+tree_mm$censoring[4,][-1] - tree_survival$censoring[4,] # ok
+
 tree_mm$censoring[5,]
 tree_survival$censoring[5,]
+tree_mm$censoring[5,][-1] - tree_survival$censoring[5,] # pretty small difference
 
-# may need to do some investigating here, but other matters are more pressing
-# an obvious possible explanation for the difference is that censoring times are included in the unique event times for survival (maybe revert?)
+# it is not that surprising that the KM estimators are different, since the splits can be quite different for the two trees,
+# and the KM estimator is very sensitive to the number of observations in the leaf
+# choosing e.g. n = 50 results in only one split and here the estimators are completely identical (as they should be)
 
 # just a bonus comparison with randomForestSRC
 
@@ -279,7 +290,7 @@ gc()
 devtools::load_all()
 library(randomForestSRC)
 set.seed(2026)
-n <- 10000
+n <- 25000
 X <- rbinom(n, 10, 0.5)
 Y <- rnorm(n)                 # noise
 Z <- 10 + rbinom(n, 80, 0.5)  # true survival time (relatively few unique values)
@@ -311,20 +322,22 @@ print_tree(tree_mm)
 # n = 1000 (quite different)
 tree_survival$ibs             # 2.145489
 tree_survival$ibs.normalised  # 0.03764016
-tree_mm$ibs                   # 1.963569
-tree_mm$ibs.normalised        # 0.03444858
+tree_mm$ibs                   # 2.151347
+tree_mm$ibs.normalised        # 0.03774292
 
 # n = 10000 (more similar)
 tree_survival$ibs             # 2.218344
 tree_survival$ibs.normalised  # 0.0369724
-tree_mm$ibs                   # 1.993813
-tree_mm$ibs.normalised        # 0.03323021
+tree_mm$ibs                   # 2.210761
+tree_mm$ibs.normalised        # 0.03684602
 
 # n = 25000
 tree_survival$ibs             # 2.176473
 tree_survival$ibs.normalised  # 0.03688937
-tree_mm$ibs                   # 1.969716
-tree_mm$ibs.normalised        # 0.03338501
+tree_mm$ibs                   # 2.181924
+tree_mm$ibs.normalised        # 0.03698176
+
+# pretty much the same all around
 
 tree_mm$censoring[1,]
 tree_survival$censoring[1,]   # much lower

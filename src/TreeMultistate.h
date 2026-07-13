@@ -8,7 +8,7 @@ class MultistateTree : public Tree {
 public:
   MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids,
             const vector<size_t>& subset_indices, uint8_t num_states, bool save_predictions,
-            const vector<size_t>& estimation_indices = {});
+            const vector<size_t>& estimation_indices = {}, shared_ptr<vector<double>> censoring_times = nullptr);
 
   const vector<double> getEventTimes() const {
     return *unique_event_times;
@@ -16,13 +16,19 @@ public:
   const size_t getNumberOfUniqueEventTimes() const {
     return num_unique_event_times;
   }
-  const vector<vector<double>> getNA() const {
+  const vector<vector<double>>& getNA() const {
     return na;
   }
-  const vector<vector<double>> getKMCensoring() const {
+  const vector<vector<double>>& getKMCensoring() const {
     return KM_censoring;
   }
-  const vector<vector<double>> getInitDist() const {
+  const vector<vector<double>>& getKMCensoringFull() const {
+    return KM_censoring_full;
+  }
+  const vector<double>& getCensoringTimes() const {
+    return *censoring_times;
+  }
+  const vector<vector<double>>& getInitDist() const {
     return init_dist;
   }
 
@@ -47,15 +53,19 @@ public:
   // when the censoring Kaplan-Meier estimators have to be populated after fitting
   void resizeKM() {
     KM_censoring.assign(num_nodes, vector<double>());
+    KM_censoring_full.assign(num_nodes, vector<double>());
   }
 private:
   shared_ptr<vector<double>> unique_event_times;        // vector of ordered unique event times across (pooled across all jumps)
   size_t num_unique_event_times;                        // number of unique event times
   shared_ptr<vector<size_t>> response_event_time_ids;   // the indices of unique_event_times corresponding to the response times (flattened array)
+  shared_ptr<vector<double>> censoring_times;           // vector of ordered unique times for the censoring distribution
+  size_t num_censoring_times;                           // number of unique censoring times
   bool save_predictions;                                // should predictions (including KM estimators for censoring) be saved during fitting?
   vector<vector<double>> na;                            // the Nelson--Aalen estimator in each terminal node with jumps at the unique_event_times,
                                                         // each vector being a flattened array of length num_states^2
   vector<vector<double>> KM_censoring;                  // the Kaplan-Meier estimate at the unique_event_times for the censoring distribution 
+  vector<vector<double>> KM_censoring_full;             // the Kaplan-Meier estimate at the censoring_times for the censoring distribution
   vector<vector<double>> init_dist;                     // estimated initial distribution in each node
 
   // temporary quantities used in growing multi-state trees
@@ -95,6 +105,7 @@ private:
 };
 
 vector<double> uniqueEventTimesMultistate(const vector<double>& times, const vector<uint8_t>& states);
+vector<double> uniqueCensoringTimesMultistate(const vector<double>& unique_event_times, const vector<double>& times, const vector<size_t>& last_observed_times);
 vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times, const vector<uint8_t>& states);
 // maybe the function below will never be used (the corresponding function for survival is deprecated)
 //vector<double> computeUniqueEventTimes(const vector<double>& times);

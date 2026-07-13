@@ -10,11 +10,13 @@ Functions for survival trees
 //--------------------------------------------------------------------------------------
 
 // the final argument is only used for honest trees
-SurvivalTree::SurvivalTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, shared_ptr<vector<size_t>> true_event_time_ids, const vector<size_t>& subset_indices, bool save_predictions, const vector<size_t>& estimation_indices) :
+SurvivalTree::SurvivalTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, shared_ptr<vector<size_t>> true_event_time_ids, const vector<size_t>& subset_indices, bool save_predictions, const vector<size_t>& estimation_indices, shared_ptr<vector<double>> censoring_times) :
     unique_event_times {unique_event_times}, true_event_time_ids {true_event_time_ids}, response_event_time_ids {response_event_time_ids}, save_predictions {save_predictions} {
         this->node_obs.push_back(subset_indices);
         this->holdout_node_obs.push_back(estimation_indices);
         this->num_unique_event_times = unique_event_times->size();
+        this->censoring_times = censoring_times == nullptr ? unique_event_times : censoring_times;
+        this->num_censoring_times = this->censoring_times->size();
         this->node_sizes.push_back(subset_indices.size());
 
         // initialise the vector of deaths and individuals at risk
@@ -331,7 +333,7 @@ void SurvivalTree::makeLeaf(size_t node_index) {
 
     // if we save predictions, we also compute the KM estimator of the censoring distribution
     if (save_predictions) {
-        computeCensoringKM();
+        computeCensoringKM(node_index);
     }
 
     // update tree info
@@ -453,6 +455,7 @@ bool SurvivalTree::createSplit(size_t node_index) {
     chf.push_back(vector<double>());
     if (save_predictions) {
         KM_censoring.push_back(vector<double>());
+        KM_censoring_full.push_back(vector<double>());
     }
 
     // for honest trees, update the holdout indices
@@ -481,49 +484,24 @@ void SurvivalTree::computeChf(size_t node_index) {
 }
 
 // computes the Kaplan-Meier estimator for the censoring distribution in node node_index
-void SurvivalTree::computeCensoringKM() {
-    vector<double>KM_censoring(num_unique_event_times, 1);
-    
-    // now compute the Kaplan-Meier estimator
-    for (size_t i = 0; i < num_unique_event_times; ++i) {
-        double previous_KM = i == 0 ? 1.0 : KM_censoring[i - 1];
-        double denominator = static_cast<double>(num_at_risk[i]) - static_cast<double>(num_deaths[i]);
-        if (denominator > 0) {
-            double next_at_risk = i + 1 < num_unique_event_times ? static_cast<double>(num_at_risk[i + 1]) : 0.0;
-            double num_censored = static_cast<double>(num_at_risk[i]) - next_at_risk - static_cast<double>(num_deaths[i]);
-            KM_censoring[i] = previous_KM * (1 - num_censored / denominator);    // may be other ways of handling ties
-        } else {
-            KM_censoring[i] = previous_KM;
-        }
-    }
-    // for debugging
-    //cout << "KM: ";
-    //printVector(KM_censoring);
-    this->KM_censoring.push_back(std::move(KM_censoring));
+void SurvivalTree::computeCensoringKM(size_t node_index) {
+    vector<double> times = data->get_y_col(0);
+    vector<double> ind = data->get_y_col(1);
+    const vector<size_t>& indices = honest ? holdout_node_obs[node_index] : node_obs[node_index];
+
+    vector<double> KM_full = computeCensoringKMFromEndpoints(times, ind, *censoring_times, indices);
+    vector<double> KM_event = selectCensoringAtTimes(KM_full, *censoring_times, *unique_event_times, 1);
+    this->KM_censoring_full.push_back(std::move(KM_full));
+    this->KM_censoring.push_back(std::move(KM_event));
 }
 
 // computes the Kaplan-Meier estimator for the censoring distribution in the node given by node_index based on the training data given by indices
 void SurvivalTree::computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index) {
-    vector<size_t> num_at_risk(num_unique_event_times, 0);
-    vector<size_t> num_deaths(num_unique_event_times, 0);
-    computeSurvivalQuantities(indices, num_deaths, num_at_risk);
-    vector<double> KM(num_unique_event_times, 1);
-    
-    // now compute the Kaplan-Meier estimator
-    for (size_t i = 0; i < num_unique_event_times; ++i) {
-        double previous_KM = i == 0 ? 1.0 : KM[i - 1];
-        double denominator = static_cast<double>(num_at_risk[i]) - static_cast<double>(num_deaths[i]);
-        if (denominator > 0) {
-            double next_at_risk = i + 1 < num_unique_event_times ? static_cast<double>(num_at_risk[i + 1]) : 0.0;
-            double num_censored = static_cast<double>(num_at_risk[i]) - next_at_risk - static_cast<double>(num_deaths[i]);
-            KM[i] = previous_KM * (1 - num_censored / denominator);    // may be other ways of handling ties
-        } else {
-            KM[i] = previous_KM;
-        }
-    }
-    //printVector(KM);
-    //cout << "Length of KM_censoring:" << this->KM_censoring.size() << endl;
-    this->KM_censoring[node_index] = move(KM);
+    vector<double> times = data->get_y_col(0);
+    vector<double> ind = data->get_y_col(1);
+    vector<double> KM_full = computeCensoringKMFromEndpoints(times, ind, *censoring_times, indices);
+    this->KM_censoring_full[node_index] = KM_full;
+    this->KM_censoring[node_index] = selectCensoringAtTimes(KM_full, *censoring_times, *unique_event_times, 1);
 }
 
 /*
@@ -705,15 +683,17 @@ vector<double> SurvivalTree::computePredictions(const Data& new_data) {
 pair<vector<double>, vector<double>> SurvivalTree::computePredictionsCensoring(const Data& new_data) {
     size_t num_obs = new_data.getNumberOfObs();
     vector<double> predictions(num_obs * num_unique_event_times);
-    vector<double> censoring(num_obs * num_unique_event_times);
+    vector<double> censoring(num_obs * num_censoring_times);
 
     for (size_t i = 0; i < num_obs; ++i) {
         size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
         const vector<double>& pred = chf[leaf_id];
-        const vector<double>& cens = KM_censoring[leaf_id];
+        const vector<double>& cens = KM_censoring_full[leaf_id];
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             predictions[i * num_unique_event_times + j] = pred[j];
-            censoring[i * num_unique_event_times + j] = cens[j];
+        }
+        for (size_t j = 0; j < num_censoring_times; ++j) {
+            censoring[i * num_censoring_times + j] = cens[j];
         }
     }
     return {predictions, censoring};
@@ -766,9 +746,68 @@ vector<double> computeOutcomes(const vector<double>& predictions, size_t num_uni
     return outcomes;
 }
 
+vector<double> computeCensoringKMFromEndpoints(const vector<double>& times, const vector<double>& ind, const vector<double>& censoring_times, const vector<size_t>& indices) {
+    vector<double> KM(censoring_times.size(), 1);
+
+    for (size_t t = 0; t < censoring_times.size(); ++t) {
+        double time = censoring_times[t];
+        double previous_KM = t == 0 ? 1.0 : KM[t - 1];
+        double num_at_risk = 0;
+        double num_events = 0;
+        double num_censored = 0;
+
+        for (size_t i : indices) {
+            if (times[i] >= time) {
+                ++num_at_risk;
+            }
+            if (times[i] == time) {
+                if (ind[i] == 1) {
+                    ++num_events;
+                } else {
+                    ++num_censored;
+                }
+            }
+        }
+
+        double denominator = num_at_risk - num_events;
+        if (denominator > 0) {
+            KM[t] = previous_KM * (1 - num_censored / denominator);
+        } else {
+            KM[t] = previous_KM;
+        }
+    }
+    return KM;
+}
+
+double censoringValueAtTime(const vector<double>& KM_cens, const vector<double>& censoring_times, size_t row, size_t row_length, double time, bool left_limit) {
+    if (censoring_times.empty()) {
+        return 1;
+    }
+
+    auto it = left_limit ? lower_bound(censoring_times.begin(), censoring_times.end(), time) :
+                           upper_bound(censoring_times.begin(), censoring_times.end(), time);
+    if (it == censoring_times.begin()) {
+        return 1;
+    }
+
+    size_t time_index = static_cast<size_t>(distance(censoring_times.begin(), it) - 1);
+    return KM_cens[row * row_length + time_index];
+}
+
+vector<double> selectCensoringAtTimes(const vector<double>& KM_cens, const vector<double>& censoring_times, const vector<double>& output_times, size_t num_obs) {
+    vector<double> result(num_obs * output_times.size());
+    size_t row_length = censoring_times.size();
+    for (size_t i = 0; i < num_obs; ++i) {
+        for (size_t t = 0; t < output_times.size(); ++t) {
+            result[i * output_times.size() + t] = censoringValueAtTime(KM_cens, censoring_times, i, row_length, output_times[t], false);
+        }
+    }
+    return result;
+}
+
 // computes the IPCW weights for each observation and event time (useful if one wants to extend to other error metrics)
 vector<double> computeIPCW(const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
-                           const NumericMatrix& KM_cens, const vector<double>& times, const vector<size_t>& last_observed_time_ids) {
+                           const NumericMatrix& KM_cens, const vector<double>& times, const vector<size_t>& last_observed_time_ids, const vector<double>& censoring_times) {
     size_t num_obs;
     bool multi_state;
     if (last_observed_time_ids.empty()) {
@@ -799,13 +838,23 @@ vector<double> computeIPCW(const vector<double>& ind, const vector<double>& uniq
         size_t event_censoring_index = event_time_index == 0 ? 0 : event_time_index - 1;
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             if (times[obs_index] <= unique_event_times[j] && ind[i] == 1) {
-               if (KM_cens(i, event_censoring_index) > 0) {
-                 weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, event_censoring_index));
-               }
+                double cens = KM_cens(i, event_censoring_index);
+                if (!censoring_times.empty()) {
+                    auto it = lower_bound(censoring_times.begin(), censoring_times.end(), times[obs_index]);
+                    cens = it == censoring_times.begin() ? 1.0 : KM_cens(i, distance(censoring_times.begin(), it) - 1);
+                }
+                if (cens > 0) {
+                    weights[i * num_unique_event_times + j] = 1 / (num_obs * cens);
+                }
             }
             else if (times[obs_index] > unique_event_times[j]) {
-                if (KM_cens(i, j) > 0) {
-                    weights[i * num_unique_event_times + j] = 1 / (num_obs * KM_cens(i, j));
+                double cens = KM_cens(i, j);
+                if (!censoring_times.empty()) {
+                    auto it = upper_bound(censoring_times.begin(), censoring_times.end(), unique_event_times[j]);
+                    cens = it == censoring_times.begin() ? 1.0 : KM_cens(i, distance(censoring_times.begin(), it) - 1);
+                }
+                if (cens > 0) {
+                    weights[i * num_unique_event_times + j] = 1 / (num_obs * cens);
                 }
             }
             // the third case (censored before the event time) has weight zero
@@ -839,7 +888,7 @@ vector<double> computeBrierScore(const vector<double>& times, const vector<doubl
 
 // computes the IPCW weights for each observation and event time (useful if one wants to extend to other error metrics)
 vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, 
-                              const vector<double>& KM_cens, vector<size_t> obs_indices, const vector<size_t>& last_observed_time_ids) {
+                              const vector<double>& KM_cens, vector<size_t> obs_indices, const vector<size_t>& last_observed_time_ids, const vector<double>& censoring_times) {
     // if obs_indices is not provided, it means that all observations should be used
     bool multi_state = !last_observed_time_ids.empty();
     size_t num_obs;
@@ -875,16 +924,21 @@ vector<double> computeIPCWCpp(const vector<double>& times, const vector<double>&
         }
 
         size_t event_censoring_index = event_time_index == 0 ? 0 : event_time_index - 1;
+        size_t censoring_row_length = censoring_times.empty() ? num_unique_event_times : censoring_times.size();
         for (size_t j = 0; j < num_unique_event_times; ++j) {
             size_t index = row * num_unique_event_times + j;
             if (time <= unique_event_times[j] && indicator == 1) {
-               if (KM_cens[row * num_unique_event_times + event_censoring_index] > 0) {
-                 weights[index] = 1 / (num_obs * KM_cens[row * num_unique_event_times + event_censoring_index]);
-               }
+                double cens = censoring_times.empty() ? KM_cens[row * num_unique_event_times + event_censoring_index] :
+                              censoringValueAtTime(KM_cens, censoring_times, row, censoring_row_length, time, true);
+                if (cens > 0) {
+                    weights[index] = 1 / (num_obs * cens);
+                }
             }
             else if (time > unique_event_times[j]) {
-                if (KM_cens[index] > 0) {
-                    weights[index] = 1 / (num_obs * KM_cens[index]);
+                double cens = censoring_times.empty() ? KM_cens[index] :
+                              censoringValueAtTime(KM_cens, censoring_times, row, censoring_row_length, unique_event_times[j], false);
+                if (cens > 0) {
+                    weights[index] = 1 / (num_obs * cens);
                 }
             }
             // the third case (censored before the event time) has weight zero
