@@ -77,7 +77,7 @@ sim[1]
 # implement as an option
 
 test_data <- data.frame(X1 = X, X2 = Y)
-test_data_functions_mm(sim, test_data, c(1, 2))
+#test_data_functions_mm(sim, test_data, c(1, 2))
 fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20, honest = TRUE)
 }
 print_tree(fitted_tree, full = TRUE)
@@ -104,6 +104,7 @@ predicted$predictions.init[[1]]
 jftree.predict(fitted_tree)[[2]][[1]]
 
 jftree.error(fitted_tree)
+jftree.error(fitted_tree, new_data = test_data, jump_data = sim)
 
 occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]])
 lapply(fitted_tree$init, function(z) sum(z))
@@ -154,14 +155,19 @@ veteran_features <- veteran[-c(3, 4)]
 veteran_tree_mm <- jftree(MM ~ ., data = jump_data_veteran, seed = 2026, feature_data = veteran_features, nsplits = 10, splitrule = "logrank", min_node_size = 10, honest = FALSE)
 veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2026, min_node_size = 10, honest = FALSE)
 
-veteran_tree_mm$ibs             # 84.09793
-veteran_tree$ibs                # 54.02095  # big difference, why for this particular dataset?
-veteran_tree_mm$ibs.normalised  # 0.08418211
-veteran_tree$ibs.normalised     # 0.05407503
+print_tree(veteran_tree_mm)
+print_tree(veteran_tree)
+
+veteran_tree_mm$ibs             # 56.07324
+veteran_tree$ibs                # 57.51201
+veteran_tree_mm$ibs.normalised  # 0.05612937
+veteran_tree$ibs.normalised     # 0.05756958
+
+# close enough
 
 # equals 999, the last event time (as it should)
-90.56269/0.09065334
-54.02095/0.05407503
+56.07324/0.05612937
+57.51201/0.05756958
 tail(veteran_tree_mm$unique.event.times)
 tail(veteran_tree$unique.event.times)
 
@@ -185,21 +191,21 @@ unlist(lapply(veteran_tree_mm$init, function(z) sum(z)))  # works!
 # 2) For moderate to heavy censoring, the KM estimators for censoring are quite different when using multi-state trees instead
 #    of survival trees
 # 4) Allow the user to input an initial distribution for multi-state error computation
-# 5) (Optional) Reconsider removing the 'censored only' event times. This is more natural. What went wrong with the error computation?
 # 6) Test errors against competing risks in randomForestSRC
 # 8) Extend error computations to whole forests
-# 12) Fix the subsampling printing error for honesty
 
 # finished points
 # 1) Fix initial value estimation (see veteran above), empirical studies show that this is very likely where the difference
 #    in errors come from (big issue!)
 # 3) Related to 2), inconsistent computation of KM, for survival we subtract the number of deaths, but we don't subtract the
 #    total number of jumps for multi-states (changed, should no longer be a difference)
+# 5) (Optional) Reconsider removing the 'censored only' event times. This is more natural. What went wrong with the error computation?
 # 7) Write prediction functions for multi-state random forests (not just single trees)
 # 9) There should be a function for survival forests which computes both OOB predictions and censoring predictions in one go instead of
 #    using two different functions (that way we only need to determine the leaf once)
 # 10) Repeat 9) for a single multi-state tree. Also do a thorough cleanup and remove old code used for prediction
 # 11) Something goes wrong for categorical data (again...): the values are saved internally in a nonsensical way
+# 12) Fix the subsampling printing error for honesty
 
 devtools::load_all()
 library(randomForestSRC)
@@ -228,15 +234,14 @@ tree_survival <- jftree(Surv(time, status) ~ ., data = sim_data, min_node_size =
 tree_mm <- jftree(MM ~ ., data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, honest = FALSE)
 
 # results for n = 1000, seed = 2026
-jftree.error(tree_survival) # IBS: 1.071071, normalised IBS: 0.05384817
-tree_mm$ibs                 # IBS: 0.9890222
-tree_mm$ibs.normalised      # normalised IBS: 0.05341131
+jftree.error(tree_survival) # IBS: 1.03857, normalised IBS: 0.0560871
+tree_mm$ibs                 # IBS: 0.9436641
+tree_mm$ibs.normalised      # normalised IBS: 0.05096178
 
-18.51709  # last unique event time for the multi-state tree (total times: 858)
-19.89058  # last unique event time for the survival tree (total times: 1000)
-# reason for the difference: we do not remove the times that are censored (we used to, but I 'removed' this feature, something to do with censoring KM estimation)
+tail(tree_survival$unique.event.times)
+tail(tree_mm$unique.event.times)
 
-unlist(lapply(tree_mm$init, function(z) sum(z)))  # hmmmm, works as intended here, so why not for veteran?
+unlist(lapply(tree_mm$init, function(z) sum(z)))
 
 tree_mm$censoring[1,]
 tree_survival$censoring[1,] # extreme difference for the first observation
@@ -247,7 +252,7 @@ tree_survival$censoring[3,] # pretty big difference
 tree_mm$censoring[4,]
 tree_survival$censoring[4,] # zero???
 tree_mm$censoring[5,]
-tree_survival$censoring[5,] # again zero
+tree_survival$censoring[5,]
 
 # may need to do some investigating here, but other matters are more pressing
 # an obvious possible explanation for the difference is that censoring times are included in the unique event times for survival (maybe revert?)
@@ -274,7 +279,7 @@ gc()
 devtools::load_all()
 library(randomForestSRC)
 set.seed(2026)
-n <- 1000
+n <- 10000
 X <- rbinom(n, 10, 0.5)
 Y <- rnorm(n)                 # noise
 Z <- 10 + rbinom(n, 80, 0.5)  # true survival time (relatively few unique values)
@@ -301,28 +306,28 @@ jump_data <- lapply(seq_len(nrow(sim_data)), function(i) {
 tree_survival <- jftree(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = FALSE)                # why did I not implement multi-threading for prediction for survival trees?
 tree_mm <- jftree(MM ~ ., data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, honest = FALSE)   # much faster for large n
 }
-print_tree(tree_mm, full = TRUE)
+print_tree(tree_mm)
 
 # n = 1000 (quite different)
-tree_survival$ibs             # 2.225711
-tree_survival$ibs.normalised  # 0.03837433
-tree_mm$ibs                   # 1.553373
-tree_mm$ibs.normalised        # 0.02725216
+tree_survival$ibs             # 2.145489
+tree_survival$ibs.normalised  # 0.03764016
+tree_mm$ibs                   # 1.963569
+tree_mm$ibs.normalised        # 0.03444858
 
 # n = 10000 (more similar)
-tree_survival$ibs             # 2.242711
-tree_survival$ibs.normalised  # 0.03737852
-tree_mm$ibs                   # 2.144577
-tree_mm$ibs.normalised        # 0.03574296
+tree_survival$ibs             # 2.218344
+tree_survival$ibs.normalised  # 0.0369724
+tree_mm$ibs                   # 1.993813
+tree_mm$ibs.normalised        # 0.03323021
 
 # n = 25000
-tree_survival$ibs             # 2.227265
-tree_survival$ibs.normalised  # 0.03712109
-tree_mm$ibs                   # 1.953496
-tree_mm$ibs.normalised        # 0.0331101
+tree_survival$ibs             # 2.176473
+tree_survival$ibs.normalised  # 0.03688937
+tree_mm$ibs                   # 1.969716
+tree_mm$ibs.normalised        # 0.03338501
 
 tree_mm$censoring[1,]
-tree_survival$censoring[1,]   # again lower than for mm, probably due to the inclusion of censoring times
+tree_survival$censoring[1,]   # much lower
 tree_mm$censoring[2,]
 tree_survival$censoring[2,]   # much lower
 tree_mm$censoring[3,]

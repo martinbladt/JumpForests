@@ -166,7 +166,8 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     # data here is jump data, a list of lists, each containing a vector 'times' and a vector 'states'
     result <- JFCppTreeMM(data, max_response_length, num_states, processed_data$data,
                           mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
-                          processed_data$categorical, processed_data$unique_values, seed)
+                          processed_data$categorical, processed_data$unique_values, seed,
+                          num_event_times)
     result$categorical.levels <- processed_data$categorical_levels
     return(result)
 
@@ -233,11 +234,12 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
 #'
 #' @param tree_list A fitted tree object from [jftree()].
 #' @param new_data Optional evaluation data.
+#' @param jump_data Jump data (only needed for multistate trees)
 #'
 #' @return Error metrics as a list.
 #' @export
 #'
-jftree.error <- function(tree_list, new_data = NULL) {
+jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL) {
   # if data is not supplied, return the error based on training data
   if (is.null(new_data)) {
     if (tree_list$tree.type == "Regression") {
@@ -256,8 +258,32 @@ jftree.error <- function(tree_list, new_data = NULL) {
     }
   }
 
-  # if new_data is supplied, compute predictions and error from scratch
+  # we need both jump data and feature data, so we need to check if the user has supplied a list of jump data and a data.frame of feature data
   covariates <- tree_list$feature.names
+  if (tree_list$tree.type == "Multi-state") {
+    if (is.null(jump_data) || !is.data.frame(new_data)) {
+      stop("For multi-state trees, jump_data and feature_data must be supplied.")
+    }
+
+    missing_columns <- setdiff(covariates, names(new_data))
+    if (length(missing_columns) > 0) {
+      stop("new_data is missing column(s): ", paste(missing_columns, collapse = ", "))
+    }
+
+    # ensures the response and features have the same order as the original dataset
+    new_data <- new_data[, covariates, drop = FALSE]
+    feature_indices <- which(names(new_data) %in% covariates) - 1
+    processed_data <- preprocess_data(new_data, tree_list$categorical.levels)
+
+    # determine response dimensions
+    max_response_length <- max(sapply(jump_data, function(e) length(e$states)))
+    num_states <- length(tree_list$init[[1]])
+
+    return(JFCppTreeErrorMM(tree_list, max_response_length, num_states, jump_data, processed_data$data, feature_indices,
+                      processed_data$categorical, processed_data$unique_values))
+  }
+
+  # if new_data is supplied, compute predictions and error from scratch
   response <- tree_list$response.names
   missing_columns <- setdiff(c(response, covariates), names(new_data))
   if (length(missing_columns) > 0) {

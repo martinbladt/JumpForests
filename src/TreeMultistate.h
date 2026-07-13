@@ -69,7 +69,7 @@ private:
   bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
   void computeInitialDist(size_t node_index);                     // computes the initial distribution in a terminal node
   void computeNA(size_t node_index);                              // computes the Nelson--Aalen estimator in a terminal node
-  void computeCensoringKM();                                      // computes the KM estimator for the censoring distribution in a terminal node
+  void computeCensoringKM(size_t node_index);                     // computes the KM estimator for the censoring distribution in a terminal node
   void computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final);
   void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold);

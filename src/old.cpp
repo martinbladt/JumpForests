@@ -1408,3 +1408,77 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
 }
 
 */
+
+// below is a temporary (now outdated) test function to make sure all methods work
+
+/*
+
+// [[Rcpp::export]]
+void fitSurvivalTree(DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, 
+                     NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical,
+                    NumericVector unique, NumericVector subset_indices) {
+  // convert the input to C++ vectors
+  vector<size_t> response_indices_cpp = as<vector<size_t>>(response_indices);
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+  vector<size_t> subset_indices_cpp = as<vector<size_t>>(subset_indices);
+
+  // determine the unique sorted (true) event times
+  vector<double> times = as<vector<double>>(df[response_indices[0]]);
+  vector<double> ind = as<vector<double>>(df[response_indices[1]]);
+  vector<double> unique_event_times;
+
+  // remove censored times
+  vector<double> observed_times;
+  for (int i = 0; i < times.size(); ++i) {
+    if (ind[i] == 1) {
+      observed_times.push_back(times[i]);
+    }
+  }
+
+  // sort and remove duplicated observed times
+  sort(observed_times.begin(), observed_times.end());
+  observed_times.push_back(-1); // to ensure the last observed time is included
+  for (int i = 0; i < observed_times.size() - 1; ++i) {
+    if (observed_times[i] != observed_times[i + 1]) {
+      unique_event_times.push_back(observed_times[i]);
+    }
+  }
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDs(unique_event_times, times);
+  vector<size_t> true_event_time_ids = computeTrueEventTimeIDs(unique_event_times, response_event_time_ids, ind);
+  
+  // create the SurvivalTree
+  SurvivalTree tree = SurvivalTree(unique_event_times, response_event_time_ids, true_event_time_ids, subset_indices_cpp);
+  shared_ptr<Data> data = make_shared<Data>(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
+  tree.initialise(data, mtry, min_node_size, nsplits, 2025); // just set seed to something
+
+  // grow the SurvivalTree
+  // the bug happens after
+  tree.grow();
+  Rcout << "Done!" << endl;
+
+  
+  // write out predictions (testing)
+  Rcout << "The terminal node values are:" << endl;
+  vector<vector<double>> predictions = tree.getCHF();
+  for (vector<double> vec : predictions) {
+    for (int i = 0; i < vec.size(); ++i) {
+      Rcout << vec[i] << ", ";
+    }
+    Rcout << endl;
+  }
+
+  // compute predictions (testing)
+  Rcout << "The predicted values for the data are: " << endl;
+  for (int i = 0; i < (*(tree.getData())).getNumberOfObs(); ++i) {
+    vector<double> pred = get<vector<double>>(tree.predict((*(tree.getData())).get_x_row(i)));
+    for (double h : pred) {
+      Rcout << h << ", ";
+    }
+    Rcout << endl;
+  }
+    
+}
+
+*/

@@ -558,7 +558,7 @@ void MultistateTree::makeLeaf(size_t node_index) {
     computeInitialDist(node_index);
 
     if (save_predictions) {
-        computeCensoringKM();
+        computeCensoringKM(node_index);
     }
 
     // update tree info
@@ -799,19 +799,27 @@ void MultistateTree::computeNA(size_t node_index) {
     this->na.push_back(std::move(na));
 }
 
-void MultistateTree::computeCensoringKM() {
+void MultistateTree::computeCensoringKM(size_t node_index) {
     // initalise and fetch data
     vector<double>KM_censoring(num_unique_event_times, 1);
-    size_t num_states = data->getNumberOfStates();
-    //const vector<size_t>& last_observed_times = data->getLastObservedTimes();
-    //const vector<uint8_t>& censoring_states = data->getCensoringStates();
-    //const vector<double>& unique_event_times = this->unique_event_times.get();
-    //const vector<size_t>& response_event_time_ids = this->response_event_time_ids.get();
     
     // compute total censoring and at risk contributions across states (integrator and 1/integrand of the NA estimator for censoring, respectively)
     vector<size_t> censoring_contribution_total = sum_vectors(censoring_contribution, num_unique_event_times);
     vector<size_t> num_at_risk_total = sum_vectors(num_at_risk, num_unique_event_times);
-    vector<size_t> num_jumps_total = sum_vectors(num_jumps, num_unique_event_times);
+    vector<size_t> observed_endpoints(num_unique_event_times, 0);
+    const vector<size_t>& indices = honest ? holdout_node_obs[node_index] : node_obs[node_index];
+    const vector<size_t>& last_observed_times = data->getLastObservedTimes();
+    const vector<uint8_t>& censoring_states = data->getCensoringStates();
+    const vector<uint8_t>& states = data->getStates();
+    uint8_t max_response_length = data->getMaxResponseLength();
+
+    // Only final uncensored endpoints leave the censoring risk set; intermediate state transitions do not.
+    for (size_t i : indices) {
+        size_t last_observed_time_id = last_observed_times[i];
+        if (censoring_states[i] == 0 && last_observed_time_id > i * max_response_length && states[last_observed_time_id] != 0) {
+            ++observed_endpoints[(*response_event_time_ids)[last_observed_time_id]];
+        }
+    }
 
     // possibly relevant for future debugging
     /*
@@ -826,7 +834,12 @@ void MultistateTree::computeCensoringKM() {
     for (size_t i = 1; i < num_unique_event_times; ++i) {
         if (num_at_risk_total[i - 1] > 0) {
             jump_size = censoring_contribution_total[i] - censoring_contribution_total[i - 1];
-            KM_censoring[i] = KM_censoring[i - 1] * (1 - jump_size / double(num_at_risk_total[i - 1] - num_jumps_total[i - 1]));
+            double denominator = static_cast<double>(num_at_risk_total[i - 1]) - static_cast<double>(observed_endpoints[i - 1]);
+            if (denominator > 0) {
+                KM_censoring[i] = KM_censoring[i - 1] * (1 - jump_size / denominator);
+            } else {
+                KM_censoring[i] = KM_censoring[i - 1];
+            }
         } else {
             KM_censoring[i] = KM_censoring[i - 1];
         }
@@ -1124,7 +1137,7 @@ vector<double> MultistateTree::computePredictions(const Data& new_data) {
 Computes all in-bag predictions, result is a vector with one, two or three flattened vectors
 depending on the parameters. First two vectors are always in-bag Nelson-Aalen estimators, and the
 same structure applies to the remaining output vectors. If compute_initial = true, the next vector is
-in-bag predicted initial distributions, and if compute_censoring = true, the OOB censoring predictions
+in-bag predicted initial distributions, and if compute_censoring = true, the censoring predictions
 are added to the result vector.
 
 */
@@ -1149,7 +1162,7 @@ vector<vector<double>> MultistateTree::computePredictions(bool compute_initial, 
 
     // initialise vectors of predictions
     vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
-    vector<double> predictions_init(num_obs * num_unique_event_times * num_states);
+    vector<double> predictions_init(num_obs * num_states);
     vector<double> censoring(num_obs * num_unique_event_times);
 
     for (size_t i = 0; i < num_obs; ++i) {
@@ -1219,12 +1232,14 @@ vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<
 
     for (size_t i = 0; i < num_obs; ++i) {
         const List& occ_probs_obs = as<List>(occupation_probs[i]);
+        size_t obs_index = i * num_unique_event_times * num_states;
         for (size_t t = 0; t < num_unique_event_times; ++t) {
             const vector<double> occ_probs_obs_t = as<vector<double>>(occ_probs_obs[t]);
+            size_t time_index = obs_index + t * num_states;
             double ipcw = weights[i * num_unique_event_times + t];
             // difference to survival: need to compute a contribution to the score across all states
             for (size_t j = 0; j < num_states; ++j) {
-                if (states_ind[i * num_unique_event_times * num_states + j]) {
+                if (states_ind[time_index + j]) {
                     brier[t * num_states + j] += ipcw * (1 - occ_probs_obs_t[j]) * (1 - occ_probs_obs_t[j]) * state_weights[j];
                 } else {
                     brier[t * num_states + j] += ipcw * occ_probs_obs_t[j] * occ_probs_obs_t[j] * state_weights[j];
@@ -1250,7 +1265,7 @@ vector<double> computeBrierScoreCppMM(const vector<bool>& states_ind, const vect
             double ipcw = weights[i * num_unique_event_times + t];
             // difference to survival: need to compute a contribution to the score across all states
             for (size_t j = 0; j < num_states; ++j) {
-                if (states_ind[i * num_unique_event_times * num_states + j]) {
+                if (states_ind[time_index + j]) {
                     brier[t * num_states + j] += ipcw * (1 - occupation_probs[time_index + j]) * (1 - occupation_probs[time_index + j]) * state_weights[j];
                 } else {
                     brier[t * num_states + j] += ipcw * occupation_probs[time_index + j] * occupation_probs[time_index + j] * state_weights[j];
@@ -1335,8 +1350,7 @@ vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states) {
     return aj;
 }
 
-// computes the occupation probabilities given a Nelson-Aalen estimator and an initial distribution
-// if na and init are flattened vectors, provide the number of estimators (na and init need to have the same 'dimensions')
+// computes occupation probabilities from flattened Nelson-Aalen estimators and one initial distribution per estimator
 vector<double> occupationProbabilitiesCpp(const vector<double>& na, const vector<double>& init, size_t num_states, size_t num_estimators) {
     size_t stride_length = na.size() / num_estimators;
     size_t dim = num_states * num_states;
@@ -1373,9 +1387,10 @@ vector<double> occupationProbabilitiesCpp(const vector<double>& na, const vector
     // now multiply with the initial distribution
     for (size_t i = 0; i < num_estimators; ++i) {
         size_t obs_index = i * num_unique_event_times * num_states;
+        size_t init_index = i * num_states;
         for (size_t t = 0; t < num_unique_event_times; ++t) {
             for (size_t j = 0; j < num_states; ++j) {
-                double init_val = init[obs_index + j];
+                double init_val = init[init_index + j];
                 for (size_t k = 0; k < num_states; ++k) {
                     result[obs_index + t * num_states + k] += init_val * aj[obs_index * num_states + t * dim + j * num_states + k];
                 }

@@ -281,7 +281,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   vector<double> censoring_indicators(data->getNumberOfObs(), 0);
   const vector<uint8_t> censoring_states = data->getCensoringStates();
   for (size_t i = 0; i < data->getNumberOfObs(); ++i) {
-    if (censoring_states[i] != 0) {
+    if (censoring_states[i] == 0) {
       censoring_indicators[i] = 1;    // censoring_state is 0 if and only if censoring has not occured
     }
   }
@@ -889,12 +889,59 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
     predictions = selectColumns(predictions, tree->getTrueEventTimeIDs());
     */    
   }
-  if (type == "Multi-state") {
-    
-  }
   else {
-    throw runtime_error("Type of forest not recognised");
+    throw runtime_error("Type of tree not recognised");
   }
+}
+
+// computes the error based on a a new dataset specifically for multi-state trees
+// [[Rcpp::export]]
+List JFCppTreeErrorMM(const List& JFTree, uint8_t max_response_length, uint8_t num_states, List jump_data, DataFrame df_features,
+                      NumericVector feature_indices, LogicalVector categorical, NumericVector unique) {
+  MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
+  num_states = tree->getData()->getNumberOfStates();
+
+  // convert the input to C++ vectors
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+
+  // convert the new data to a suitable C++ Data object
+  Data new_data = Data(jump_data, max_response_length, num_states, df_features, feature_indices_cpp, categorical_cpp, unique_cpp);
+  size_t num_obs = new_data.getNumberOfObs();
+
+  // Score on the fitted tree's event-time grid, including any thinning used at fit time.
+  vector<double> unique_event_times = tree->getEventTimes();
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, new_data.getTimes(), new_data.getStates());
+
+  // default weights (change later to make user-defined)
+  vector<double> state_weights(num_states, 1 / (double) num_states);
+
+  // compute all predictions and censoring indicators
+  vector<vector<double>> predictions_cpp = tree->computePredictions(true, true, new_data);
+  vector<double> censoring_indicators(new_data.getNumberOfObs(), 0);
+  const vector<uint8_t> censoring_states = new_data.getCensoringStates();
+  for (size_t i = 0; i < new_data.getNumberOfObs(); ++i) {
+    if (censoring_states[i] == 0) {
+      censoring_indicators[i] = 1;    // censoring_state is 0 if and only if censoring has not occured
+    }
+  }
+  // compute state indicators and occupation probabilities
+  vector<bool> states_ind = new_data.computeStateIndicators(response_event_time_ids, unique_event_times);
+  vector<double> occupation_probabilities = occupationProbabilitiesCpp(predictions_cpp[0], predictions_cpp[1], num_states, num_obs);
+
+  // now ready to compute Brier score error, starting with the IPCW weights
+  vector<double> IPCW_weights = computeIPCWCpp(new_data.getTimes(), censoring_indicators, unique_event_times, response_event_time_ids, predictions_cpp[2], {}, new_data.getLastObservedTimes());
+  // compute IBS and normalised IBS
+  vector<double> brier = computeBrierScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
+  pair<double, double> ibs = computeIBS(brier, unique_event_times, true);
+
+  // save in a list and return
+  List result = List::create(
+    Named("IBS.error") = ibs.first,
+    Named("normalised.IBS.error") = ibs.second
+  );
+  return result;
 }
 
 // growing random forests
@@ -1918,80 +1965,6 @@ void df_test(DataFrame data, NumericVector response_indices, NumericVector featu
     printVector(test.get_x_row(i));
   }
 }
-
-// below is a temporary (now outdated) test function to make sure all methods work
-
-/*
-
-// [[Rcpp::export]]
-void fitSurvivalTree(DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, 
-                     NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical,
-                    NumericVector unique, NumericVector subset_indices) {
-  // convert the input to C++ vectors
-  vector<size_t> response_indices_cpp = as<vector<size_t>>(response_indices);
-  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
-  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
-  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
-  vector<size_t> subset_indices_cpp = as<vector<size_t>>(subset_indices);
-
-  // determine the unique sorted (true) event times
-  vector<double> times = as<vector<double>>(df[response_indices[0]]);
-  vector<double> ind = as<vector<double>>(df[response_indices[1]]);
-  vector<double> unique_event_times;
-
-  // remove censored times
-  vector<double> observed_times;
-  for (int i = 0; i < times.size(); ++i) {
-    if (ind[i] == 1) {
-      observed_times.push_back(times[i]);
-    }
-  }
-
-  // sort and remove duplicated observed times
-  sort(observed_times.begin(), observed_times.end());
-  observed_times.push_back(-1); // to ensure the last observed time is included
-  for (int i = 0; i < observed_times.size() - 1; ++i) {
-    if (observed_times[i] != observed_times[i + 1]) {
-      unique_event_times.push_back(observed_times[i]);
-    }
-  }
-  vector<size_t> response_event_time_ids = computeResponseEventTimeIDs(unique_event_times, times);
-  vector<size_t> true_event_time_ids = computeTrueEventTimeIDs(unique_event_times, response_event_time_ids, ind);
-  
-  // create the SurvivalTree
-  SurvivalTree tree = SurvivalTree(unique_event_times, response_event_time_ids, true_event_time_ids, subset_indices_cpp);
-  shared_ptr<Data> data = make_shared<Data>(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
-  tree.initialise(data, mtry, min_node_size, nsplits, 2025); // just set seed to something
-
-  // grow the SurvivalTree
-  // the bug happens after
-  tree.grow();
-  Rcout << "Done!" << endl;
-
-  
-  // write out predictions (testing)
-  Rcout << "The terminal node values are:" << endl;
-  vector<vector<double>> predictions = tree.getCHF();
-  for (vector<double> vec : predictions) {
-    for (int i = 0; i < vec.size(); ++i) {
-      Rcout << vec[i] << ", ";
-    }
-    Rcout << endl;
-  }
-
-  // compute predictions (testing)
-  Rcout << "The predicted values for the data are: " << endl;
-  for (int i = 0; i < (*(tree.getData())).getNumberOfObs(); ++i) {
-    vector<double> pred = get<vector<double>>(tree.predict((*(tree.getData())).get_x_row(i)));
-    for (double h : pred) {
-      Rcout << h << ", ";
-    }
-    Rcout << endl;
-  }
-    
-}
-
-*/
 
 // a test function to ensure that all Data functionalities work
 // [[Rcpp::export]]

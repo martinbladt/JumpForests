@@ -120,6 +120,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// JFCppTreeErrorMM
+List JFCppTreeErrorMM(const List& JFTree, uint8_t max_response_length, uint8_t num_states, List jump_data, DataFrame df_features, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
+RcppExport SEXP _JumpForests_JFCppTreeErrorMM(SEXP JFTreeSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP jump_dataSEXP, SEXP df_featuresSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFTree(JFTreeSEXP);
+    Rcpp::traits::input_parameter< uint8_t >::type max_response_length(max_response_lengthSEXP);
+    Rcpp::traits::input_parameter< uint8_t >::type num_states(num_statesSEXP);
+    Rcpp::traits::input_parameter< List >::type jump_data(jump_dataSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df_features(df_featuresSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppTreeErrorMM(JFTree, max_response_length, num_states, jump_data, df_features, feature_indices, categorical, unique));
+    return rcpp_result_gen;
+END_RCPP
+}
 // JFCppForest
 List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
 RcppExport SEXP _JumpForests_JFCppForest(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP double_bootstrapSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP save_predictionsSEXP, SEXP num_event_timesSEXP) {
@@ -474,6 +492,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppTreePredictCensoring", (DL_FUNC) &_JumpForests_JFCppTreePredictCensoring, 5},
     {"_JumpForests_JFCppTreePredictMM", (DL_FUNC) &_JumpForests_JFCppTreePredictMM, 7},
     {"_JumpForests_JFCppTreeError", (DL_FUNC) &_JumpForests_JFCppTreeError, 6},
+    {"_JumpForests_JFCppTreeErrorMM", (DL_FUNC) &_JumpForests_JFCppTreeErrorMM, 8},
     {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 19},
     {"_JumpForests_JFCppForestMM", (DL_FUNC) &_JumpForests_JFCppForestMM, 20},
     {"_JumpForests_JFCppForestPredictTraining", (DL_FUNC) &_JumpForests_JFCppForestPredictTraining, 1},

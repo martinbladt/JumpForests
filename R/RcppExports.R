@@ -25,6 +25,10 @@ JFCppTreeError <- function(JFTree, df, feature_indices, categorical, unique, res
     .Call(`_JumpForests_JFCppTreeError`, JFTree, df, feature_indices, categorical, unique, response_indices)
 }
 
+JFCppTreeErrorMM <- function(JFTree, max_response_length, num_states, jump_data, df_features, feature_indices, categorical, unique) {
+    .Call(`_JumpForests_JFCppTreeErrorMM`, JFTree, max_response_length, num_states, jump_data, df_features, feature_indices, categorical, unique)
+}
+
 JFCppForest <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times = 0L) {
     .Call(`_JumpForests_JFCppForest`, tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
 }
