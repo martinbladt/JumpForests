@@ -11,6 +11,23 @@ vector<double> eventTimesAtIDs(const vector<double>& event_times, const vector<s
   return selected_event_times;
 }
 
+vector<double> normaliseStateWeights(const NumericVector& state_weights, size_t num_states) {
+  if (state_weights.size() == 0) {
+    return vector<double>(num_states, 1 / static_cast<double>(num_states));
+  }
+  if (static_cast<size_t>(state_weights.size()) != num_states) {
+    throw runtime_error("The length of state_weights must be equal to the number of states");
+  }
+
+  vector<double> state_weights_cpp = as<vector<double>>(state_weights);
+  for (double weight : state_weights_cpp) {
+    if (!R_finite(weight) || weight < 0) {
+      throw runtime_error("state_weights must contain finite non-negative values");
+    }
+  }
+  return state_weights_cpp;
+}
+
 }
 
 /*
@@ -195,7 +212,7 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 // [[Rcpp::export]]
 List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
                  unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
-                 unsigned int seed, size_t num_event_times = 0) {
+                 unsigned int seed, NumericVector state_weights, size_t num_event_times) {
 
   // convert the input to C++ vectors
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -266,8 +283,9 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
   result["Tree"] = multistate_tree;               // add the tree (as a pointer, only to be used for prediction in C++)
   JFCppTreePredict(result);                       // compute and save predictions on the data
 
+  vector<double> state_weights_cpp = normaliseStateWeights(state_weights, num_states);
+
   // compute and save error estimate (need to come up with something for multi-states)
-  vector<double> state_weights(num_states, 1 / double(num_states));   // just choose default for now, let the user specify later
   vector<double> censoring_indicators(data->getNumberOfObs(), 0);
   const vector<uint8_t> censoring_states = data->getCensoringStates();
   for (size_t i = 0; i < data->getNumberOfObs(); ++i) {
@@ -275,7 +293,7 @@ List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states
       censoring_indicators[i] = 1;    // censoring_state is 0 if and only if censoring has not occured
     }
   }
-  JFCppTreeErrorMultistate(result, data->getTimes(), data->getLastObservedTimes(), censoring_indicators, unique_event_times, response_event_time_ids, state_weights);
+  JFCppTreeErrorMultistate(result, data->getTimes(), data->getLastObservedTimes(), censoring_indicators, unique_event_times, response_event_time_ids, state_weights_cpp);
 
   // save information about the tree itself
   result["num.nodes"] = tree->getNumberOfNodes();
@@ -806,7 +824,7 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
 // computes the error based on a a new dataset specifically for multi-state trees
 // [[Rcpp::export]]
 List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, uint8_t num_states, List jump_data, DataFrame df_features,
-                      NumericVector feature_indices, LogicalVector categorical, NumericVector unique) {
+                      NumericVector feature_indices, LogicalVector categorical, NumericVector unique, NumericVector state_weights) {
   MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
   num_states = tree->getData()->getNumberOfStates();
 
@@ -823,8 +841,7 @@ List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, u
   vector<double> unique_event_times = tree->getEventTimes();
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, new_data.getTimes(), new_data.getStates());
 
-  // default weights (change later to make user-defined)
-  vector<double> state_weights(num_states, 1 / (double) num_states);
+  vector<double> state_weights_cpp = normaliseStateWeights(state_weights, num_states);
 
   // compute all predictions and censoring indicators
   vector<vector<double>> predictions_cpp = tree->computePredictions(true, true, new_data);
@@ -842,7 +859,7 @@ List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, u
   // now ready to compute Brier score error, starting with the IPCW weights
   vector<double> IPCW_weights = computeIPCWCpp(new_data.getTimes(), censoring_indicators, unique_event_times, response_event_time_ids, predictions_cpp[2], {}, new_data.getLastObservedTimes(), tree->getCensoringTimes());
   // compute IBS and normalised IBS
-  vector<double> brier = computeBrierScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
+  vector<double> brier = computeBrierScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights_cpp);
   pair<double, double> ibs = computeIBS(brier, unique_event_times, true);
 
   // save in a list and return

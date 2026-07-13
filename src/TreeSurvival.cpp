@@ -68,6 +68,7 @@ void SurvivalTree::computeSurvivalQuantities(const vector<size_t>& indices, vect
             j++;
         }
     }
+}
 
 // for computing survival quantities (number at risk and number of deaths) for all splits in a node (for splits on continuous features)
 void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,

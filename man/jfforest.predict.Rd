@@ -4,12 +4,21 @@
 \alias{jfforest.predict}
 \title{Predict from a fitted forest}
 \usage{
-jfforest.predict(forest_list, new_data = NULL)
+jfforest.predict(
+  forest_list,
+  new_data = NULL,
+  compute_censoring = FALSE,
+  compute_initial = FALSE
+)
 }
 \arguments{
 \item{forest_list}{A fitted forest object from [jfforest()].}
 
 \item{new_data}{Optional new data.}
+
+\item{compute_censoring}{Should the censoring distribution also be estimated (only valid for survival and multi-state trees)}
+
+\item{compute_initial}{Should the initial distribution also be estimated? (only valid for multi-state trees)}
 }
 \value{
 Predictions.

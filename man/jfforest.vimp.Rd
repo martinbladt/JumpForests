@@ -4,7 +4,13 @@
 \alias{jfforest.vimp}
 \title{Variable importance for a fitted forest}
 \usage{
-jfforest.vimp(forest_list, feature = NULL, seed = NULL, method = "permute")
+jfforest.vimp(
+  forest_list,
+  feature = NULL,
+  seed = NULL,
+  method = "permute",
+  loss = "default"
+)
 }
 \arguments{
 \item{forest_list}{A fitted forest object from [jfforest()].}
@@ -14,6 +20,8 @@ jfforest.vimp(forest_list, feature = NULL, seed = NULL, method = "permute")
 \item{seed}{Optional random seed.}
 
 \item{method}{Importance method, `"permute"` or `"random"`.}
+
+\item{loss}{Loss function for importance, `"default"`, `"brier"`, or `"misc"` depending on forest type.}
 }
 \value{
 Variable importance values.

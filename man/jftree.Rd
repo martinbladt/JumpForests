@@ -13,7 +13,9 @@ jftree(
   min_node_size = NULL,
   nsplits = 10,
   honest = FALSE,
-  seed = NULL
+  seed = NULL,
+  num_event_times = 0,
+  state_weights = NULL
 )
 }
 \arguments{
@@ -34,6 +36,10 @@ jftree(
 \item{honest}{Whether to use honest splitting.}
 
 \item{seed}{Optional random seed.}
+
+\item{num_event_times}{Maximum number of event times to use (only relevant for survival and multi-states)}
+
+\item{state_weights}{Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)}
 }
 \value{
 A fitted tree object as a list.

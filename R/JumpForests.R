@@ -14,13 +14,14 @@
 #' @param honest Whether to use honest splitting.
 #' @param seed Optional random seed.
 #' @param num_event_times Maximum number of event times to use (only relevant for survival and multi-states)
+#' @param state_weights Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)
 #'
 #' @return A fitted tree object as a list.
 #' @export
 #'
 # the main function for fitting trees (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
 jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
-                   honest = FALSE, seed = NULL, num_event_times = 0) {
+                   honest = FALSE, seed = NULL, num_event_times = 0, state_weights = NULL) {
   lhs <- as.character(formula[[2]])
   # if seed is not set, generate a random one
   if (is.null(seed)) {
@@ -162,12 +163,15 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     # determine number of states and max_response_length
     max_response_length <- max(sapply(data, function(e) length(e$states)))
     num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
+    if (is.null(state_weights)) {
+      state_weights <- numeric(0)
+    }
 
     # data here is jump data, a list of lists, each containing a vector 'times' and a vector 'states'
     result <- JFCppTreeMM(data, max_response_length, num_states, processed_data$data,
                           mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
                           processed_data$categorical, processed_data$unique_values, seed,
-                          num_event_times)
+                          state_weights, num_event_times)
     result$categorical.levels <- processed_data$categorical_levels
     return(result)
 
@@ -235,11 +239,12 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
 #' @param tree_list A fitted tree object from [jftree()].
 #' @param new_data Optional evaluation data.
 #' @param jump_data Jump data (only needed for multistate trees)
+#' @param state_weights Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)
 #'
 #' @return Error metrics as a list.
 #' @export
 #'
-jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL) {
+jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_weights = NULL) {
   # if data is not supplied, return the error based on training data
   if (is.null(new_data)) {
     if (tree_list$tree.type == "Regression") {
@@ -278,9 +283,12 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL) {
     # determine response dimensions
     max_response_length <- max(sapply(jump_data, function(e) length(e$states)))
     num_states <- length(tree_list$init[[1]])
+    if (is.null(state_weights)) {
+      state_weights <- numeric(0)
+    }
 
     return(JFCppTreeErrorMultistate(tree_list, max_response_length, num_states, jump_data, processed_data$data, feature_indices,
-                      processed_data$categorical, processed_data$unique_values))
+                      processed_data$categorical, processed_data$unique_values, state_weights))
   }
 
   # if new_data is supplied, compute predictions and error from scratch
@@ -650,6 +658,7 @@ jfforest.error <- function(forest_list, new_data = NULL) {
 #' @param feature Optional feature name.
 #' @param seed Optional random seed.
 #' @param method Importance method, `"permute"` or `"random"`.
+#' @param loss Loss function for importance, `"default"`, `"brier"`, or `"misc"` depending on forest type.
 #'
 #' @return Variable importance values.
 #' @export

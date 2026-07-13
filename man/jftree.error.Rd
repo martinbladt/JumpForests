@@ -4,12 +4,16 @@
 \alias{jftree.error}
 \title{Compute tree prediction error}
 \usage{
-jftree.error(tree_list, new_data = NULL)
+jftree.error(tree_list, new_data = NULL, jump_data = NULL, state_weights = NULL)
 }
 \arguments{
 \item{tree_list}{A fitted tree object from [jftree()].}
 
 \item{new_data}{Optional evaluation data.}
+
+\item{jump_data}{Jump data (only needed for multistate trees)}
+
+\item{state_weights}{Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)}
 }
 \value{
 Error metrics as a list.
