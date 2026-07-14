@@ -94,10 +94,6 @@ void SurvivalForest::grow() {
                 oob_indices[i] = computeOOBIndices(bootstrap_indices, n);
             }
         }
-
-        // Create and grow tree
-        //auto tree = make_unique<SurvivalTree>(unique_event_times, response_event_time_ids, true_event_time_ids, bootstrap_indices);
-
         uniform_int_distribution<size_t> dist(0, numeric_limits<size_t>::max());
         tree->initialise(data, mtry, min_node_size, nsplits, splitrule, honest, dist(local_rng));
         tree->setRNG(local_rng);
@@ -245,7 +241,7 @@ vector<vector<double>> SurvivalForest::computePredictions(const Data& new_data, 
 
 // for populating the leaves with the censoring KM estimators if these have not already been saved during fitting
 void SurvivalForest::computePredictionsCensoring() {
-    //#pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t j = 0; j < ntrees; ++j) {
         // fetch tree and group all the observations by leaves
         SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
@@ -406,7 +402,6 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, stri
                 ++valid_trees;
             }
         }
-        //total_vimp += (computeConcordanceIndex(tree_outcomes, times_tree, ind_tree) - computeConcordanceIndex(tree_outcomes_shuffled, times_tree, ind_tree)) * num_oob_obs;
     }
     
     if (valid_trees == 0) {
@@ -471,81 +466,4 @@ double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed) {
 
     // return forest VIMP
     return total_vimp / total_oob;
-}
-
-// computes VIMP predictions by random daughter assignments (this function is no longer used)
-vector<double> SurvivalForest::computePredictionsVIMPRandom(size_t feature, int feature_seed) {
-    size_t num_obs = data->getNumberOfObs();
-    vector<double> vimp_predictions(num_obs * num_unique_event_times, 0);
-    vector<size_t> num_oob_trees(num_obs, 0);
-
-    /*
-      Use one RNG stream per tree and advance it across that tree's OOB cases.
-      Reseeding per observation would give every OOB case in a tree the same random daughter sequence.
-    */
-    for (size_t j = 0; j < ntrees; ++j) {
-        SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
-        mt19937 local_rng = makeVIMPTreeRNG(feature_seed, j);
-
-        for (size_t i = 0; i < num_obs; ++i) {
-            if (!oob_indices[j][i]) {
-                continue;
-            }
-
-            ++num_oob_trees[i];
-            vector<double> vimp_tree_pred = get<vector<double>>(tree->predictVIMP(data->get_x_row(i), feature, local_rng));
-            for (size_t k = 0; k < num_unique_event_times; ++k) {
-                vimp_predictions[i * num_unique_event_times + k] += vimp_tree_pred[k];
-            }
-        }
-    }
-
-    // normalise predictions by the number of OOB trees for each observation
-    for (size_t i = 0; i < num_obs; ++i) {
-        for (size_t k = 0; k < num_unique_event_times; ++k) {
-            if (num_oob_trees[i] > 0) {
-                vimp_predictions[i * num_unique_event_times + k] /= num_oob_trees[i];
-            }
-        }
-    }
-    return vimp_predictions; 
-}
-
-// computes VIMP predictions by permuting features
-vector<double> SurvivalForest::computePredictionsVIMPPermute(size_t feature, int feature_seed) {
-    size_t num_obs = data->getNumberOfObs();
-    vector<double> vimp_predictions(num_obs * num_unique_event_times);
-
-    // shuffle feature values for all trees among the oob covariates
-    vector<vector<size_t>> oob_indices_non_bool;
-    OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
-    const vector<vector<double>>& shuffled_values_feature = shuffledFeatureValues(oob_indices_non_bool, feature, feature_seed);
-
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
-    for (size_t i = 0; i < num_obs; ++i) {
-        vector<double> vimp_pred(num_unique_event_times, 0);
-        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
-
-        // compute the sum of all oob predictions for observation i
-        for (size_t j = 0; j < ntrees; ++j) {
-            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
-            
-            if (oob_indices[j][i]) {
-                ++num_oob_trees;
-                vector<double> x = data->get_x_row(i);
-                x[feature] = shuffled_values_feature[j][i];
-                vector<double> vimp_tree_pred = get<vector<double>>(tree->predict(x));
-                sum_vectors(vimp_pred, vimp_tree_pred);
-            }
-        }
-
-        // normalise and save predictions
-        for (size_t k = 0; k < num_unique_event_times; ++k) {
-            if (num_oob_trees > 0) {
-                vimp_pred[k] /= num_oob_trees;
-            }
-            vimp_predictions[i * num_unique_event_times + k] = vimp_pred[k];
-        }
-    }
-    return vimp_predictions; 
 }

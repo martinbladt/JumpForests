@@ -126,7 +126,6 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
         times.assign(num_obs * max_response_length, 0);
         states.assign(num_obs * max_response_length, 0);
         last_observed_times.assign(num_obs, 0);
-        //censoring_times.assign(num_obs, 0);
         censoring_states.assign(num_obs, 0);
         for (size_t i = 0; i < num_obs; ++i) {
             List obs = as<List>(jump_data[i]);

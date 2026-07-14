@@ -37,6 +37,10 @@ public:
   // for computing predictions after the forest is grown
   vector<vector<double>> computePredictions(bool compute_initial, bool compute_censoring);
   vector<vector<double>> computePredictions(const Data& new_data, bool compute_initial, bool compute_censoring);
+  // VIMP functions
+  double computeVIMPPermute(size_t feature, int feature_seed, string error_type);
+  double computeVIMPRandom(size_t feature, int feature_seed);
+  
 private:
   // quantities of interest specific to multi-state forests
   bool save_predictions;

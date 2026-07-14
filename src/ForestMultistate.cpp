@@ -334,6 +334,7 @@ vector<vector<double>> MultistateForest::computePredictions(const Data& new_data
 // Populate leaf-level censoring estimators when they were not saved during fitting.
 void MultistateForest::computePredictionsCensoring() {
     size_t num_obs = data->getNumberOfObs();
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t j = 0; j < ntrees; ++j) {
         MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
         size_t num_nodes = tree->getNumberOfNodes();

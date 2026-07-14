@@ -2,7 +2,6 @@
 #define TREE_MULTISTATE_H
 
 #include "Tree.h"
-//#include <RcppArmadillo.h>
 
 class MultistateTree : public Tree {
 public:

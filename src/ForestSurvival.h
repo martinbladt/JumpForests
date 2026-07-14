@@ -35,25 +35,15 @@ public:
     return save_predictions;
   }
   // for computing predictions after the forest is grown
-  // first vector is a flattened 2D array with in-bag predictions, the other with oob predictions
-  //pair<vector<double>, vector<double>> computePredictions();
   vector<vector<double>> computePredictions(bool compute_censoring);
   vector<vector<double>> computePredictions(const Data& new_data, bool compute_censoring);
   // computes OOB censoring predictions after these are saved in the terminal nodes
-  //vector<double> computePredictionsCensoringOOB();
-  // computing predictions on a new dataset (output is a flattened array)
-  //vector<double> computePredictions(const Data& new_data);
-  //pair<vector<double>, vector<double>> computePredictionsCensoring(const Data& new_data);
   void computePredictionsCensoring();
-  // for computing OOB predictions for VIMP
-  vector<double> computePredictionsVIMPRandom(size_t feature, int feature_seed);
-  vector<double> computePredictionsVIMPPermute(size_t feature, int feature_seed);
+  // VIMP functions
   double computeVIMPPermute(size_t feature, int feature_seed, string error_type);
   double computeVIMPRandom(size_t feature, int feature_seed);
 
 private:
-  // the trees in the forest
-  //vector<unique_ptr<SurvivalTree>> trees;
   bool save_predictions;
 
   // quantities of interest specific to survival forests

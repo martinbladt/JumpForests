@@ -18,7 +18,6 @@ public:
   ValueType predict(const vector<double>& x) override {
     return classes[predictionLeafID(x)];
   }
-  //vector<size_t> computePredictions(const Data& new_data) override;
   // VIMP prediction for classification trees
   ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
     return classes[predictionLeafIDVIMP(x, feature, rng)];
@@ -36,7 +35,6 @@ private:
   vector<vector<double>> class_counts_node;        // number of each class in every node
 
   // growing clasification trees
-  //double computeSum(const vector<size_t>& indices);
   void makeLeaf(size_t node_index);
   bool createSplit(size_t node_index) override;
   vector<double> computeClassCounts(const vector<size_t>& node_obs);

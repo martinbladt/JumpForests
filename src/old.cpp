@@ -1762,3 +1762,183 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
 }
 
 */
+
+/*
+
+old VIMP functions for survival
+
+// computes VIMP predictions by random daughter assignments (this function is no longer used)
+vector<double> SurvivalForest::computePredictionsVIMPRandom(size_t feature, int feature_seed) {
+    size_t num_obs = data->getNumberOfObs();
+    vector<double> vimp_predictions(num_obs * num_unique_event_times, 0);
+    vector<size_t> num_oob_trees(num_obs, 0);
+
+    
+    //  Use one RNG stream per tree and advance it across that tree's OOB cases.
+    //  Reseeding per observation would give every OOB case in a tree the same random daughter sequence.
+    
+    for (size_t j = 0; j < ntrees; ++j) {
+        SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+        mt19937 local_rng = makeVIMPTreeRNG(feature_seed, j);
+
+        for (size_t i = 0; i < num_obs; ++i) {
+            if (!oob_indices[j][i]) {
+                continue;
+            }
+
+            ++num_oob_trees[i];
+            vector<double> vimp_tree_pred = get<vector<double>>(tree->predictVIMP(data->get_x_row(i), feature, local_rng));
+            for (size_t k = 0; k < num_unique_event_times; ++k) {
+                vimp_predictions[i * num_unique_event_times + k] += vimp_tree_pred[k];
+            }
+        }
+    }
+
+    // normalise predictions by the number of OOB trees for each observation
+    for (size_t i = 0; i < num_obs; ++i) {
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            if (num_oob_trees[i] > 0) {
+                vimp_predictions[i * num_unique_event_times + k] /= num_oob_trees[i];
+            }
+        }
+    }
+    return vimp_predictions; 
+}
+
+// computes VIMP predictions by permuting features
+vector<double> SurvivalForest::computePredictionsVIMPPermute(size_t feature, int feature_seed) {
+    size_t num_obs = data->getNumberOfObs();
+    vector<double> vimp_predictions(num_obs * num_unique_event_times);
+
+    // shuffle feature values for all trees among the oob covariates
+    vector<vector<size_t>> oob_indices_non_bool;
+    OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
+    const vector<vector<double>>& shuffled_values_feature = shuffledFeatureValues(oob_indices_non_bool, feature, feature_seed);
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < num_obs; ++i) {
+        vector<double> vimp_pred(num_unique_event_times, 0);
+        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+
+        // compute the sum of all oob predictions for observation i
+        for (size_t j = 0; j < ntrees; ++j) {
+            SurvivalTree* tree = dynamic_cast<SurvivalTree*>(trees[j].get());
+            
+            if (oob_indices[j][i]) {
+                ++num_oob_trees;
+                vector<double> x = data->get_x_row(i);
+                x[feature] = shuffled_values_feature[j][i];
+                vector<double> vimp_tree_pred = get<vector<double>>(tree->predict(x));
+                sum_vectors(vimp_pred, vimp_tree_pred);
+            }
+        }
+
+        // normalise and save predictions
+        for (size_t k = 0; k < num_unique_event_times; ++k) {
+            if (num_oob_trees > 0) {
+                vimp_pred[k] /= num_oob_trees;
+            }
+            vimp_predictions[i * num_unique_event_times + k] = vimp_pred[k];
+        }
+    }
+    return vimp_predictions; 
+}
+
+*/
+
+/*
+
+// NB: this function is no longer used since we don't remove times without an observed event
+vector<double> computeUniqueEventTimes(const vector<double>& times, const vector<size_t>& ind) {
+    // remove censored times 
+    vector<double> observed_times;
+    for (size_t i = 0; i < times.size(); ++i) {
+      if (ind[i] == 1) {
+        observed_times.push_back(times[i]);
+      }
+    }
+    
+    // sort and remove duplicated observed times
+    sort(observed_times.begin(), observed_times.end());
+    observed_times.erase(unique(observed_times.begin(), observed_times.end()), observed_times.end());
+    return observed_times; 
+}
+
+*/
+
+/*
+
+// computes all 2-partitions of the vector of doubles feature_values and puts all subsets in one vector
+// used for determining splits on a categorical variable
+vector<vector<double>> compute2Partitions(const vector<double>& feature_values) {
+    vector<vector<double>> result;
+    size_t n = feature_values.size();
+
+    // Loop over all subsets except the empty set and the whole set
+    for (size_t i = 1; i < (1 << n) - 1; ++i) {
+        vector<double> subset1, subset2;
+        for (size_t j = 0; j < n; ++j) {
+            if (i & (1 << j)) {
+                subset1.push_back(feature_values[j]);
+            } else {
+                subset2.push_back(feature_values[j]);
+            }
+        }
+
+        // To avoid duplicate partitions like {A,B} and {B,A}, ensure subset1 < subset2
+        if (subset1 < subset2) {
+            result.emplace_back(subset1);
+            result.emplace_back(subset2);
+        }
+    }
+
+    return result;
+}
+
+*/
+
+/*
+
+// adds two flattened d x d matrices
+vector<size_t> addMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d) {
+    vector<size_t> result(d * d);
+    for (size_t i = 0; i < d; ++i) {
+        for (size_t j = 0; j < d; ++j) {
+            result[i * d + j] = matrix1[i * d + j] + matrix2[i * d + j];
+        }
+    }
+    return result;
+}
+
+*/
+
+/*
+
+vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states) {
+    vector<double> aj = vector<double>(na.size(), 0);
+    size_t dim = num_states * num_states;   // number of entries in each matrix
+    size_t num_unique_event_times = na.size() / dim;
+    // initial value is the identity matrix
+    for (size_t j = 0; j < num_states; ++j) {
+        aj[j * num_states + j] = 1;
+    }
+
+    // compute the Aalen--Johansen estimator at each jump time using an optimised matrix multiplication scheme
+    for (size_t i = 1; i < num_unique_event_times; ++i) {
+        for (size_t j = 0; j < num_states; ++j) {           // row of the aj matrix
+            for (size_t k = 0; k < num_states; ++k) {       // column of the aj matrix
+                double prev = aj[(i - 1) * dim + j * num_states + k];
+                for (size_t l = 0; l < num_states; ++l) {   // column of matrix in increment
+                    double contribution = na[i * dim + k * num_states + l] - na[(i - 1) * dim + k * num_states + l];
+                    if (k == l) {
+                        ++contribution;
+                    }
+                    aj[i * dim + j * num_states + l] += prev * contribution;
+                }
+            }
+        }
+    }
+    return aj;
+}
+
+*/

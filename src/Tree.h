@@ -24,7 +24,6 @@ public:
 
   // predicted value depending on the type of tree (must be overriden by a derived Tree class)
   virtual ValueType predict(const vector<double>& x) = 0;               // predicting on a single observation
-  //virtual vector<double> computePredictions(const Data& new_data) = 0;  // for computing observations on an entire dataset
 
   // returns the ID of the leaf containing x
   size_t predictionLeafID(const vector<double>& x);

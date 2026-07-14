@@ -329,7 +329,6 @@ void JFCppTreePredict(List& JFTree) {
   if (type == "Classification") {
     ClassificationTree* tree = ((XPtr<ClassificationTree>) JFTree["Tree"]).get();
     size_t num_classes = as<size_t>(JFTree["num.classes"]);
-    //size_t num_classes = tree->getData()->getNumClasses();
     NumericVector predictions(num_obs);
     NumericMatrix predictions_prob(num_obs, num_classes);
 
@@ -412,7 +411,6 @@ void JFCppTreePredict(List& JFTree) {
 
       // save censoring KM estimator
       vector<double> cens_pred = cens[leaf_id];
-      //printVector(cens_pred);
       NumericVector rcens(cens_pred.begin(), cens_pred.end());
       censoring.row(i) = rcens;
       vector<double> cens_pred_full = cens_full[leaf_id];
@@ -462,7 +460,6 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
   if (type == "Classification") {
     ClassificationTree* tree = ((XPtr<ClassificationTree>) JFTree["Tree"]).get();
     size_t num_classes = as<size_t>(JFTree["num.classes"]);
-    //size_t num_classes = tree->getData()->getNumClasses();
     NumericMatrix predictions(num_obs, num_classes + 1);
     
     // fetch predictions, first vector is the predicted classes, second a flattened vector of class probabilities
@@ -580,8 +577,6 @@ List JFCppTreePredictMultistate(const List& JFTree, DataFrame df, NumericVector 
     //const vector<double>& pred = get<vector<double>>(tree->predict(new_data.get_x_row(i)));
     for (size_t j = 0; j < num_unique_event_times; ++j) {
       auto start_it = predictions_cpp[0].begin() + ((i * num_unique_event_times + j) * num_states * num_states);
-      //auto start_it = predictions_cpp.begin() + ((i * num_unique_event_times + j) * num_states * num_states);
-      //auto start_it = pred.begin() + (j * num_states * num_states);
       NumericMatrix pred_time(num_states, num_states, start_it);
       rpred[j] = transpose(pred_time);
     }
@@ -590,9 +585,7 @@ List JFCppTreePredictMultistate(const List& JFTree, DataFrame df, NumericVector 
     // if compute_initial == true, save initial distribution
     if (compute_initial) {
       NumericVector rpred_init(num_states);
-      //vector<double> pred_init = tree->predictInitDist(new_data.get_x_row(i));
       for (size_t j = 0; j < num_states; ++j) {
-        //rpred_init[j] = predictions_init_cpp[i * num_states + j];
         rpred_init[j] = predictions_cpp[1][i * num_states + j];
       }
       predictions_init[i] = rpred_init;
@@ -601,11 +594,9 @@ List JFCppTreePredictMultistate(const List& JFTree, DataFrame df, NumericVector 
     if (compute_censoring && compute_initial) {
       copy(censoring_event_cpp.begin() + i * num_unique_event_times, censoring_event_cpp.begin() + (i + 1) * num_unique_event_times, censoring.row(i).begin());
       copy(predictions_cpp[2].begin() + i * num_censoring_times, predictions_cpp[2].begin() + (i + 1) * num_censoring_times, censoring_full.row(i).begin());
-      //copy(censoring_cpp.begin() + i * num_unique_event_times, censoring_cpp.begin() + (i + 1) * num_unique_event_times, censoring.row(i).begin());
     } else if (compute_censoring) {
       copy(censoring_event_cpp.begin() + i * num_unique_event_times, censoring_event_cpp.begin() + (i + 1) * num_unique_event_times, censoring.row(i).begin());
       copy(predictions_cpp[1].begin() + i * num_censoring_times, predictions_cpp[1].begin() + (i + 1) * num_censoring_times, censoring_full.row(i).begin());
-      //copy(censoring_cpp.begin() + i * num_unique_event_times, censoring_cpp.begin() + (i + 1) * num_unique_event_times, censoring.row(i).begin());
     }
   }
 
@@ -695,12 +686,6 @@ void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vec
   JFTree["ibs.normalised"] = ibs.second;
   JFTree["ikl"] = ikl.first;
   JFTree["ikl.normalised"] = ikl.second;
-}
-
-double JFCppErrorSurvival(const NumericMatrix& predictions, const vector<double>& times, const vector<double>& ind) {
-  // compute Harrell's C-index
-  vector<double> outcomes = computeOutcomes(predictions);
-  return 1 - computeConcordanceIndex(outcomes, times, ind);
 }
 
 // Multi-state
@@ -1421,7 +1406,6 @@ List JFCppForestPredictMultistate(const List& JFForest, DataFrame df, NumericVec
       for (size_t j = 0; j < num_states; ++j) {
         for (size_t k = 0; k < num_states; ++k) {
           pred_time(j, k) = predictions_cpp[0][i * num_unique_event_times * dim + dim * t + j * num_states + k];
-          //pred_time(j, k) = predictions_cpp[i * num_unique_event_times * dim + dim * t + j * num_states + k];
         }
       }
       rpred[t] = pred_time;
@@ -1434,7 +1418,6 @@ List JFCppForestPredictMultistate(const List& JFForest, DataFrame df, NumericVec
       NumericVector rpred_init(num_states);
       for (size_t j = 0; j < num_states; ++j) {
         rpred_init[j] = predictions_cpp[1][i * num_states + j];
-        //rpred_init[j] = predictions_init_cpp[i * num_states + j];
       }
       predictions_init[i] = rpred_init;
     }
@@ -1741,7 +1724,6 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
     }
     
     const vector<vector<double>>& predictions = forest->computePredictions(new_data, true);
-    //pair<vector<double>, vector<double>> predictions = forest->computePredictionsCensoring(new_data);
 
     // truncate the predictions to only include non-censored times
     vector<double> predictions_final = selectColumns(predictions[0], true_event_time_ids, num_unique_event_times);

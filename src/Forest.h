@@ -39,7 +39,7 @@ public:
     return data;
   }
 
-  // frees memory after oob_indices are no longer necessary (maybe not best practice to have it public)
+  // frees memory after oob_indices are no longer necessary (maybe not best practice to have it public, but not used anyway)
   void cleanUp() {
     vector<vector<bool>>().swap(oob_indices);
   }

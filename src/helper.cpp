@@ -99,33 +99,6 @@ vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, si
     return result;
 }
 
-// computes all 2-partitions of the vector of doubles feature_values and puts all subsets in one vector
-// used for determining splits on a categorical variable
-vector<vector<double>> compute2Partitions(const vector<double>& feature_values) {
-    vector<vector<double>> result;
-    size_t n = feature_values.size();
-
-    // Loop over all subsets except the empty set and the whole set
-    for (size_t i = 1; i < (1 << n) - 1; ++i) {
-        vector<double> subset1, subset2;
-        for (size_t j = 0; j < n; ++j) {
-            if (i & (1 << j)) {
-                subset1.push_back(feature_values[j]);
-            } else {
-                subset2.push_back(feature_values[j]);
-            }
-        }
-
-        // To avoid duplicate partitions like {A,B} and {B,A}, ensure subset1 < subset2
-        if (subset1 < subset2) {
-            result.emplace_back(subset1);
-            result.emplace_back(subset2);
-        }
-    }
-
-    return result;
-}
-
 // samples k indices from global_indices with or without replacement
 vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, bool with_replacement, mt19937& rng) {    
     size_t n = global_indices.size();
@@ -208,17 +181,6 @@ vector<size_t> transpose(const vector<size_t>& matrix, size_t d) {
     for (size_t i = 0; i < d; ++i) {
         for (size_t j = 0; j < d; ++j) {
             result[j * d + i] = matrix[i * d + j];
-        }
-    }
-    return result;
-}
-
-// adds two flattened d x d matrices
-vector<size_t> addMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d) {
-    vector<size_t> result(d * d);
-    for (size_t i = 0; i < d; ++i) {
-        for (size_t j = 0; j < d; ++j) {
-            result[i * d + j] = matrix1[i * d + j] + matrix2[i * d + j];
         }
     }
     return result;
@@ -316,7 +278,6 @@ void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matr
         for (size_t i = 1; i < num_matrices; ++i) {
             for (size_t j = 0; j < d; ++j) {
                 for (size_t k = 0; k < d; ++k) {
-                    //size_t index = i * dim + j * d + k;
                     size_t prev_matrix_index = (i - 1) * dim + j * d + k;   // used to get t- instead of t for accumulated jumps in the key decomposition for multi-states 
                     acc_matrix[v_index + prev_matrix_index + dim] = acc_matrix[v_index + prev_matrix_index] + matrix[v_index + prev_matrix_index];
                 }

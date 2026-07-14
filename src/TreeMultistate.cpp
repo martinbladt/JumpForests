@@ -33,8 +33,6 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
     const vector<double>& times = data->getTimes();
     const vector<uint8_t>& states = data->getStates();
     const vector<size_t>& last_observed_times = data->getLastObservedTimes();
-    //const vector<double>& last_observed_times = data->getLastObservedTimes();
-    //const vector<double>& censoring_times = data->getCensoringTimes();
     const vector<uint8_t>& censoring_states = data->getCensoringStates();
 
     uint8_t max_response_length = data->getMaxResponseLength();
@@ -56,8 +54,6 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         uint8_t censoring_state = censoring_states[i];
         if (censoring_state != 0) {     // censoring actually occurs
             double R = times[last_observed_times[i]];
-            //double R = last_observed_times[i];    // old: when we saved the last observed time itself
-            //double R = censoring_times[i];        // old: when we saved the censoring times only
             for (size_t j = 0; j < num_unique_event_times; ++j) {
                 if ((*unique_event_times)[j] > R) {
                     // all following event times also satisfy > R
@@ -78,19 +74,16 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
             int prev_state_index = states[index - 1] - 1;
             if (current_state_index != prev_state_index) {
                 ++jumps[id * dim + prev_state_index * num_states + current_state_index];
-                //num_jumps_acc[id * dim + prev_state_index * num_states + current_state_index] = num_jumps_acc[(id - 1) * dim + prev_state_index * num_states + current_state_index] + 1;
             } 
             ++j;
             ++index;
         }
-        //Rcout << "Finished computing jumps for index " << i << endl;
     }
     // compute the cumulative number of jumps
     cumulativeMatrixSums(num_jumps_acc, jumps, num_states);
 
     // now compute number at risk via the key decomposition
     for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above
-        //vector<int> subtraction = subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1));
         vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1)), static_cast<size_t>(num_states));
         for (size_t k = 0; k < num_states; ++k) {
             // key decomposition
@@ -148,8 +141,6 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
                 uint8_t censoring_state = censoring_states[i];
                 if (censoring_state != 0) {     // censoring actually occurs
                     double R = times[last_observed_times[i]];
-                    //double R = last_observed_times[i];
-                    //double R  = censoring_times[i];
                     for (size_t j = 0; j < num_unique_event_times; ++j) {
                         if ((*unique_event_times)[j] > R) {
                             // all following event times also satisfy > R
@@ -772,10 +763,6 @@ double MultistateTree::conserve(const vector<size_t>& num_jumps, const vector<si
         Rcout << "Added to cons: " << (num_at_risk_daughter[at_risk_index + j] * sum1_jump + num_at_risk_daughter_2[0] * sum2_jump) / num_at_risk[j] << endl;
         cons += (num_at_risk_daughter[at_risk_index + j] * sum1_jump + num_at_risk_daughter_2[0] * sum2_jump) / num_at_risk[j];
         Rcout << "cons = " << cons << endl;
-
-        // reset NAsum vectors
-        //fill(NAsum1.begin(), NAsum1.end(), 0);
-        //fill(NAsum2.begin(), NAsum2.end(), 0);
     }
     return 1/(1 + cons);
 }
@@ -1098,33 +1085,6 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
     return response_event_time_ids;
 }
 
-vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states) {
-    vector<double> aj = vector<double>(na.size(), 0);
-    size_t dim = num_states * num_states;   // number of entries in each matrix
-    size_t num_unique_event_times = na.size() / dim;
-    // initial value is the identity matrix
-    for (size_t j = 0; j < num_states; ++j) {
-        aj[j * num_states + j] = 1;
-    }
-
-    // compute the Aalen--Johansen estimator at each jump time using an optimised matrix multiplication scheme
-    for (size_t i = 1; i < num_unique_event_times; ++i) {
-        for (size_t j = 0; j < num_states; ++j) {           // row of the aj matrix
-            for (size_t k = 0; k < num_states; ++k) {       // column of the aj matrix
-                double prev = aj[(i - 1) * dim + j * num_states + k];
-                for (size_t l = 0; l < num_states; ++l) {   // column of matrix in increment
-                    double contribution = na[i * dim + k * num_states + l] - na[(i - 1) * dim + k * num_states + l];
-                    if (k == l) {
-                        ++contribution;
-                    }
-                    aj[i * dim + j * num_states + l] += prev * contribution;
-                }
-            }
-        }
-    }
-    return aj;
-}
-
 // computes occupation probabilities from flattened Nelson-Aalen estimators and one initial distribution per estimator
 vector<double> occupationProbabilitiesCpp(const vector<double>& na, const vector<double>& init, size_t num_states, size_t num_estimators) {
     size_t stride_length = na.size() / num_estimators;
@@ -1201,7 +1161,6 @@ vector<double> occupationProbabilities(const List& na, const List& init, size_t 
                 for (size_t k = 0; k < num_states; ++k) {       // col of the aj matrix
                     double prev = aj[obs_index + (t - 1) * dim + j * num_states + k];
                     for (size_t l = 0; l < num_states; ++l) {   // column of matrix in increment
-                        //double contribution = na[obs_index + t * dim + k * num_states + l] - na[obs_index + (t - 1) * dim + k * num_states + l];
                         double contribution = na_obs_cur(k, l) - na_obs_prev(k, l);
                         if (k == l) {
                             ++contribution;

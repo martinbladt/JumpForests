@@ -85,7 +85,6 @@ void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t f
             if (feature_val > split_points[j]) {
                 ++num_obs_right[j];
                 ++delta_num_at_risk_right[j * num_unique_event_times + time_id];
-                //Rcout << "Line 152: death? " << data->get_y(i, 1) << endl;
                 if (data->get_y(i, 1) == 1) {
                     ++num_deaths_right[j * num_unique_event_times + time_id];
                 }
@@ -142,7 +141,6 @@ void SurvivalTree::bestSplitContinuous(size_t node_index, size_t feature, double
         if (splitrule == "approxlogrank") {
             split_val = approxLogRank(num_deaths, num_at_risk, num_deaths_right, num_at_risk_right, i);
         }
-        //Rcout << "Line 193: log-rank value: " << split_val << endl;
         if (split_val > best_split_val) {
             best_split_val = split_val;
             best_feature = feature;
@@ -932,22 +930,6 @@ vector<size_t> computeTrueEventTimeIDs(const vector<double>& unique_event_times,
         }
     }
     return final_time_indices;
-}
-
-// NB: this function is no longer used since we don't remove times without an observed event
-vector<double> computeUniqueEventTimes(const vector<double>& times, const vector<size_t>& ind) {
-    // remove censored times 
-    vector<double> observed_times;
-    for (size_t i = 0; i < times.size(); ++i) {
-      if (ind[i] == 1) {
-        observed_times.push_back(times[i]);
-      }
-    }
-    
-    // sort and remove duplicated observed times
-    sort(observed_times.begin(), observed_times.end());
-    observed_times.erase(unique(observed_times.begin(), observed_times.end()), observed_times.end());
-    return observed_times; 
 }
 
 // computes the Kaplan-Meier estimator given a Nelson-Aalen estimator
