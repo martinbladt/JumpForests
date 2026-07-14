@@ -688,9 +688,13 @@ void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vec
   vector<double> censoring_times = as<vector<double>>(JFTree["censoring.times"]);
   vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFTree["censoring.full"], times, {}, censoring_times);
   vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, JFTree["predictions.km"]);
-  pair<double, double> ibs = computeIBS(brier, unique_event_times);
+  vector<double> kl = computeKLScore(times, IPCW_weights, unique_event_times, JFTree["predictions.km"]);
+  pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times);
+  pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times);
   JFTree["ibs"] = ibs.first;
   JFTree["ibs.normalised"] = ibs.second;
+  JFTree["ikl"] = ikl.first;
+  JFTree["ikl.normalised"] = ikl.second;
 }
 
 double JFCppErrorSurvival(const NumericMatrix& predictions, const vector<double>& times, const vector<double>& ind) {
@@ -713,16 +717,20 @@ void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& times, const v
 
   // compute occupation probabilities as a flattened vector (IMPORTANT: Let the user specify whether init should be used!)
   vector<double> occupation_probabilities = occupationProbabilities(JFTree["predictions"], JFTree["init"], state_weights.size());
+
   // compute the integrated Brier score (IBS) and the normalised IBS
   vector<double> brier = computeBrierScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
-  pair<double, double> ibs = computeIBS(brier, unique_event_times, true);
+  pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times, true);
 
   // compute the integrated Kullback-Leibler loss and the normalised IKL
-  // add this here when IBS seems to work
+  vector<double> kl = computeKLScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
+  pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
 
   // save all the error metrics in the tree list
   JFTree["ibs"] = ibs.first;
   JFTree["ibs.normalised"] = ibs.second;
+  JFTree["ikl"] = ikl.first;
+  JFTree["ikl.normalised"] = ikl.second;
 }
 
 // computes the error based on a a new dataset, here we don't need to specify the type of tree beforehand
@@ -810,10 +818,18 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
     vector<size_t> response_event_time_ids_new_data = computeResponseEventTimeIDs(unique_event_times, times);   // have to compute the ids from scratch
     vector<double> IPCW_weights = computeIPCWCpp(times, ind, unique_event_times, response_event_time_ids_new_data, predictions.second, {}, {}, tree->getCensoringTimes());
     vector<double> km_pred = KaplanMeier(predictions_final, times.size());
+
+    // compute Brier score and integrated Brier score (IBS) and normalised IBS
     vector<double> brier = computeBrierScoreCpp(times, IPCW_weights, unique_event_times, km_pred);
-    pair<double, double> ibs = computeIBS(brier, unique_event_times);
+    pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times);
+
+    // compute the Kullback-Leibler loss and integrated Kullback-Leibler loss (IKL) and normalised IKL
+    vector<double> kl = computeKLScoreCpp(times, IPCW_weights, unique_event_times, km_pred);
+    pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times);
     result["IBS.error"] = ibs.first;
     result["normalised.IBS.error"] = ibs.second;
+    result["IKL.error"] = ikl.first;
+    result["normalised.IKL.error"] = ikl.second;
     return result;
   }
   else {
@@ -858,14 +874,21 @@ List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, u
 
   // now ready to compute Brier score error, starting with the IPCW weights
   vector<double> IPCW_weights = computeIPCWCpp(new_data.getTimes(), censoring_indicators, unique_event_times, response_event_time_ids, predictions_cpp[2], {}, new_data.getLastObservedTimes(), tree->getCensoringTimes());
+
   // compute IBS and normalised IBS
   vector<double> brier = computeBrierScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights_cpp);
-  pair<double, double> ibs = computeIBS(brier, unique_event_times, true);
+  pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times, true);
+
+  // compute IKL and normalised IKL
+  vector<double> kl = computeKLScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights_cpp);
+  pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
 
   // save in a list and return
   List result = List::create(
     Named("IBS.error") = ibs.first,
-    Named("normalised.IBS.error") = ibs.second
+    Named("normalised.IBS.error") = ibs.second,
+    Named("IKL.error") = ikl.first,
+    Named("normalised.IKL.error") = ikl.second
   );
   return result;
 }
@@ -1512,12 +1535,22 @@ void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const
   JFForest["outcomes.oob"] = outcomes;
   JFForest["C.error"] = 1 - computeConcordanceIndex(outcomes, times, ind);
 
-  // now compute Brier score
+  // compute IPCS weights and the censoring Kaplan-Meier estimators
   vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"], times);
-  vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"])));
-  pair<double, double> ibs = computeIBS(brier, unique_event_times);
+  const NumericMatrix& censoring_km = KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"]));
+
+  // compute Brier score and integrated Brier score
+  vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, censoring_km);
+  pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times);
+
+  // compute Kullback-Leibler score and integrated Kullback-Leibler score
+  vector<double> kl = computeKLScore(times, IPCW_weights, unique_event_times, censoring_km);
+  pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times);
+
   JFForest["ibs"] = ibs.first;
   JFForest["ibs.normalised"] = ibs.second;
+  JFForest["ikl"] = ikl.first;
+  JFForest["ikl.normalised"] = ikl.second;
 }
 
 // for computing OOB errors for a survival forest when errors are not already saved, but predictions are computed
@@ -1534,17 +1567,26 @@ List JFCppForestErrorSurvivalExternal(List& JFForest) {
   const vector<double>& outcomes = computeOutcomes(JFForest["oob.predictions"]);
   JFForest["outcomes.oob"] = outcomes;
 
-  // now compute Brier score
+  // now compute IPCW weights and Kaplan-Meier estimator for the censoring distribution
   vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"], times);
-  vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"])));
-  pair<double, double> ibs = computeIBS(brier, unique_event_times);
+  const NumericMatrix& censoring_km = KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"]));
+
+  // compute Brier score and integrated Brier score
+  vector<double> brier = computeBrierScore(times, IPCW_weights, unique_event_times, censoring_km);
+  pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times);
   
+  // compute Kullback-Leibler score and integrated Kullback-Leibler score
+  vector<double> kl = computeKLScore(times, IPCW_weights, unique_event_times, censoring_km);
+  pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times);
+
   // create and return list of errors
   double c_error = 1 - computeConcordanceIndex(outcomes, times, ind);
   List result = List::create(
     Named("C.error") = c_error,
     Named("IBS") = ibs.first,
-    Named("IBS.normalised") = ibs.second
+    Named("IBS.normalised") = ibs.second,
+    Named("IKL") = ikl.first,
+    Named("IKL.normalised") = ikl.second
   );
 
   return result;
@@ -1633,14 +1675,24 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
     const vector<double>& outcomes = computeOutcomes(predictions_final, num_true_event_times);
     List result = List::create(Named("C.error") = 1 - computeConcordanceIndex(outcomes, times, ind));
 
-    // compute the Brier score
-    vector<size_t> response_event_time_ids_new_data = computeResponseEventTimeIDs(unique_event_times, times);   // have to compute the ids from scratch
+    // compute the response event time ids based on the new data, the IPCW weights and the Kaplan-Meier
+    // estimators of the predictions
+    vector<size_t> response_event_time_ids_new_data = computeResponseEventTimeIDs(unique_event_times, times);
     vector<double> IPCW_weights = computeIPCWCpp(times, ind, unique_event_times, response_event_time_ids_new_data, censoring_final);
     vector<double> km_pred = KaplanMeier(predictions_final, times.size());
+
+    // now compute the Brier score and integrated Brier score
     vector<double> brier = computeBrierScoreCpp(times, IPCW_weights, unique_event_times, km_pred);
-    pair<double, double> ibs = computeIBS(brier, unique_event_times);
+    pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times);
+
+    // finally, compute the Kullback-Leibler score and integrated Kullback-Leibler score
+    vector<double> kl = computeKLScoreCpp(times, IPCW_weights, unique_event_times, km_pred);
+    pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times);
+
     result["IBS.error"] = ibs.first;
     result["normalised.IBS.error"] = ibs.second;
+    result["IKL.error"] = ikl.first;
+    result["normalised.IKL.error"] = ikl.second;
     return result;
   }
   if (type == "Multi-state") {

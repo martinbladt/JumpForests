@@ -727,6 +727,42 @@ vector<double> computeBrierScore(const vector<double>& times, const vector<doubl
     return brier;
 }
 
+// computes a vector of the Kullback-Leibler score using given IPCW weights
+double probabilityForLogScore(double probability) {
+    constexpr double probability_tolerance = 1e-12;
+    constexpr double probability_epsilon = 1e-15;
+
+    if (!isfinite(probability)) {
+        throw runtime_error("Non-finite predicted probability in Kullback-Leibler score");
+    }
+    if (probability < -probability_tolerance || probability > 1 + probability_tolerance) {
+        throw runtime_error("Predicted probability outside [0, 1] in Kullback-Leibler score");
+    }
+    return min(max(probability, probability_epsilon), 1 - probability_epsilon);
+}
+
+vector<double> computeKLScore(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const NumericMatrix& KM_pred) {
+    size_t num_obs = times.size();
+    size_t num_unique_event_times = unique_event_times.size();
+    vector<double> kl_score(num_unique_event_times, 0);
+
+    for (size_t j = 0; j < num_unique_event_times; ++j) {
+        for (size_t i = 0; i < num_obs; ++i) {
+            double weight = weights[i * num_unique_event_times + j];
+            if (weight == 0) {
+                continue;
+            }
+            double survival_probability = probabilityForLogScore(KM_pred(i, j));
+            if (times[i] <= unique_event_times[j]) {
+                kl_score[j] -= log1p(-survival_probability) * weight;
+            } else if (times[i] > unique_event_times[j]) {
+                kl_score[j] -= log(survival_probability) * weight;
+            }
+        }
+    }
+    return kl_score;
+}
+
 // the following functions are identical except that they accept KM_cens and KM_pred as flattened arrays instead of NumericMatrices
 
 // computes the IPCW weights for each observation and event time (useful if one wants to extend to other error metrics)
@@ -810,33 +846,59 @@ vector<double> computeBrierScoreCpp(const vector<double>& times, const vector<do
     return brier;
 }
 
+// computes a vector of the Kullback-Leibler score using given IPCW weights
+vector<double> computeKLScoreCpp(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const vector<double>& KM_pred) {
+    size_t num_obs = times.size();
+    size_t num_unique_event_times = unique_event_times.size();
+    vector<double> kl_score(num_unique_event_times, 0);
+
+    for (size_t j = 0; j < num_unique_event_times; ++j) {
+        for (size_t i = 0; i < num_obs; ++i) {
+            size_t index = i * num_unique_event_times + j;
+            double weight = weights[index];
+            if (weight == 0) {
+                continue;
+            }
+            double survival_probability = probabilityForLogScore(KM_pred[index]);
+            if (times[i] <= unique_event_times[j]) {
+                kl_score[j] -= log1p(-survival_probability) * weight;
+            } else if (times[i] > unique_event_times[j]) {
+                kl_score[j] -= log(survival_probability) * weight;
+            }
+        }
+    }
+    return kl_score;
+}
+
 // computes the integrated Brier Score (IBS) and the normalised IBS (using the trapezoidal rule)
 // for a multi-state model (multi_state == true), bs is a flattened vector of length num_unique_event_times * num_states
-pair<double, double> computeIBS(const vector<double>& bs, const vector<double>& unique_event_times, bool multi_state) {
+pair<double, double> computeIntegratedScore(const vector<double>& score, const vector<double>& unique_event_times, bool multi_state) {
     size_t num_unique_event_times = unique_event_times.size();
     double ibs = 0;
 
     if (!multi_state) { // survival
         // apply trapezoidal rule
         for (size_t j = 1; j < num_unique_event_times; ++j) {
-            ibs += (bs[j] + bs[j - 1]) * (unique_event_times[j] - unique_event_times[j - 1]) / 2;
+            ibs += (score[j] + score[j - 1]) * (unique_event_times[j] - unique_event_times[j - 1]) / 2;
         }
     } else {            // for multi-state models, aggregate over all states
-        size_t num_states = bs.size() / num_unique_event_times;
-        // first compute the Brier score across all states
+        size_t num_states = score.size() / num_unique_event_times;
+        // first compute the score across all states
         vector<double> state_contributions(num_unique_event_times, 0);
         for (size_t t = 0; t < num_unique_event_times; ++t) {
             for (size_t j = 0; j < num_states; ++j) {
-                state_contributions[t] += bs[t * num_states + j];
+                state_contributions[t] += score[t * num_states + j];
             }
         }
-        // now compute the IBS via the trapezoidal rule
+        // now compute the integrated score via the trapezoidal rule
         for (size_t t = 1; t < num_unique_event_times; ++t) {
             ibs += (state_contributions[t] + state_contributions[t - 1]) * (unique_event_times[t] - unique_event_times[t - 1]) / 2;
         }
     }
     return {ibs, ibs / unique_event_times.back()};
 }
+
+
 
 // miscellaneous functions related to survival
 //--------------------------------------------------------------------------------------

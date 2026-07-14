@@ -392,8 +392,8 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, stri
             vector<double> brier_shuffled = computeBrierScoreCpp(times_tree, ipcw, brier_event_times, tree_KM_predictions_shuffled);
 
             // we use the normalised integrated Brier score
-            double ibs_normalised = computeIBS(brier, brier_event_times).second;
-            double ibs_normalised_shuffled = computeIBS(brier_shuffled, brier_event_times).second;
+            double ibs_normalised = computeIntegratedScore(brier, brier_event_times).second;
+            double ibs_normalised_shuffled = computeIntegratedScore(brier_shuffled, brier_event_times).second;
 
             total_vimp += ibs_normalised_shuffled - ibs_normalised;
             ++valid_trees;

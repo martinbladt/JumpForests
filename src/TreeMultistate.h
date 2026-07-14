@@ -107,6 +107,10 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
 // error computations for multi-states
 vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                    const List& occupation_probs, const vector<double>& state_weights);
+vector<double> computeKLScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                            const List& occupation_probs, const vector<double>& state_weights);
+vector<double> computeKLScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                                   const vector<double>& occupation_probs, const vector<double>& state_weights);
 vector<double> computeBrierScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times, 
                                       const vector<double>& occupation_probs, const vector<double>& state_weights);
 

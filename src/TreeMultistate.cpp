@@ -946,6 +946,36 @@ vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<
     return brier;
 }
 
+// computes a vector of the Kullback-Leibler score using given IPCW weights for multi-state predictions
+// (states_ind is a flattened vector of boolean indicators of whether observation i at event time t is in state j)
+vector<double> computeKLScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                            const List& occupation_probs, const vector<double>& state_weights) {
+    size_t num_unique_event_times = unique_event_times.size();
+    uint8_t num_states = state_weights.size();
+    size_t num_obs = weights.size() / num_unique_event_times;
+    vector<double> kl(num_unique_event_times * num_states, 0);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        const List& occ_probs_obs = as<List>(occupation_probs[i]);
+        size_t obs_index = i * num_unique_event_times * num_states;
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            const vector<double> occ_probs_obs_t = as<vector<double>>(occ_probs_obs[t]);
+            size_t time_index = obs_index + t * num_states;
+            double ipcw = weights[i * num_unique_event_times + t];
+            if (ipcw == 0) {
+                continue;
+            }
+            for (size_t j = 0; j < num_states; ++j) {
+                if (states_ind[time_index + j] && state_weights[j] != 0) {
+                    double occupation_probability = probabilityForLogScore(occ_probs_obs_t[j]);
+                    kl[t * num_states + j] -= ipcw * log(occupation_probability) * state_weights[j];
+                }
+            }
+        }
+    }
+    return kl;
+}
+
 // same function as above but where the occupation probabilities are instead given by a flattened vector
 vector<double> computeBrierScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times, 
                                       const vector<double>& occupation_probs, const vector<double>& state_weights) {
@@ -970,6 +1000,33 @@ vector<double> computeBrierScoreCppMM(const vector<bool>& states_ind, const vect
         }
     }
     return brier;
+}
+
+// same function as above but where the occupation probabilities are instead given by a flattened vector
+vector<double> computeKLScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                                   const vector<double>& occupation_probs, const vector<double>& state_weights) {
+    size_t num_unique_event_times = unique_event_times.size();
+    uint8_t num_states = state_weights.size();
+    size_t num_obs = weights.size() / num_unique_event_times;
+    vector<double> kl(num_unique_event_times * num_states, 0);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t obs_index = i * num_unique_event_times * num_states;
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            size_t time_index = obs_index + t * num_states;
+            double ipcw = weights[i * num_unique_event_times + t];
+            if (ipcw == 0) {
+                continue;
+            }
+            for (size_t j = 0; j < num_states; ++j) {
+                if (states_ind[time_index + j] && state_weights[j] != 0) {
+                    double occupation_probability = probabilityForLogScore(occupation_probs[time_index + j]);
+                    kl[t * num_states + j] -= ipcw * log(occupation_probability) * state_weights[j];
+                }
+            }
+        }
+    }
+    return kl;
 }
 
 // miscellaneous functions related to multi-states

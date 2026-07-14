@@ -576,6 +576,7 @@ double computeBrierScoreError(const vector<double>& prob_predictions, const vect
   return result / ((double) response.size() * (double) num_classes);
 }
 
+// computes the normalised Brier score error as in the vignette https://www.randomforestsrc.org/articles/rfsrc-subsample.html
 double computeNormalizedBrierScoreError(const vector<double>& prob_predictions, const vector<double>& response, size_t num_classes) {
   return computeBrierScoreError(prob_predictions, response, num_classes) *
          (double) num_classes * (double) num_classes / (double) (num_classes - 1);
