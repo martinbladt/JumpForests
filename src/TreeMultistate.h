@@ -51,6 +51,7 @@ public:
     KM_censoring.assign(num_nodes, vector<double>());
     KM_censoring_full.assign(num_nodes, vector<double>());
   }
+  void computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index);
 private:
   shared_ptr<vector<double>> unique_event_times;        // vector of ordered unique event times across (pooled across all jumps)
   size_t num_unique_event_times;                        // number of unique event times
@@ -105,13 +106,13 @@ vector<double> uniqueCensoringTimesMultistate(const vector<double>& unique_event
 vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times, const vector<uint8_t>& states);
 
 // error computations for multi-states
-vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                    const List& occupation_probs, const vector<double>& state_weights);
-vector<double> computeKLScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                             const List& occupation_probs, const vector<double>& state_weights);
-vector<double> computeKLScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+vector<double> computeKLScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                    const vector<double>& occupation_probs, const vector<double>& state_weights);
-vector<double> computeBrierScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times, 
+vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                       const vector<double>& occupation_probs, const vector<double>& state_weights);
 
 // miscellaneous functions related to multi-states

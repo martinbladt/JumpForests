@@ -14,7 +14,7 @@ using namespace Rcpp;
 List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, 
                bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
                unsigned int seed, size_t num_event_times);
-List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
+List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
                unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
                unsigned int seed, NumericVector state_weights = {}, size_t num_event_times = 0);
 
@@ -25,7 +25,7 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
                                LogicalVector categorical, NumericVector unique);
 List JFCppTreePredictCensoring(const List& JFTree, DataFrame df, NumericVector feature_indices, 
                                LogicalVector categorical, NumericVector unique);
-List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, 
+List JFCppTreePredictMultistate(const List& JFTree, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique, bool compute_initial, bool compute_censoring);
 
 // error computation with trees
@@ -47,7 +47,7 @@ List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, u
 List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule,
     unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, 
     LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
-List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
+List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
   unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, 
   LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
 
@@ -59,7 +59,7 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
                                  LogicalVector categorical, NumericVector unique);
 List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique);
-List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical,
+List JFCppForestPredictMultistate(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical,
                           NumericVector unique, bool compute_initial);
 
 // error computation with forests
@@ -68,6 +68,13 @@ List JFCppForestErrorRegression(const vector<double>& predictions, const vector<
 void JFCppForestErrorClassification(List& JFForest, const vector<double>& response);
 void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids);
 List JFCppForestErrorSurvivalExternal(List& JFForest);
+void JFCppForestErrorMultistate(List& JFForest, const vector<double>& times, const vector<size_t>& last_observed_time_ids,
+                               const vector<double>& ind, const vector<double>& unique_event_times,
+                               const vector<size_t>& response_event_time_ids, const vector<double>& state_weights);
+List JFCppForestErrorMultistateExternal(List& JFForest, NumericVector state_weights = {});
+List JFCppForestErrorMultistate(const List& JFForest, uint8_t max_response_length, uint8_t num_states,
+                                List jump_data, DataFrame df_features, NumericVector feature_indices,
+                                LogicalVector categorical, NumericVector unique, NumericVector state_weights = {});
 List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique, NumericVector response_indices);
 

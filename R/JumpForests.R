@@ -168,7 +168,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     }
 
     # data here is jump data, a list of lists, each containing a vector 'times' and a vector 'states'
-    result <- JFCppTreeMM(data, max_response_length, num_states, processed_data$data,
+    result <- JFCppTreeMultistate(data, max_response_length, num_states, processed_data$data,
                           mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
                           processed_data$categorical, processed_data$unique_values, seed,
                           state_weights, num_event_times)
@@ -226,7 +226,7 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
         return(predictions)
       }
     } else {
-      return(JFCppTreePredictMM(tree_list, processed_data$data, feature_indices, processed_data$categorical,
+      return(JFCppTreePredictMultistate(tree_list, processed_data$data, feature_indices, processed_data$categorical,
              processed_data$unique_values, compute_initial, compute_censoring))
     }
   } else {
@@ -519,7 +519,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     max_response_length <- max(sapply(data, function(e) length(e$states)))
     num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
 
-    result <- JFCppForestMM(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
+    result <- JFCppForestMultistate(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
                             nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, 
                             processed_data$categorical, processed_data$unique_values, seed, nworkers, save_predictions, 
                             num_event_times)
@@ -585,7 +585,7 @@ jfforest.predict <- function(forest_list, new_data = NULL, compute_censoring = F
         return(predictions)
       }
     } else {
-      return(JFCppForestPredictMM(forest_list, processed_data$data, feature_indices,
+      return(JFCppForestPredictMultistate(forest_list, processed_data$data, feature_indices,
                             processed_data$categorical, processed_data$unique_values, compute_initial))
     }
   } else {
@@ -597,11 +597,13 @@ jfforest.predict <- function(forest_list, new_data = NULL, compute_censoring = F
 #'
 #' @param forest_list A fitted forest object from [jfforest()].
 #' @param new_data Optional evaluation data.
+#' @param jump_data Jump data (only needed for multi-state forests).
+#' @param state_weights Optional weights for each state in multi-state error calculations.
 #'
 #' @return Error metrics as a list.
 #' @export
 #'
-jfforest.error <- function(forest_list, new_data = NULL) {
+jfforest.error <- function(forest_list, new_data = NULL, jump_data = NULL, state_weights = NULL) {
   # if data is not supplied and error metrics are already computed, return the error based on OOB data
   if (is.null(new_data)) {
     if (forest_list$tree.type == "Regression") {
@@ -622,15 +624,55 @@ jfforest.error <- function(forest_list, new_data = NULL) {
         result <- JFCppForestErrorSurvivalExternal(forest_list)  # use just computed predictions to compute errors
         return(result)
       }
-      }
-      if (forest_list$tree.type == "Multi-state") {
-
+    }
+    if (forest_list$tree.type == "Multi-state") {
+      if (!is.null(forest_list$ibs) && is.null(state_weights)) {
+        return(list("IBS.error" = forest_list$ibs,
+                    "normalised.IBS.error" = forest_list$ibs.normalised,
+                    "IKL.error" = forest_list$ikl,
+                    "normalised.IKL.error" = forest_list$ikl.normalised))
+      } else {
+        if (is.null(state_weights)) {
+          state_weights <- numeric(0)
+        }
+        return(JFCppForestErrorMultistateExternal(forest_list, state_weights))
       }
     }
-    
+  }
 
   # if new_data is supplied, compute predictions and error from scratch
   covariates <- forest_list$feature.names
+  if (forest_list$tree.type == "Multi-state") {
+    if (is.null(jump_data) || !is.data.frame(new_data)) {
+      stop("For multi-state forests, jump_data and feature data must be supplied.")
+    }
+    if (length(jump_data) != nrow(new_data)) {
+      stop("jump_data and new_data must contain the same number of observations.")
+    }
+
+    missing_columns <- setdiff(covariates, names(new_data))
+    if (length(missing_columns) > 0) {
+      stop("new_data is missing column(s): ", paste(missing_columns, collapse = ", "))
+    }
+
+    new_data <- new_data[, covariates, drop = FALSE]
+    feature_indices <- which(names(new_data) %in% covariates) - 1
+    processed_data <- preprocess_data(new_data, forest_list$categorical.levels)
+    max_response_length <- max(sapply(jump_data, function(e) length(e$states)))
+    num_states <- forest_list$num.states
+    if (is.null(num_states)) {
+      num_states <- length(unique(unlist(lapply(jump_data, `[[`, "states"))))
+    }
+    if (is.null(state_weights)) {
+      state_weights <- numeric(0)
+    }
+
+    return(JFCppForestErrorMultistate(
+      forest_list, max_response_length, num_states, jump_data, processed_data$data,
+      feature_indices, processed_data$categorical, processed_data$unique_values, state_weights
+    ))
+  }
+
   response <- forest_list$response.names
   missing_columns <- setdiff(c(response, covariates), names(new_data))
   if (length(missing_columns) > 0) {
@@ -822,15 +864,25 @@ print_forest <- function(forest_list) {
     if (length(forest_list$unique.event.times) <= 20) {
       cat("Unique event times:", forest_list$unique.event.times, "\n")
     }
-    cat("OOB error (C-index):", forest_list$C.error, "\n")
-    cat("OOB error (IBS):", forest_list$ibs, "\n")
-    cat("OOB error (normalised IBS):", forest_list$ibs.normalised, "\n")
-    cat("OOB error (IKL):", forest_list$ikl, "\n")
-    cat("OOB error (normalised IKL):", forest_list$ikl.normalised, "\n")
+    if (!is.null(forest_list$C.error)) {
+      cat("OOB error (C-index):", forest_list$C.error, "\n")
+    }
+    if (!is.null(forest_list$ibs)) {
+      cat("OOB error (IBS):", forest_list$ibs, "\n")
+      cat("OOB error (normalised IBS):", forest_list$ibs.normalised, "\n")
+      cat("OOB error (IKL):", forest_list$ikl, "\n")
+      cat("OOB error (normalised IKL):", forest_list$ikl.normalised, "\n")
+    }
   }
   if (forest_list$tree.type == "Multi-state") {
     if (length(forest_list$unique.event.times) <= 20) {
       cat("Unique event times:", forest_list$unique.event.times, "\n")
+    }
+    if (!is.null(forest_list$ibs)) {
+      cat("OOB error (IBS):", forest_list$ibs, "\n")
+      cat("OOB error (normalised IBS):", forest_list$ibs.normalised, "\n")
+      cat("OOB error (IKL):", forest_list$ikl, "\n")
+      cat("OOB error (normalised IKL):", forest_list$ikl.normalised, "\n")
     }
   }
 
@@ -951,12 +1003,12 @@ test_data_functions <- function(data, response_indices, feature_indices) {
            processed_data$categorical, processed_data$unique_values)
 }
 
-test_data_functions_mm <- function(jump_data, feature_data, feature_indices) {
+test_data_functions_multistate <- function(jump_data, feature_data, feature_indices) {
   processed_data <- preprocess_data(feature_data)
   feature_indices <- feature_indices - 1
   max_response_length <- max(sapply(jump_data, function(e) length(e$states)))
   num_states <- length(unique(unlist(lapply(jump_data, '[[', "states"))))
-  testDataMM(jump_data, max_response_length, num_states, processed_data$data, 
+  testDataMultistate(jump_data, max_response_length, num_states, processed_data$data,
              feature_indices, processed_data$categorical, processed_data$unique_values)
 }
 

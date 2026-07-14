@@ -330,3 +330,26 @@ vector<vector<double>> MultistateForest::computePredictions(const Data& new_data
         return {predictions};
     }
 }
+
+// Populate leaf-level censoring estimators when they were not saved during fitting.
+void MultistateForest::computePredictionsCensoring() {
+    size_t num_obs = data->getNumberOfObs();
+    for (size_t j = 0; j < ntrees; ++j) {
+        MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
+        size_t num_nodes = tree->getNumberOfNodes();
+        vector<vector<size_t>> leaf_groups(num_nodes);
+
+        for (size_t i = 0; i < num_obs; ++i) {
+            size_t leaf_id = tree->predictionLeafID(data->get_x_row(i));
+            leaf_groups[leaf_id].push_back(i);
+        }
+
+        tree->resizeKM();
+        for (size_t node_id = 0; node_id < num_nodes; ++node_id) {
+            if (!leaf_groups[node_id].empty()) {
+                tree->computeCensoringKMExternal(leaf_groups[node_id], node_id);
+            }
+        }
+    }
+    save_predictions = true;
+}

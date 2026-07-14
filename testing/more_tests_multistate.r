@@ -64,7 +64,7 @@ sim[1]
 
 # test data
 #sim
-#test_data_functions_mm(sim, test_data, c(1, 2))
+#test_data_functions_multistate(sim, test_data, c(1, 2))
 # conclusion: Data works precisely as intended, also for multi-states
 
 # testing thinning of the unique event times
@@ -162,4 +162,3 @@ lines(times, 2/x3*log(1+x3*times), col = "darkgreen")
 #                      data = test_data, splitrule = "conserve", min_node_size = 2, nsplits = 2, seed = 2025)
 
 #nolint_end
-

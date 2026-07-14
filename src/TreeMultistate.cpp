@@ -11,7 +11,7 @@ Functions for multi-state trees
 // constructor for MultistateTree
 //--------------------------------------------------------------------------------------
 
-// the final argument is only used for honest trees
+// the second to final argument is only used for honest trees
 MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, 
                                const vector<size_t>& subset_indices, uint8_t num_states, bool save_predictions, const vector<size_t>& estimation_indices, shared_ptr<vector<double>> censoring_times) : 
     unique_event_times {unique_event_times}, response_event_time_ids {response_event_time_ids}, save_predictions {save_predictions} {
@@ -534,14 +534,18 @@ void MultistateTree::computeNA(size_t node_index) {
 }
 
 void MultistateTree::computeCensoringKM(size_t node_index) {
-    // initalise and fetch data
+    const vector<size_t>& indices = honest ? holdout_node_obs[node_index] : node_obs[node_index];
+    computeCensoringKMExternal(indices, node_index);
+}
+
+void MultistateTree::computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index) {
+    // initialise and fetch data
     size_t num_obs = data->getNumberOfObs();
     vector<double> endpoint_times(num_obs, 0);
     vector<double> uncensored_indicators(num_obs, 0);
-    const vector<size_t>& indices = honest ? holdout_node_obs[node_index] : node_obs[node_index];
-    vector<double> times = data->getTimes();
-    vector<size_t> last_observed_times = data->getLastObservedTimes();
-    vector<uint8_t> censoring_states = data->getCensoringStates();
+    const vector<double>& times = data->getTimes();
+    const vector<size_t>& last_observed_times = data->getLastObservedTimes();
+    const vector<uint8_t>& censoring_states = data->getCensoringStates();
 
     for (size_t i = 0; i < num_obs; ++i) {
         size_t last_observed_time_id = last_observed_times[i];
@@ -551,8 +555,13 @@ void MultistateTree::computeCensoringKM(size_t node_index) {
 
     vector<double> KM_full = computeCensoringKMFromEndpoints(endpoint_times, uncensored_indicators, *censoring_times, indices);
     vector<double> KM_event = selectCensoringAtTimes(KM_full, *censoring_times, *unique_event_times, 1);
-    this->KM_censoring_full.push_back(std::move(KM_full));
-    this->KM_censoring.push_back(std::move(KM_event));
+    if (node_index < KM_censoring.size()) {
+        KM_censoring_full[node_index] = std::move(KM_full);
+        KM_censoring[node_index] = std::move(KM_event);
+    } else {
+        KM_censoring_full.push_back(std::move(KM_full));
+        KM_censoring.push_back(std::move(KM_event));
+    }
 }
 
 // splitting rules for multi-state trees
@@ -919,7 +928,7 @@ vector<vector<double>> MultistateTree::computePredictions(bool compute_initial, 
 
 // computes a vector of the Brier score using given IPCW weights for multi-state predictions 
 // (states_ind is a flattened vector of boolean indicators of whether observation i at event time t is in state j)
-vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                    const List& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
     uint8_t num_states = state_weights.size();
@@ -948,7 +957,7 @@ vector<double> computeBrierScoreMM(const vector<bool>& states_ind, const vector<
 
 // computes a vector of the Kullback-Leibler score using given IPCW weights for multi-state predictions
 // (states_ind is a flattened vector of boolean indicators of whether observation i at event time t is in state j)
-vector<double> computeKLScoreMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                             const List& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
     uint8_t num_states = state_weights.size();
@@ -977,7 +986,7 @@ vector<double> computeKLScoreMM(const vector<bool>& states_ind, const vector<dou
 }
 
 // same function as above but where the occupation probabilities are instead given by a flattened vector
-vector<double> computeBrierScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times, 
+vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                       const vector<double>& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
     uint8_t num_states = state_weights.size();
@@ -1003,7 +1012,7 @@ vector<double> computeBrierScoreCppMM(const vector<bool>& states_ind, const vect
 }
 
 // same function as above but where the occupation probabilities are instead given by a flattened vector
-vector<double> computeKLScoreCppMM(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+vector<double> computeKLScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                    const vector<double>& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
     uint8_t num_states = state_weights.size();

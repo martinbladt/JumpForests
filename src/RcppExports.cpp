@@ -33,9 +33,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// JFCppTreeMM
-List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, NumericVector state_weights, size_t num_event_times);
-RcppExport SEXP _JumpForests_JFCppTreeMM(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP df_featuresSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP honestSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP state_weightsSEXP, SEXP num_event_timesSEXP) {
+// JFCppTreeMultistate
+List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, NumericVector state_weights, size_t num_event_times);
+RcppExport SEXP _JumpForests_JFCppTreeMultistate(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP df_featuresSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP honestSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP state_weightsSEXP, SEXP num_event_timesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -54,7 +54,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type state_weights(state_weightsSEXP);
     Rcpp::traits::input_parameter< size_t >::type num_event_times(num_event_timesSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppTreeMM(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, honest, feature_indices, categorical, unique, seed, state_weights, num_event_times));
+    rcpp_result_gen = Rcpp::wrap(JFCppTreeMultistate(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, honest, feature_indices, categorical, unique, seed, state_weights, num_event_times));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -88,9 +88,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// JFCppTreePredictMM
-List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial, bool compute_censoring);
-RcppExport SEXP _JumpForests_JFCppTreePredictMM(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP, SEXP compute_censoringSEXP) {
+// JFCppTreePredictMultistate
+List JFCppTreePredictMultistate(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial, bool compute_censoring);
+RcppExport SEXP _JumpForests_JFCppTreePredictMultistate(SEXP JFTreeSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP, SEXP compute_censoringSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -101,7 +101,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
     Rcpp::traits::input_parameter< bool >::type compute_initial(compute_initialSEXP);
     Rcpp::traits::input_parameter< bool >::type compute_censoring(compute_censoringSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppTreePredictMM(JFTree, df, feature_indices, categorical, unique, compute_initial, compute_censoring));
+    rcpp_result_gen = Rcpp::wrap(JFCppTreePredictMultistate(JFTree, df, feature_indices, categorical, unique, compute_initial, compute_censoring));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -169,9 +169,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// JFCppForestMM
-List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
-RcppExport SEXP _JumpForests_JFCppForestMM(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP df_featuresSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP double_bootstrapSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP save_predictionsSEXP, SEXP num_event_timesSEXP) {
+// JFCppForestMultistate
+List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
+RcppExport SEXP _JumpForests_JFCppForestMultistate(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP df_featuresSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP double_bootstrapSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP save_predictionsSEXP, SEXP num_event_timesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -195,7 +195,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< unsigned int >::type nworkers(nworkersSEXP);
     Rcpp::traits::input_parameter< bool >::type save_predictions(save_predictionsSEXP);
     Rcpp::traits::input_parameter< size_t >::type num_event_times(num_event_timesSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppForestMM(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times));
+    rcpp_result_gen = Rcpp::wrap(JFCppForestMultistate(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -239,9 +239,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// JFCppForestPredictMM
-List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial);
-RcppExport SEXP _JumpForests_JFCppForestPredictMM(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP) {
+// JFCppForestPredictMultistate
+List JFCppForestPredictMultistate(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, bool compute_initial);
+RcppExport SEXP _JumpForests_JFCppForestPredictMultistate(SEXP JFForestSEXP, SEXP dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP compute_initialSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -251,7 +251,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
     Rcpp::traits::input_parameter< bool >::type compute_initial(compute_initialSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppForestPredictMM(JFForest, df, feature_indices, categorical, unique, compute_initial));
+    rcpp_result_gen = Rcpp::wrap(JFCppForestPredictMultistate(JFForest, df, feature_indices, categorical, unique, compute_initial));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -263,6 +263,18 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< List& >::type JFForest(JFForestSEXP);
     rcpp_result_gen = Rcpp::wrap(JFCppForestErrorSurvivalExternal(JFForest));
+    return rcpp_result_gen;
+END_RCPP
+}
+// JFCppForestErrorMultistateExternal
+List JFCppForestErrorMultistateExternal(List& JFForest, NumericVector state_weights);
+RcppExport SEXP _JumpForests_JFCppForestErrorMultistateExternal(SEXP JFForestSEXP, SEXP state_weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List& >::type JFForest(JFForestSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type state_weights(state_weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestErrorMultistateExternal(JFForest, state_weights));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -279,6 +291,25 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type response_indices(response_indicesSEXP);
     rcpp_result_gen = Rcpp::wrap(JFCppForestError(JFForest, df, feature_indices, categorical, unique, response_indices));
+    return rcpp_result_gen;
+END_RCPP
+}
+// JFCppForestErrorMultistate
+List JFCppForestErrorMultistate(const List& JFForest, uint8_t max_response_length, uint8_t num_states, List jump_data, DataFrame df_features, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, NumericVector state_weights);
+RcppExport SEXP _JumpForests_JFCppForestErrorMultistate(SEXP JFForestSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP jump_dataSEXP, SEXP df_featuresSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP state_weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List& >::type JFForest(JFForestSEXP);
+    Rcpp::traits::input_parameter< uint8_t >::type max_response_length(max_response_lengthSEXP);
+    Rcpp::traits::input_parameter< uint8_t >::type num_states(num_statesSEXP);
+    Rcpp::traits::input_parameter< List >::type jump_data(jump_dataSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type df_features(df_featuresSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type feature_indices(feature_indicesSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type categorical(categoricalSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type unique(uniqueSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type state_weights(state_weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(JFCppForestErrorMultistate(JFForest, max_response_length, num_states, jump_data, df_features, feature_indices, categorical, unique, state_weights));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -350,9 +381,9 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
-// testDataMM
-void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame& feature_df, const NumericVector& feature_indices, const LogicalVector& categorical, const NumericVector& unique);
-RcppExport SEXP _JumpForests_testDataMM(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP feature_dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
+// testDataMultistate
+void testDataMultistate(const List& jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame& feature_df, const NumericVector& feature_indices, const LogicalVector& categorical, const NumericVector& unique);
+RcppExport SEXP _JumpForests_testDataMultistate(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP feature_dfSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP) {
 BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const List& >::type jump_data(jump_dataSEXP);
@@ -362,7 +393,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const NumericVector& >::type feature_indices(feature_indicesSEXP);
     Rcpp::traits::input_parameter< const LogicalVector& >::type categorical(categoricalSEXP);
     Rcpp::traits::input_parameter< const NumericVector& >::type unique(uniqueSEXP);
-    testDataMM(jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique);
+    testDataMultistate(jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique);
     return R_NilValue;
 END_RCPP
 }
@@ -489,26 +520,28 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppTree", (DL_FUNC) &_JumpForests_JFCppTree, 13},
-    {"_JumpForests_JFCppTreeMM", (DL_FUNC) &_JumpForests_JFCppTreeMM, 15},
+    {"_JumpForests_JFCppTreeMultistate", (DL_FUNC) &_JumpForests_JFCppTreeMultistate, 15},
     {"_JumpForests_JFCppTreePredict", (DL_FUNC) &_JumpForests_JFCppTreePredict, 5},
     {"_JumpForests_JFCppTreePredictCensoring", (DL_FUNC) &_JumpForests_JFCppTreePredictCensoring, 5},
-    {"_JumpForests_JFCppTreePredictMM", (DL_FUNC) &_JumpForests_JFCppTreePredictMM, 7},
+    {"_JumpForests_JFCppTreePredictMultistate", (DL_FUNC) &_JumpForests_JFCppTreePredictMultistate, 7},
     {"_JumpForests_JFCppTreeError", (DL_FUNC) &_JumpForests_JFCppTreeError, 6},
     {"_JumpForests_JFCppTreeErrorMultistate", (DL_FUNC) &_JumpForests_JFCppTreeErrorMultistate, 9},
     {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 19},
-    {"_JumpForests_JFCppForestMM", (DL_FUNC) &_JumpForests_JFCppForestMM, 20},
+    {"_JumpForests_JFCppForestMultistate", (DL_FUNC) &_JumpForests_JFCppForestMultistate, 20},
     {"_JumpForests_JFCppForestPredictTraining", (DL_FUNC) &_JumpForests_JFCppForestPredictTraining, 1},
     {"_JumpForests_JFCppForestPredict", (DL_FUNC) &_JumpForests_JFCppForestPredict, 5},
     {"_JumpForests_JFCppForestPredictCensoring", (DL_FUNC) &_JumpForests_JFCppForestPredictCensoring, 5},
-    {"_JumpForests_JFCppForestPredictMM", (DL_FUNC) &_JumpForests_JFCppForestPredictMM, 6},
+    {"_JumpForests_JFCppForestPredictMultistate", (DL_FUNC) &_JumpForests_JFCppForestPredictMultistate, 6},
     {"_JumpForests_JFCppForestErrorSurvivalExternal", (DL_FUNC) &_JumpForests_JFCppForestErrorSurvivalExternal, 1},
+    {"_JumpForests_JFCppForestErrorMultistateExternal", (DL_FUNC) &_JumpForests_JFCppForestErrorMultistateExternal, 2},
     {"_JumpForests_JFCppForestError", (DL_FUNC) &_JumpForests_JFCppForestError, 6},
+    {"_JumpForests_JFCppForestErrorMultistate", (DL_FUNC) &_JumpForests_JFCppForestErrorMultistate, 9},
     {"_JumpForests_JFCppForestVIMPFeature", (DL_FUNC) &_JumpForests_JFCppForestVIMPFeature, 5},
     {"_JumpForests_JFCppForestVIMP", (DL_FUNC) &_JumpForests_JFCppForestVIMP, 4},
     {"_JumpForests_getTreeTable", (DL_FUNC) &_JumpForests_getTreeTable, 1},
     {"_JumpForests_df_test", (DL_FUNC) &_JumpForests_df_test, 5},
     {"_JumpForests_testData", (DL_FUNC) &_JumpForests_testData, 5},
-    {"_JumpForests_testDataMM", (DL_FUNC) &_JumpForests_testDataMM, 7},
+    {"_JumpForests_testDataMultistate", (DL_FUNC) &_JumpForests_testDataMultistate, 7},
     {"_JumpForests_testUniqueEventTimesThinning", (DL_FUNC) &_JumpForests_testUniqueEventTimesThinning, 2},
     {"_JumpForests_test_omp", (DL_FUNC) &_JumpForests_test_omp, 0},
     {"_JumpForests_getNodeSize", (DL_FUNC) &_JumpForests_getNodeSize, 2},

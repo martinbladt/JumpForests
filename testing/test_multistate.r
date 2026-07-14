@@ -67,7 +67,7 @@ sim[1]
 
 # test data
 #sim
-#test_data_functions_mm(sim, test_data, c(1, 2))
+#test_data_functions_multistate(sim, test_data, c(1, 2))
 # conclusion: Data works precisely as intended, also for multi-states
 
 # testing thinning of the unique event times
@@ -77,7 +77,7 @@ sim[1]
 # implement as an option
 
 test_data <- data.frame(X1 = X, X2 = Y)
-#test_data_functions_mm(sim, test_data, c(1, 2))
+#test_data_functions_multistate(sim, test_data, c(1, 2))
 fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20, honest = TRUE)
 }
 print_tree(fitted_tree, full = TRUE)
@@ -124,6 +124,9 @@ jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$pr
 unlist(jfforest.predict(fitted_forest)$predictions) - unlist(jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$predictions)
 # okay, the internal predictions are the same as predictions computed manually on the training data
 
+jfforest.error(fitted_forest)
+jfforest.error(fitted_forest, new_data = test_data, jump_data = sim, state_weights = c(1,1,1))
+
 #jfforest.predict(fitted_forest)  # warning: only call if the number of observations is not very large (otherwise it never finishes printing)
 unlist(lapply(jfforest.predict(fitted_forest)[[2]], function(z) sum(z)))
 occupation_prob(init = fitted_forest$init[[1]], na = fitted_forest$predictions[[1]])
@@ -150,7 +153,7 @@ jump_data_veteran <- lapply(seq_len(nrow(veteran)), function(i) {
 })
 
 veteran_features <- veteran[-c(3, 4)]
-#test_data_functions_mm(jump_data_veteran, veteran_features, ncol(veteran_features))
+#test_data_functions_multistate(jump_data_veteran, veteran_features, ncol(veteran_features))
 
 veteran_tree_mm <- jftree(MM ~ ., data = jump_data_veteran, seed = 2026, feature_data = veteran_features, nsplits = 10, splitrule = "logrank", min_node_size = 10, honest = FALSE)
 veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2026, min_node_size = 10, honest = FALSE)
@@ -447,5 +450,4 @@ lines(times, 2/x3*log(1+x3*times), col = "darkgreen")
 #                      data = test_data, splitrule = "conserve", min_node_size = 2, nsplits = 2, seed = 2025)
 
 #nolint_end
-
 

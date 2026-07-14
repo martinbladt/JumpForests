@@ -210,7 +210,7 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 }
 
 // [[Rcpp::export]]
-List JFCppTreeMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
+List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
                  unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
                  unsigned int seed, NumericVector state_weights, size_t num_event_times) {
 
@@ -544,7 +544,7 @@ List JFCppTreePredictCensoring(const List& JFTree, DataFrame df, NumericVector f
 */
 
 // [[Rcpp::export]]
-List JFCppTreePredictMM(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical,
+List JFCppTreePredictMultistate(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical,
                         NumericVector unique, bool compute_initial, bool compute_censoring) {
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp;  // need an empty vector for the response indices
@@ -707,7 +707,7 @@ double JFCppErrorSurvival(const NumericMatrix& predictions, const vector<double>
 
 void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& times, const vector<size_t>& last_observed_time_ids, const vector<double>& ind, 
                               const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& state_weights) {
-  // first compute the IPCW weights
+  // first compute the censoring times and the IPCW weights
   vector<double> censoring_times = as<vector<double>>(JFTree["censoring.times"]);
   vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFTree["censoring.full"], times, last_observed_time_ids, censoring_times);
 
@@ -719,11 +719,11 @@ void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& times, const v
   vector<double> occupation_probabilities = occupationProbabilities(JFTree["predictions"], JFTree["init"], state_weights.size());
 
   // compute the integrated Brier score (IBS) and the normalised IBS
-  vector<double> brier = computeBrierScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
+  vector<double> brier = computeBrierScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
   pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times, true);
 
   // compute the integrated Kullback-Leibler loss and the normalised IKL
-  vector<double> kl = computeKLScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
+  vector<double> kl = computeKLScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights);
   pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
 
   // save all the error metrics in the tree list
@@ -876,11 +876,11 @@ List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, u
   vector<double> IPCW_weights = computeIPCWCpp(new_data.getTimes(), censoring_indicators, unique_event_times, response_event_time_ids, predictions_cpp[2], {}, new_data.getLastObservedTimes(), tree->getCensoringTimes());
 
   // compute IBS and normalised IBS
-  vector<double> brier = computeBrierScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights_cpp);
+  vector<double> brier = computeBrierScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights_cpp);
   pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times, true);
 
   // compute IKL and normalised IKL
-  vector<double> kl = computeKLScoreCppMM(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights_cpp);
+  vector<double> kl = computeKLScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights_cpp);
   pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
 
   // save in a list and return
@@ -1042,7 +1042,7 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 }
 
 // [[Rcpp::export]]
-List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, 
+List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
   unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, 
   LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times = 0) {
   
@@ -1095,6 +1095,7 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
   // specific to multi-states
   NumericVector unique_event_times_R(unique_event_times.begin(), unique_event_times.end());
   result["tree.type"] = "Multi-state";
+  result["num.states"] = num_states;
   result["num.trees"] = ntrees;
   result["unique.event.times"] = unique_event_times_R;
   XPtr<MultistateForest> multistate_forest(forest, true);
@@ -1104,6 +1105,16 @@ List JFCppForestMM(List jump_data, uint8_t max_response_length, uint8_t num_stat
     Rcout << "Computing forest predictions" << endl;
     JFCppForestPredict(result);
 
+    vector<double> censoring_indicators(data->getNumberOfObs(), 0);
+    const vector<uint8_t>& censoring_states = data->getCensoringStates();
+    for (size_t i = 0; i < data->getNumberOfObs(); ++i) {
+      if (censoring_states[i] == 0) {
+        censoring_indicators[i] = 1;
+      }
+    }
+    vector<double> state_weights(num_states, 1.0 / num_states);
+    JFCppForestErrorMultistate(result, data->getTimes(), data->getLastObservedTimes(), censoring_indicators,
+                               unique_event_times, response_event_time_ids, state_weights);
   } else {
     result["predictions"] = R_NilValue;
     result["oob.predictions"] = R_NilValue;
@@ -1214,7 +1225,10 @@ void JFCppForestPredict(List& JFForest, bool compute_censoring) {
     // compute predictions via multi-threading
     MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
 
-    const vector<vector<double>>& predictions_cpp = forest->computePredictions(true, false);
+    // Censoring estimators only exist in the leaves when predictions were saved
+    // during fitting. Nelson--Aalen and initial-state estimates are always stored.
+    bool compute_multistate_censoring = forest->predictionsSaved();
+    const vector<vector<double>>& predictions_cpp = forest->computePredictions(true, compute_multistate_censoring);
     size_t num_unique_event_times = forest->getNumUniqueEventTimes();
     size_t num_obs = JFForest["num.obs"];
     uint8_t num_states = forest->getData()->getNumberOfStates();
@@ -1223,6 +1237,7 @@ void JFCppForestPredict(List& JFForest, bool compute_censoring) {
     List predictions_oob(num_obs);
     List predictions_init(num_obs);   // each predicted initial distribution is a vector
     List predictions_init_oob(num_obs);
+    NumericMatrix censoring_oob(num_obs, num_unique_event_times);
 
     for (size_t i = 0; i < num_obs; ++i) {
       List rpred(num_unique_event_times);                     // list of NumericMatrix for a single prediction
@@ -1253,12 +1268,20 @@ void JFCppForestPredict(List& JFForest, bool compute_censoring) {
       }
       predictions_init[i] = rpred_init;
       predictions_init_oob[i] = rpred_init_oob;
+      if (compute_multistate_censoring) {
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+          censoring_oob(i, t) = predictions_cpp[4][i * num_unique_event_times + t];
+        }
+      }
     }
     // save predictions
     JFForest["predictions"] = predictions;
     JFForest["oob.predictions"] = predictions_oob;
     JFForest["init"] = predictions_init;
     JFForest["oob.init"] = predictions_init_oob;
+    if (compute_multistate_censoring) {
+      JFForest["censoring.oob"] = censoring_oob;
+    }
   }
 }
 
@@ -1371,7 +1394,7 @@ List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVect
 */
 
 // [[Rcpp::export]]
-List JFCppForestPredictMM(const List& JFForest, DataFrame df, NumericVector feature_indices,
+List JFCppForestPredictMultistate(const List& JFForest, DataFrame df, NumericVector feature_indices,
                           LogicalVector categorical, NumericVector unique, bool compute_initial) {
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp;  // need an empty vector for the response indices
@@ -1594,6 +1617,63 @@ List JFCppForestErrorSurvivalExternal(List& JFForest) {
 
 // Multi-state
 
+void JFCppForestErrorMultistate(List& JFForest, const vector<double>& times, const vector<size_t>& last_observed_time_ids, const vector<double>& ind,
+                        const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, const vector<double>& state_weights) {
+  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids,
+                                             JFForest["censoring.oob"], times, last_observed_time_ids);
+
+  MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
+  vector<bool> states_ind = forest->getData()->computeStateIndicators(response_event_time_ids, unique_event_times);
+  vector<double> occupation_probabilities = occupationProbabilities(JFForest["oob.predictions"], JFForest["oob.init"], state_weights.size());
+
+  vector<double> brier = computeBrierScoreCppMultistate(states_ind, IPCW_weights, unique_event_times,
+                                                        occupation_probabilities, state_weights);
+  pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times, true);
+  vector<double> kl = computeKLScoreCppMultistate(states_ind, IPCW_weights, unique_event_times,
+                                                  occupation_probabilities, state_weights);
+  pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
+
+  JFForest["ibs"] = ibs.first;
+  JFForest["ibs.normalised"] = ibs.second;
+  JFForest["ikl"] = ikl.first;
+  JFForest["ikl.normalised"] = ikl.second;
+}
+
+// Computes and saves OOB errors when predictions were not requested during fitting.
+// [[Rcpp::export]]
+List JFCppForestErrorMultistateExternal(List& JFForest, NumericVector state_weights) {
+  MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
+  if (!forest->predictionsSaved()) {
+    forest->computePredictionsCensoring();
+  }
+
+  JFCppForestPredict(JFForest);
+
+  shared_ptr<Data> data = forest->getData();
+  const vector<double>& unique_event_times = forest->getEventTimes();
+  const vector<size_t>& response_event_time_ids = forest->getResponseEventTimeIDs();
+  vector<double> censoring_indicators(data->getNumberOfObs(), 0);
+  const vector<uint8_t>& censoring_states = data->getCensoringStates();
+  for (size_t i = 0; i < data->getNumberOfObs(); ++i) {
+    if (censoring_states[i] == 0) {
+      censoring_indicators[i] = 1;
+    }
+  }
+
+  uint8_t num_states = data->getNumberOfStates();
+  vector<double> state_weights_cpp = normaliseStateWeights(state_weights, num_states);
+  JFCppForestErrorMultistate(JFForest, data->getTimes(), data->getLastObservedTimes(),
+                             censoring_indicators, unique_event_times,
+                             response_event_time_ids, state_weights_cpp);
+
+  return List::create(
+    Named("IBS.error") = JFForest["ibs"],
+    Named("normalised.IBS.error") = JFForest["ibs.normalised"],
+    Named("IKL.error") = JFForest["ikl"],
+    Named("normalised.IKL.error") = JFForest["ikl.normalised"]
+  );
+}
+
 // computes the error based on a a new dataset, here we don't need to specify the type of forest beforehand
 // [[Rcpp::export]]
 List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_indices,
@@ -1695,12 +1775,63 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
     result["normalised.IKL.error"] = ikl.second;
     return result;
   }
-  if (type == "Multi-state") {
-
-  }
   else {
     throw runtime_error("Type of forest not recognised");
   }
+}
+
+// computes errors on a new dataset specifically for multi-state forests
+// [[Rcpp::export]]
+List JFCppForestErrorMultistate(const List& JFForest, uint8_t max_response_length, uint8_t num_states,
+                                List jump_data, DataFrame df_features, NumericVector feature_indices,
+                                LogicalVector categorical, NumericVector unique, NumericVector state_weights) {
+  MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
+  num_states = forest->getData()->getNumberOfStates();
+
+  if (!forest->predictionsSaved()) {
+    forest->computePredictionsCensoring();
+  }
+
+  vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
+  vector<bool> categorical_cpp = as<vector<bool>>(categorical);
+  vector<size_t> unique_cpp = as<vector<size_t>>(unique);
+  Data new_data(jump_data, max_response_length, num_states, df_features, feature_indices_cpp,
+                categorical_cpp, unique_cpp);
+
+  const vector<double> unique_event_times = forest->getEventTimes();
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(
+    unique_event_times, new_data.getTimes(), new_data.getStates());
+  vector<double> state_weights_cpp = normaliseStateWeights(state_weights, num_states);
+
+  vector<vector<double>> predictions = forest->computePredictions(new_data, true, true);
+  vector<double> censoring_indicators(new_data.getNumberOfObs(), 0);
+  const vector<uint8_t>& censoring_states = new_data.getCensoringStates();
+  for (size_t i = 0; i < new_data.getNumberOfObs(); ++i) {
+    if (censoring_states[i] == 0) {
+      censoring_indicators[i] = 1;
+    }
+  }
+
+  vector<bool> states_ind = new_data.computeStateIndicators(response_event_time_ids, unique_event_times);
+  vector<double> occupation_probabilities = occupationProbabilitiesCpp(
+    predictions[0], predictions[1], num_states, new_data.getNumberOfObs());
+  vector<double> IPCW_weights = computeIPCWCpp(
+    new_data.getTimes(), censoring_indicators, unique_event_times, response_event_time_ids,
+    predictions[2], {}, new_data.getLastObservedTimes());
+
+  vector<double> brier = computeBrierScoreCppMultistate(
+    states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights_cpp);
+  pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times, true);
+  vector<double> kl = computeKLScoreCppMultistate(
+    states_ind, IPCW_weights, unique_event_times, occupation_probabilities, state_weights_cpp);
+  pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
+
+  return List::create(
+    Named("IBS.error") = ibs.first,
+    Named("normalised.IBS.error") = ibs.second,
+    Named("IKL.error") = ikl.first,
+    Named("normalised.IKL.error") = ikl.second
+  );
 }
 
 // computes VIMP for a specific feature after the forest is grown
@@ -1900,7 +2031,7 @@ void testData(const DataFrame& df, const NumericVector& response_indices, const 
 
 // for testing that all data functionalities related to multi-states work
 // [[Rcpp::export]]
-void testDataMM(const List& jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame& feature_df, 
+void testDataMultistate(const List& jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame& feature_df,
                 const NumericVector& feature_indices, const LogicalVector& categorical, const NumericVector& unique) {
   // convert the input to C++ vectors
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);

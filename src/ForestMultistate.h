@@ -33,6 +33,7 @@ public:
   bool predictionsSaved() {
     return save_predictions;
   }
+  void computePredictionsCensoring();
   // for computing predictions after the forest is grown
   vector<vector<double>> computePredictions(bool compute_initial, bool compute_censoring);
   vector<vector<double>> computePredictions(const Data& new_data, bool compute_initial, bool compute_censoring);

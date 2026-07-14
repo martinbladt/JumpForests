@@ -4,12 +4,21 @@
 \alias{jfforest.error}
 \title{Compute forest prediction error}
 \usage{
-jfforest.error(forest_list, new_data = NULL)
+jfforest.error(
+  forest_list,
+  new_data = NULL,
+  jump_data = NULL,
+  state_weights = NULL
+)
 }
 \arguments{
 \item{forest_list}{A fitted forest object from [jfforest()].}
 
 \item{new_data}{Optional evaluation data.}
+
+\item{jump_data}{Jump data (only needed for multi-state forests).}
+
+\item{state_weights}{Optional weights for each state in multi-state error calculations.}
 }
 \value{
 Error metrics as a list.

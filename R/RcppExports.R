@@ -5,8 +5,8 @@ JFCppTree <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, ho
     .Call(`_JumpForests_JFCppTree`, tree_type, df, mtry, min_node_size, nsplits, splitrule, honest, response_indices, feature_indices, categorical, unique, seed, num_event_times)
 }
 
-JFCppTreeMM <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, honest, feature_indices, categorical, unique, seed, state_weights, num_event_times) {
-    .Call(`_JumpForests_JFCppTreeMM`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, honest, feature_indices, categorical, unique, seed, state_weights, num_event_times)
+JFCppTreeMultistate <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, honest, feature_indices, categorical, unique, seed, state_weights, num_event_times) {
+    .Call(`_JumpForests_JFCppTreeMultistate`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, honest, feature_indices, categorical, unique, seed, state_weights, num_event_times)
 }
 
 JFCppTreePredict <- function(JFTree, df, feature_indices, categorical, unique) {
@@ -17,8 +17,8 @@ JFCppTreePredictCensoring <- function(JFTree, df, feature_indices, categorical, 
     .Call(`_JumpForests_JFCppTreePredictCensoring`, JFTree, df, feature_indices, categorical, unique)
 }
 
-JFCppTreePredictMM <- function(JFTree, df, feature_indices, categorical, unique, compute_initial, compute_censoring) {
-    .Call(`_JumpForests_JFCppTreePredictMM`, JFTree, df, feature_indices, categorical, unique, compute_initial, compute_censoring)
+JFCppTreePredictMultistate <- function(JFTree, df, feature_indices, categorical, unique, compute_initial, compute_censoring) {
+    .Call(`_JumpForests_JFCppTreePredictMultistate`, JFTree, df, feature_indices, categorical, unique, compute_initial, compute_censoring)
 }
 
 JFCppTreeError <- function(JFTree, df, feature_indices, categorical, unique, response_indices) {
@@ -33,8 +33,8 @@ JFCppForest <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, 
     .Call(`_JumpForests_JFCppForest`, tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
 }
 
-JFCppForestMM <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times = 0L) {
-    .Call(`_JumpForests_JFCppForestMM`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
+JFCppForestMultistate <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times = 0L) {
+    .Call(`_JumpForests_JFCppForestMultistate`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
 }
 
 JFCppForestPredictTraining <- function(JFForest) {
@@ -49,16 +49,24 @@ JFCppForestPredictCensoring <- function(JFForest, df, feature_indices, categoric
     .Call(`_JumpForests_JFCppForestPredictCensoring`, JFForest, df, feature_indices, categorical, unique)
 }
 
-JFCppForestPredictMM <- function(JFForest, df, feature_indices, categorical, unique, compute_initial) {
-    .Call(`_JumpForests_JFCppForestPredictMM`, JFForest, df, feature_indices, categorical, unique, compute_initial)
+JFCppForestPredictMultistate <- function(JFForest, df, feature_indices, categorical, unique, compute_initial) {
+    .Call(`_JumpForests_JFCppForestPredictMultistate`, JFForest, df, feature_indices, categorical, unique, compute_initial)
 }
 
 JFCppForestErrorSurvivalExternal <- function(JFForest) {
     .Call(`_JumpForests_JFCppForestErrorSurvivalExternal`, JFForest)
 }
 
+JFCppForestErrorMultistateExternal <- function(JFForest, state_weights) {
+    .Call(`_JumpForests_JFCppForestErrorMultistateExternal`, JFForest, state_weights)
+}
+
 JFCppForestError <- function(JFForest, df, feature_indices, categorical, unique, response_indices) {
     .Call(`_JumpForests_JFCppForestError`, JFForest, df, feature_indices, categorical, unique, response_indices)
+}
+
+JFCppForestErrorMultistate <- function(JFForest, max_response_length, num_states, jump_data, df_features, feature_indices, categorical, unique, state_weights) {
+    .Call(`_JumpForests_JFCppForestErrorMultistate`, JFForest, max_response_length, num_states, jump_data, df_features, feature_indices, categorical, unique, state_weights)
 }
 
 JFCppForestVIMPFeature <- function(JFForest, feature_name, feature_seed, method, loss) {
@@ -81,8 +89,8 @@ testData <- function(df, response_indices, feature_indices, categorical, unique)
     invisible(.Call(`_JumpForests_testData`, df, response_indices, feature_indices, categorical, unique))
 }
 
-testDataMM <- function(jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique) {
-    invisible(.Call(`_JumpForests_testDataMM`, jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique))
+testDataMultistate <- function(jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique) {
+    invisible(.Call(`_JumpForests_testDataMultistate`, jump_data, max_response_length, num_states, feature_df, feature_indices, categorical, unique))
 }
 
 testUniqueEventTimesThinning <- function(unique_event_times, num_event_times) {
