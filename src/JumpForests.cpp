@@ -1878,15 +1878,15 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     }
 
     // check validity of loss function
-    vector<string> valid_loss_functions = {"brier", "concordance"};
+    vector<string> valid_loss_functions = {"brier", "concordance", "kl"};
     if (find(valid_loss_functions.begin(), valid_loss_functions.end(), loss_cpp) == valid_loss_functions.end()) {
-      throw runtime_error("Invalid loss function, please choose between 'brier' or 'concordance'");
+      throw runtime_error("Invalid loss function, please choose between 'brier', 'concordance', or 'kl'");
     }
     
     if (method_cpp == "permute") {
       return forest->computeVIMPPermute(feature, feature_seed, loss_cpp);
     } else if (method_cpp == "random") {
-      return forest->computeVIMPRandom(feature, feature_seed);
+      return forest->computeVIMPRandom(feature, feature_seed, loss_cpp);
     } else {
       throw runtime_error("Type of VIMP computation method not recognised, use 'permute' or 'random'");
     }

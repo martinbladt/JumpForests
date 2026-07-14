@@ -170,6 +170,9 @@ censoring_predictions[95,]
 
 # VIMP
 jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "permute", loss = "brier")
+jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "random", loss = "brier")
+jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "permute", loss = "kl")
+jfforest.vimp(veteran_forest, feature = "karno", seed = 2025, method = "random", loss = "kl")
 veteran_forest <- jfforest.vimp(veteran_forest, seed = 2025, method = "permute")
 unlist(veteran_forest$vimp)
 vimp.rfsrc(veteran_forest_SRC, importance = "permute", vimp.measure = "concordance")$importance
@@ -303,6 +306,7 @@ colMeans(VIMP)
 colMeans(VIMP_SRC)
 
 # okay, it actually makes sense now, try with 'random'
+set.seed(2026)
 VIMP <- matrix(0, ncol = 6, nrow = nrows)
 VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
 for (b in seq_len(nrows)) {
@@ -332,6 +336,7 @@ colMeans(VIMP_SRC)
 # concurs nicely
 
 # now try both with Brier instead of concordance
+set.seed(2026)
 VIMP <- matrix(0, ncol = 6, nrow = nrows)
 VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
 for (b in seq_len(nrows)) {
@@ -362,6 +367,7 @@ colMeans(VIMP_SRC)
 
 # concurs fine
 
+set.seed(2026)
 VIMP <- matrix(0, ncol = 6, nrow = nrows)
 VIMP_SRC <- matrix(0, ncol = 6, nrow = nrows)
 for (b in seq_len(nrows)) {
@@ -604,6 +610,12 @@ vimp.rfsrc(forest_SRC, importance = "random", block.size = 1, seed = 2026, vimp.
 
 # across all runs, it seems that the only important variable, X1, has an approx. 10 times higher VIMP than the others
 # and the values concur in magnitude across methods and loss functions for our implementation and RF-SRC
+
+# not that we can compare to RFSRC but we should also verify that KL loss makes sense
+unlist(jfforest.vimp(forest, seed = 2026, method = "permute",loss = "kl")$vimp)
+unlist(jfforest.vimp(forest, seed = 2026, method = "random",loss = "kl")$vimp)
+
+# probably needs further testing, but again X1 is found to be the only important variable, as should be the case
 
 # peakVO2
 #--------------------------------------------------------------------

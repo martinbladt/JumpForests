@@ -21,7 +21,9 @@ jfforest.vimp(
 
 \item{method}{Importance method, `"permute"` or `"random"`.}
 
-\item{loss}{Loss function for importance, `"default"`, `"brier"`, or `"misc"` depending on forest type.}
+\item{loss}{Loss function for importance: `"mse"` for regression,
+`"misc"` or `"brier"` for classification, and `"concordance"`, `"brier"`,
+or `"kl"` for survival. `"default"` selects the forest-type default.}
 }
 \value{
 Variable importance values.

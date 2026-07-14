@@ -702,7 +702,9 @@ jfforest.error <- function(forest_list, new_data = NULL, jump_data = NULL, state
 #' @param feature Optional feature name.
 #' @param seed Optional random seed.
 #' @param method Importance method, `"permute"` or `"random"`.
-#' @param loss Loss function for importance, `"default"`, `"brier"`, or `"misc"` depending on forest type.
+#' @param loss Loss function for importance: `"mse"` for regression,
+#'   `"misc"` or `"brier"` for classification, and `"concordance"`, `"brier"`,
+#'   or `"kl"` for survival. `"default"` selects the forest-type default.
 #'
 #' @return Variable importance values.
 #' @export

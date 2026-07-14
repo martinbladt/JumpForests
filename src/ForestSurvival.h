@@ -41,7 +41,7 @@ public:
   void computePredictionsCensoring();
   // VIMP functions
   double computeVIMPPermute(size_t feature, int feature_seed, string error_type);
-  double computeVIMPRandom(size_t feature, int feature_seed);
+  double computeVIMPRandom(size_t feature, int feature_seed, string error_type);
 
 private:
   bool save_predictions;
