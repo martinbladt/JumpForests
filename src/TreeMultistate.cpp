@@ -30,7 +30,6 @@ MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, sh
 
 void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& jumps, vector<size_t>& at_risk) {
     // fetch states and other relevant data quantities
-    const vector<double>& times = data->getTimes();
     const vector<uint8_t>& states = data->getStates();
     const vector<size_t>& last_observed_times = data->getLastObservedTimes();
     const vector<uint8_t>& censoring_states = data->getCensoringStates();
@@ -53,15 +52,9 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
         // compute the censoring contribution C
         uint8_t censoring_state = censoring_states[i];
         if (censoring_state != 0) {     // censoring actually occurs
-            double R = times[last_observed_times[i]];
-            for (size_t j = 0; j < num_unique_event_times; ++j) {
-                if ((*unique_event_times)[j] > R) {
-                    // all following event times also satisfy > R
-                    for (size_t k = j; k < num_unique_event_times; ++k) {
-                        ++censoring_contribution[k * num_states + censoring_state - 1];
-                    }
-                    break;
-                }
+            size_t censoring_time_id = (*response_event_time_ids)[last_observed_times[i]];
+            for (size_t k = censoring_time_id; k < num_unique_event_times; ++k) {
+                ++censoring_contribution[k * num_states + censoring_state - 1];
             }
         }
         // compute number of jumps (we assume that at least one event of some kind occurs so that max_response_length > 1)
@@ -97,7 +90,6 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
 void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                          vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final) {
     // fetch states and other relevant data quantities
-    const vector<double>& times = data->getTimes();
     const vector<uint8_t>& states = data->getStates();
     const vector<size_t>& last_observed_times = data->getLastObservedTimes();
     const vector<uint8_t>& censoring_states = data->getCensoringStates();
@@ -140,18 +132,12 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
                 // censoring contribution
                 uint8_t censoring_state = censoring_states[i];
                 if (censoring_state != 0) {     // censoring actually occurs
-                    double R = times[last_observed_times[i]];
-                    for (size_t j = 0; j < num_unique_event_times; ++j) {
-                        if ((*unique_event_times)[j] > R) {
-                            // all following event times also satisfy > R
-                            for (size_t k = j; k < num_unique_event_times; ++k) {
-                                ++censoring_contribution_right[s * num_unique_event_times * num_states + k * num_states + censoring_state - 1];
-                            }
-                            break;
-                        }
+                    size_t censoring_time_id = (*response_event_time_ids)[last_observed_times[i]];
+                    for (size_t k = censoring_time_id; k < num_unique_event_times; ++k) {
+                        ++censoring_contribution_right[s * num_unique_event_times * num_states + k * num_states + censoring_state - 1];
                     }
                 }
-                // compute the number of jumps (the problem has to lie in the computation of the jumps since the accumulated jumps are too many)
+                // compute the number of jumps
                 size_t j = 1;
                 size_t index = i * max_response_length + 1;
                 while(j < max_response_length && states[index] != 0) {
@@ -188,7 +174,7 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
                 // for debugging
                 int addition = (int) num_at_risk_right[split_stride + k] - (int) censoring_contribution_right[split_stride + j * num_states + k] + (int) jump_contributions[k];
                 if (addition < 0) {
-                    cout << "Warning: Key decomposition negative, causing underflow in num_at_risk_right" << endl;  // here is the bug when thinning
+                    cout << "Warning: Key decomposition negative, causing underflow in num_at_risk_right" << endl;
                     cout << "Addition = " << addition << endl;
                     cout << "num_at_risk_0 = " << num_at_risk_right[split_stride + k] << endl;
                     cout << "Censoring contribution = " << censoring_contribution_right[split_stride + j * num_states + k] << endl;
@@ -1061,26 +1047,90 @@ vector<double> uniqueCensoringTimesMultistate(const vector<double>& unique_event
     return result;
 }
 
-// for computing the ids in the observed times corresponding to the unique event times (not counting censored times)
-vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times, const vector<uint8_t>& states) {
-    vector<size_t> response_event_time_ids;
-    size_t n = times.size();
-    response_event_time_ids.reserve(n);
-    for (size_t i = 0; i < n; ++i) {
-        // only difference to survival: there will be many zeroes since we flatten the times vector with the largest number of total jumps
-        // the states clause means that we exclude censoring times
-        if (times[i] == 0 || states[i] == states[i - 1]) {
-            response_event_time_ids.push_back(0);
-            continue;
+/*
+  Maps each response time to the fitted event-time grid. When the grid is thinned, several successive transitions can
+  otherwise map to the same time. Keep the mapped transitions strictly ordered within each observation, and delay censoring
+  until after the final mapped transition, so the binned paths remain valid paths.
+*/
+vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times,
+                                                     const vector<uint8_t>& states, uint8_t max_response_length) {
+    if (times.size() != states.size() || max_response_length == 0 || times.size() % max_response_length != 0) {
+        throw invalid_argument("Invalid flattened multi-state response data");
+    }
+    if (unique_event_times.empty()) {
+        throw invalid_argument("The multi-state event-time grid cannot be empty");
+    }
+
+    const size_t num_event_times = unique_event_times.size();
+    const size_t num_obs = times.size() / max_response_length;
+    vector<size_t> response_event_time_ids(times.size(), 0);
+
+    for (size_t obs = 0; obs < num_obs; ++obs) {
+        const size_t offset = obs * max_response_length;
+        size_t response_length = 1;
+        while (response_length < max_response_length && states[offset + response_length] != 0) {
+            ++response_length;
         }
 
-        // use binary search to find lower bound
-        auto it = lower_bound(unique_event_times.begin(), unique_event_times.end(), times[i]);
-        size_t idx = static_cast<size_t>(distance(unique_event_times.begin(), it));
-        if (idx >= unique_event_times.size()) {
-            idx = unique_event_times.size() - 1;
+        vector<size_t> transition_positions;
+        vector<size_t> mapped_transition_ids;
+        transition_positions.reserve(response_length - 1);
+        mapped_transition_ids.reserve(response_length - 1);
+
+        for (size_t j = 1; j < response_length; ++j) {
+            const size_t index = offset + j;
+            if (states[index] == states[index - 1]) {
+                continue;
+            }
+
+            auto it = lower_bound(unique_event_times.begin(), unique_event_times.end(), times[index]);
+            size_t event_time_id = static_cast<size_t>(distance(unique_event_times.begin(), it));
+            if (event_time_id >= num_event_times) {
+                event_time_id = num_event_times - 1;
+            }
+            transition_positions.push_back(index);
+            mapped_transition_ids.push_back(event_time_id);
         }
-        response_event_time_ids.push_back(idx);
+
+        const size_t num_transitions = mapped_transition_ids.size();
+        if (num_transitions >= num_event_times) {
+            throw invalid_argument("num_event_times is too small to preserve the order of a multi-state response path");
+        }
+
+        // Prefer the existing lower-bound mapping and only move a transition when
+        // thinning would collapse it onto an earlier transition from the same path.
+        for (size_t j = 0; j < num_transitions; ++j) {
+            const size_t earliest_id = j == 0 ? 1 : mapped_transition_ids[j - 1] + 1;
+            mapped_transition_ids[j] = max(mapped_transition_ids[j], earliest_id);
+        }
+
+        // Near the right edge there may not be room to move transitions forward.
+        // Move the affected tail backwards while retaining strict ordering.
+        if (num_transitions > 0 && mapped_transition_ids.back() >= num_event_times) {
+            mapped_transition_ids.back() = num_event_times - 1;
+            for (size_t j = num_transitions - 1; j > 0; --j) {
+                mapped_transition_ids[j - 1] = min(mapped_transition_ids[j - 1], mapped_transition_ids[j] - 1);
+            }
+        }
+
+        for (size_t j = 0; j < num_transitions; ++j) {
+            response_event_time_ids[transition_positions[j]] = mapped_transition_ids[j];
+        }
+
+        // A repeated final state denotes censoring. Store the first grid index at
+        // which censoring should remove the observation. num_event_times is a valid
+        // sentinel meaning that censoring occurs beyond the fitted grid.
+        if (response_length >= 2) {
+            const size_t last_index = offset + response_length - 1;
+            if (states[last_index] == states[last_index - 1]) {
+                auto it = upper_bound(unique_event_times.begin(), unique_event_times.end(), times[last_index]);
+                size_t censoring_time_id = static_cast<size_t>(distance(unique_event_times.begin(), it));
+                if (num_transitions > 0) {
+                    censoring_time_id = max(censoring_time_id, mapped_transition_ids.back() + 1);
+                }
+                response_event_time_ids[last_index] = censoring_time_id;
+            }
+        }
     }
     return response_event_time_ids;
 }

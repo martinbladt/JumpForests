@@ -225,15 +225,9 @@ vector<bool> Data::computeStateIndicators(const vector<size_t>& response_event_t
         // compute censoring contribution for current observation
         uint8_t censoring_state = censoring_states[i];
         if (censoring_state != 0) {
-            double R = times[last_observed_times[i]];
-            for (size_t t = 0; t < num_unique_event_times; ++t) {
-                if (unique_event_times[t] >= R) {
-                    // all following event times also satisfy >= R
-                    for (size_t s = t; s < num_unique_event_times; ++s) {
-                        ++censoring_contribution[s * num_states + censoring_state - 1];
-                    }
-                    break;
-                }
+            size_t censoring_time_id = response_event_time_ids[last_observed_times[i]];
+            for (size_t s = censoring_time_id; s < num_unique_event_times; ++s) {
+                ++censoring_contribution[s * num_states + censoring_state - 1];
             }
         }
         size_t j = 1;

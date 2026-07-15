@@ -248,7 +248,7 @@ List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t nu
   if (num_event_times > 0) {
     unique_event_times = thinUniqueEventTimes(unique_event_times, num_event_times);
   }
-  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates(), data->getMaxResponseLength());
   vector<double> censoring_times = uniqueCensoringTimesMultistate(unique_event_times, data->getTimes(), data->getLastObservedTimes());
 
   // create and grow the multi-state tree
@@ -840,7 +840,8 @@ List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, u
 
   // Score on the fitted tree's event-time grid, including any thinning used at fit time.
   vector<double> unique_event_times = tree->getEventTimes();
-  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, new_data.getTimes(), new_data.getStates());
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(
+    unique_event_times, new_data.getTimes(), new_data.getStates(), new_data.getMaxResponseLength());
 
   vector<double> state_weights_cpp = normaliseStateWeights(state_weights, num_states);
 
@@ -1064,7 +1065,8 @@ List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t 
     unique_event_times = thinUniqueEventTimes(unique_event_times, num_event_times);
   }
   
-  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data->getTimes(), data->getStates());
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(
+    unique_event_times, data->getTimes(), data->getStates(), data->getMaxResponseLength());
 
   // check validity of splitrule argument (just logrank for now)
   vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank"};
@@ -1782,7 +1784,7 @@ List JFCppForestErrorMultistate(const List& JFForest, uint8_t max_response_lengt
 
   const vector<double> unique_event_times = forest->getEventTimes();
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(
-    unique_event_times, new_data.getTimes(), new_data.getStates());
+    unique_event_times, new_data.getTimes(), new_data.getStates(), new_data.getMaxResponseLength());
   vector<double> state_weights_cpp = normaliseStateWeights(state_weights, num_states);
 
   vector<vector<double>> predictions = forest->computePredictions(new_data, true, true);
@@ -2082,7 +2084,8 @@ void testDataMultistate(const List& jump_data, uint8_t max_response_length, uint
   Rcout << endl << "The unique event times are: (total number : " << unique_event_times.size() << "):" << endl;;
   printVector(unique_event_times);
   Rcout << "The response event time ids are: ";
-  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(unique_event_times, data.getTimes(), data.getStates());
+  vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(
+    unique_event_times, data.getTimes(), data.getStates(), data.getMaxResponseLength());
   printVector(response_event_time_ids);
   vector<bool> state_indicators = data.computeStateIndicators(response_event_time_ids, unique_event_times);
   Rcout << "The state indicators are: ";

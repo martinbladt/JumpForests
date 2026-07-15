@@ -102,7 +102,8 @@ private:
 
 vector<double> uniqueEventTimesMultistate(const vector<double>& times, const vector<uint8_t>& states);
 vector<double> uniqueCensoringTimesMultistate(const vector<double>& unique_event_times, const vector<double>& times, const vector<size_t>& last_observed_times);
-vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times, const vector<uint8_t>& states);
+vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& unique_event_times, const vector<double>& times,
+                                                     const vector<uint8_t>& states, uint8_t max_response_length);
 
 // error computations for multi-states
 vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
