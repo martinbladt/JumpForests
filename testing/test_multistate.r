@@ -135,6 +135,12 @@ occupation_prob(init = predictions_new_data$initial[[1]], na = predictions_new_d
 #new_data <- data.frame(X2 = runif(1), X1 = rnorm(1))
 #new_data <- test_data[1,]
 
+# testing VIMP (X1 is signal, X2 is noise)
+unlist(jfforest.vimp(fitted_forest, method = "permute", loss = "brier")$vimp)
+unlist(jfforest.vimp(fitted_forest, method = "permute", loss = "kl")$vimp)
+
+# can't really distinguish, it seems, should compare to the survival implementation below
+
 # testing the error metrics on a survival data set (veteran)
 #-------------------------------------------------------------------------------------------------
 {
@@ -191,24 +197,25 @@ unlist(lapply(veteran_tree_mm$init, function(z) sum(z)))  # works!
 
 # plan for 18/5 and beyond
 
-# 2) For moderate to heavy censoring, the KM estimators for censoring are quite different when using multi-state trees instead
-#    of survival trees
 # 4) Allow the user to input an initial distribution for multi-state error computation
 # 6) Test errors against competing risks in randomForestSRC
-# 8) Extend error computations to whole forests
 
 # finished points
 # 1) Fix initial value estimation (see veteran above), empirical studies show that this is very likely where the difference
 #    in errors come from (big issue!)
+# 2) For moderate to heavy censoring, the KM estimators for censoring are quite different when using multi-state trees instead
+#    of survival trees (fixed, concurs quite nicely now)
 # 3) Related to 2), inconsistent computation of KM, for survival we subtract the number of deaths, but we don't subtract the
 #    total number of jumps for multi-states (changed, should no longer be a difference)
 # 5) (Optional) Reconsider removing the 'censored only' event times. This is more natural. What went wrong with the error computation?
 # 7) Write prediction functions for multi-state random forests (not just single trees)
+# 8) Extend error computations to whole forests
 # 9) There should be a function for survival forests which computes both OOB predictions and censoring predictions in one go instead of
 #    using two different functions (that way we only need to determine the leaf once)
 # 10) Repeat 9) for a single multi-state tree. Also do a thorough cleanup and remove old code used for prediction
 # 11) Something goes wrong for categorical data (again...): the values are saved internally in a nonsensical way
 # 12) Fix the subsampling printing error for honesty
+
 
 devtools::load_all()
 library(randomForestSRC)
@@ -272,15 +279,23 @@ tree_mm$censoring[5,][-1] - tree_survival$censoring[5,] # pretty small differenc
 # choosing e.g. n = 50 results in only one split and here the estimators are completely identical (as they should be)
 
 # just a bonus comparison with randomForestSRC
-
-forest_survival <- jfforest(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = TRUE)
+set.seed(2026)
+forest_mm <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15)
+forest_survival <- jfforest(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = FALSE)
 forest_survival_src <- rfsrc(Surv(time, status) ~ ., data = sim_data)
 
 print_forest(forest_survival) # C-error: 0.4609178, IBS: 1.187464, normalised IBS: 0.05969983
 forest_survival_src           # C-error: 0.46226363, IBS: 1.20540655, normalised IBS: 0.06509696
 
-# our survival forest provides significantly lower errors with honesty! C-error: 0.403807, IBS: 1.070356, normalised IBS: 0.0538122
-# (just a bonus observation, important to investigate the effect of honesty somewhere, maybe a direct consequence of much larger OOB sample...)
+# VIMP
+options(scipen = 999) # I want decimals
+unlist(jfforest.vimp(forest_survival, method = "random", loss = "brier", seed = 2026)$vimp)
+vimp.rfsrc(forest_survival_src,importance = "random", block.size = 1, vimp.measure = "brier", seed = 2026)$importance
+
+unlist(jfforest.vimp(forest_survival, method = "permute", loss = "brier", seed = 2026)$vimp)
+unlist(jfforest.vimp(forest_mm, method = "permute", loss = "brier", seed = 2026)$vimp)
+vimp.rfsrc(forest_survival_src,importance = "permute", block.size = 1, vimp.measure = "brier", seed = 2026)$importance
+
 
 # regain memory
 rm('forest_survival', 'forest_survival_src')

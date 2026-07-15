@@ -50,6 +50,42 @@ size_t Tree::predictionLeafID(const vector<double>& x) {
     return(current_node);
 }
 
+size_t Tree::predictionLeafID(size_t observation) {
+    size_t current_node = 0;
+    const vector<bool>& categorical = data->getCategorical();
+    while (left_daughters[current_node] != 0) {
+        size_t split_feature = feature_IDs[current_node];
+        double value = data->get_x(observation, split_feature);
+        if (categorical[split_feature]) {
+            const vector<double>& left_subset = thresholds[current_node];
+            current_node = find(left_subset.begin(), left_subset.end(), value) != left_subset.end() ?
+                left_daughters[current_node] : left_daughters[current_node] + 1;
+        } else {
+            current_node = value <= thresholds[current_node][0] ?
+                left_daughters[current_node] : left_daughters[current_node] + 1;
+        }
+    }
+    return current_node;
+}
+
+size_t Tree::predictionLeafIDPermuted(size_t observation, size_t feature, double value) {
+    size_t current_node = 0;
+    const vector<bool>& categorical = data->getCategorical();
+    while (left_daughters[current_node] != 0) {
+        size_t split_feature = feature_IDs[current_node];
+        double split_value = split_feature == feature ? value : data->get_x(observation, split_feature);
+        if (categorical[split_feature]) {
+            const vector<double>& left_subset = thresholds[current_node];
+            current_node = find(left_subset.begin(), left_subset.end(), split_value) != left_subset.end() ?
+                left_daughters[current_node] : left_daughters[current_node] + 1;
+        } else {
+            current_node = split_value <= thresholds[current_node][0] ?
+                left_daughters[current_node] : left_daughters[current_node] + 1;
+        }
+    }
+    return current_node;
+}
+
 size_t Tree::predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
     //uniform_int_distribution<size_t> daughter_id(0, 1);
     size_t current_node = 0;

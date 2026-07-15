@@ -1,16 +1,5 @@
 #include "ForestRegression.h"
 
-namespace {
-mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
-    seed_seq::result_type seed_data[2] = {
-        static_cast<seed_seq::result_type>(feature_seed),
-        static_cast<seed_seq::result_type>(tree_id)
-    };
-    seed_seq tree_seed(seed_data, seed_data + 2);
-    return mt19937(tree_seed);
-    }
-}
-
 // functions for growing regression forests
 //--------------------------------------------------------------------------------------
 

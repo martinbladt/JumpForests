@@ -3,15 +3,6 @@
 #include <cmath>
 
 namespace {
-mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
-    seed_seq::result_type seed_data[2] = {
-        static_cast<seed_seq::result_type>(feature_seed),
-        static_cast<seed_seq::result_type>(tree_id)
-    };
-    seed_seq tree_seed(seed_data, seed_data + 2);
-    return mt19937(tree_seed);
-}
-
 vector<double> eventTimesAtIDs(const vector<double>& event_times, const vector<size_t>& ids) {
     vector<double> selected_event_times;
     selected_event_times.reserve(ids.size());
@@ -326,12 +317,11 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, stri
         vector<double> tree_KM_predictions_shuffled;
         if (error_type == "brier" || error_type == "kl") {
             tree_KM_predictions.assign(num_oob_obs * num_brier_event_times, 0);
-            tree_KM_censoring.assign(num_oob_obs * num_brier_event_times, 0);
+            tree_KM_censoring.assign(num_oob_obs * tree->getCensoringTimes().size(), 0);
             tree_KM_predictions_shuffled.assign(num_oob_obs * num_brier_event_times, 0);
         }
 
-        // initialise vectors of times and indicators belonging to the OOB
-        // observations of this tree
+        // initialise vectors of times and indicators belonging to the OOB observations of this tree
         vector<double> times_tree;
         vector<double> ind_tree;
         vector<size_t> obs_indices_tree;
@@ -358,15 +348,16 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, stri
             if (error_type == "brier" || error_type == "kl") {
                 // fetch KM estimators for the CHF and censoring for the tree
                 const vector<double> tree_KM_pred = KaplanMeier(tree_pred);
-                const vector<double>& tree_KM_cens = tree->getKMCensoring()[leaf_id];
+                const vector<double>& tree_KM_cens = tree->getKMCensoringFull()[leaf_id];
                 const vector<double> tree_KM_pred_shuffled = KaplanMeier(tree_pred_shuffled);
 
                 // now save in the flattened vectors
                 size_t obs_index = num_brier_event_times * j;
+                size_t censoring_index = tree->getCensoringTimes().size() * j;
+                copy(tree_KM_cens.begin(), tree_KM_cens.end(), tree_KM_censoring.begin() + censoring_index);
                 for (size_t t = 0; t < num_brier_event_times; ++t) {
                     size_t source_time = true_event_time_ids[t];
                     tree_KM_predictions[obs_index + t] = tree_KM_pred[source_time];
-                    tree_KM_censoring[obs_index + t] = tree_KM_cens[source_time];
                     tree_KM_predictions_shuffled[obs_index + t] = tree_KM_pred_shuffled[source_time];
                 }
 
@@ -381,7 +372,9 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, stri
         // now compute and save tree VIMP
         if (error_type == "brier" || error_type == "kl") {
             // Keep the loss fixed: only the survival prediction is permuted.
-            vector<double> ipcw = computeIPCWCpp(times_tree, ind_tree, brier_event_times, brier_response_event_time_ids, tree_KM_censoring, obs_indices_tree);
+            vector<double> ipcw = computeIPCWCpp(times_tree, ind_tree, brier_event_times,
+                brier_response_event_time_ids, tree_KM_censoring, obs_indices_tree,
+                {}, tree->getCensoringTimes());
 
             vector<double> score = error_type == "brier" ?
                 computeBrierScoreCpp(times_tree, ipcw, brier_event_times, tree_KM_predictions) :
@@ -390,11 +383,11 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, stri
                 computeBrierScoreCpp(times_tree, ipcw, brier_event_times, tree_KM_predictions_shuffled) :
                 computeKLScoreCpp(times_tree, ipcw, brier_event_times, tree_KM_predictions_shuffled);
 
-            // Use the normalised integrated probability score.
-            double ibs_normalised = computeIntegratedScore(score, brier_event_times).second;
-            double ibs_normalised_shuffled = computeIntegratedScore(score_shuffled, brier_event_times).second;
+            // use the normalised integrated score.
+            double score_normalised = computeIntegratedScore(score, brier_event_times).second;
+            double score_normalised_shuffled = computeIntegratedScore(score_shuffled, brier_event_times).second;
 
-            tree_vimp[i] = ibs_normalised_shuffled - ibs_normalised;
+            tree_vimp[i] = score_normalised_shuffled - score_normalised;
             tree_valid[i] = 1;
             
         } else if (error_type == "concordance") {
@@ -474,7 +467,7 @@ double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed, strin
         obs_indices_tree.reserve(num_obs);
         if (error_type == "brier" || error_type == "kl") {
             tree_KM_predictions.reserve(num_obs * num_score_event_times);
-            tree_KM_censoring.reserve(num_obs * num_score_event_times);
+            tree_KM_censoring.reserve(num_obs * tree->getCensoringTimes().size());
             tree_KM_predictions_random.reserve(num_obs * num_score_event_times);
         }
 
@@ -497,13 +490,13 @@ double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed, strin
                 tree_outcomes_random.push_back(vector_sum(tree_pred_random));
             } else if (error_type == "brier" || error_type == "kl") {
                 size_t leaf_id = tree->predictionLeafID(x);
-                const vector<double>& tree_KM_cens = tree->getKMCensoring()[leaf_id];
+                const vector<double>& tree_KM_cens = tree->getKMCensoringFull()[leaf_id];
                 vector<double> tree_KM_pred = KaplanMeier(tree_pred);
                 vector<double> tree_KM_pred_random = KaplanMeier(tree_pred_random);
+                tree_KM_censoring.insert(tree_KM_censoring.end(), tree_KM_cens.begin(), tree_KM_cens.end());
                 for (size_t t = 0; t < num_score_event_times; ++t) {
                     size_t source_time = true_event_time_ids[t];
                     tree_KM_predictions.push_back(tree_KM_pred[source_time]);
-                    tree_KM_censoring.push_back(tree_KM_cens[source_time]);
                     tree_KM_predictions_random.push_back(tree_KM_pred_random[source_time]);
                 }
             } else {
@@ -523,7 +516,8 @@ double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed, strin
             }
         } else {
             vector<double> ipcw = computeIPCWCpp(times_tree, ind_tree, score_event_times,
-                score_response_event_time_ids, tree_KM_censoring, obs_indices_tree);
+                score_response_event_time_ids, tree_KM_censoring, obs_indices_tree,
+                {}, tree->getCensoringTimes());
             vector<double> score = error_type == "brier" ?
                 computeBrierScoreCpp(times_tree, ipcw, score_event_times, tree_KM_predictions) :
                 computeKLScoreCpp(times_tree, ipcw, score_event_times, tree_KM_predictions);

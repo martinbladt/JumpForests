@@ -27,6 +27,10 @@ public:
 
   // returns the ID of the leaf containing x
   size_t predictionLeafID(const vector<double>& x);
+  // returns the leaf for a training observation without materialising its feature row
+  size_t predictionLeafID(size_t observation);
+  // as above, but substitutes one feature value (used by permutation VIMP)
+  size_t predictionLeafIDPermuted(size_t observation, size_t feature, double value);
   // returns the ID of the leaf containing x when computing VIMP (random daughter assignments of feature x)
   size_t predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt19937& rng);
 
@@ -36,11 +40,11 @@ public:
   }
 
   // functions to get tree info
-  const vector<size_t> getLeftDaughters() const {
+  const vector<size_t>& getLeftDaughters() const {
     return left_daughters;
   }
 
-  const vector<size_t> getFeatureIDs() const {
+  const vector<size_t>& getFeatureIDs() const {
     return feature_IDs;
   }
 

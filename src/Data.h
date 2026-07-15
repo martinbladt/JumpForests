@@ -73,16 +73,16 @@ struct Data {
     return res;
   }
   // extract times and states for multi-state data
-  vector<double> getTimes() const {
+  const vector<double>& getTimes() const {
     return times;
   }
-  vector<uint8_t> getStates() const {
+  const vector<uint8_t>& getStates() const {
     return states;
   }
- vector<size_t> getLastObservedTimes() const {
-  return last_observed_times;
- }
-  vector<uint8_t> getCensoringStates() const {
+  const vector<size_t>& getLastObservedTimes() const {
+    return last_observed_times;
+  }
+  const vector<uint8_t>& getCensoringStates() const {
     return censoring_states;
   }
 
@@ -96,7 +96,7 @@ struct Data {
   size_t getNumberOfFeatures () const {
     return num_features;
   }
-  vector<bool> getCategorical () const {
+  const vector<bool>& getCategorical () const {
     return categorical;
   }
   vector<size_t> getUniqueValues () const {

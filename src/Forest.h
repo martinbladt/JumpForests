@@ -11,6 +11,9 @@ inline int omp_get_thread_num() { return 0; }
 #endif
 #include <thread>
 
+// Creates a deterministic, tree-specific RNG for parallel VIMP computations.
+mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id);
+
 class Forest {
 public:
   // function to initialise a general Forest (later add more options such as OOB, honesty etc.)

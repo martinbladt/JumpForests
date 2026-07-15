@@ -1892,7 +1892,21 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     }
   }
   if (type == "Multi-state") {
-    
+    MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
+    size_t feature = forest->getData()->getFeatureID(feature_name_cpp);
+    if (loss_cpp == "default") {
+      loss_cpp = "brier";
+    }
+    vector<string> valid_loss_functions = {"brier", "kl"};
+    if (find(valid_loss_functions.begin(), valid_loss_functions.end(), loss_cpp) == valid_loss_functions.end()) {
+      throw runtime_error("Invalid loss function, please choose between 'brier' or 'kl'");
+    }
+    if (method_cpp != "permute") {
+      throw runtime_error("Only permutation VIMP is currently implemented for multi-state forests");
+    }
+    const size_t num_states = forest->getData()->getNumberOfStates();
+    vector<double> state_weights(num_states, 1.0 / static_cast<double>(num_states));
+    return forest->computeVIMPPermute(feature, feature_seed, loss_cpp, state_weights);
   }
   throw runtime_error("Type of forest not recognised");
 }

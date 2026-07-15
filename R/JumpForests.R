@@ -503,6 +503,10 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     if (is.null(min_node_size)) {
       min_node_size <- 20
     }
+    # use the same default forest size as survival forests
+    if (is.null(ntrees)) {
+      ntrees <- 500
+    }
     # set default splitting rule (log-rank for multi-states so far)
     if (is.null(splitrule)) {
       splitrule <- "logrank"
@@ -704,7 +708,8 @@ jfforest.error <- function(forest_list, new_data = NULL, jump_data = NULL, state
 #' @param method Importance method, `"permute"` or `"random"`.
 #' @param loss Loss function for importance: `"mse"` for regression,
 #'   `"misc"` or `"brier"` for classification, and `"concordance"`, `"brier"`,
-#'   or `"kl"` for survival. `"default"` selects the forest-type default.
+#'   or `"kl"` for survival; and `"brier"` or `"kl"` for multi-state
+#'   forests. `"default"` selects the forest-type default.
 #'
 #' @return Variable importance values.
 #' @export

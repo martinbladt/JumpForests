@@ -3,15 +3,6 @@
 #include <cmath>
 
 namespace {
-mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
-    seed_seq::result_type seed_data[2] = {
-        static_cast<seed_seq::result_type>(feature_seed),
-        static_cast<seed_seq::result_type>(tree_id)
-    };
-    seed_seq tree_seed(seed_data, seed_data + 2);
-    return mt19937(tree_seed);
-    }
-
 size_t encodedResponseToClassIndex(double response, size_t num_classes) {
     double rounded_response = round(response);
     if (!isfinite(response) || abs(response - rounded_response) > 1e-8 ||

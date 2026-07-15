@@ -869,15 +869,15 @@ vector<double> computeKLScoreCpp(const vector<double>& times, const vector<doubl
 }
 
 // computes the integrated Brier Score (IBS) and the normalised IBS (using the trapezoidal rule)
-// for a multi-state model (multi_state == true), bs is a flattened vector of length num_unique_event_times * num_states
+// for a multi-state model (multi_state == true), score is a flattened vector of length num_unique_event_times * num_states
 pair<double, double> computeIntegratedScore(const vector<double>& score, const vector<double>& unique_event_times, bool multi_state) {
     size_t num_unique_event_times = unique_event_times.size();
-    double ibs = 0;
+    double iscore = 0;
 
     if (!multi_state) { // survival
         // apply trapezoidal rule
         for (size_t j = 1; j < num_unique_event_times; ++j) {
-            ibs += (score[j] + score[j - 1]) * (unique_event_times[j] - unique_event_times[j - 1]) / 2;
+            iscore += (score[j] + score[j - 1]) * (unique_event_times[j] - unique_event_times[j - 1]) / 2;
         }
     } else {            // for multi-state models, aggregate over all states
         size_t num_states = score.size() / num_unique_event_times;
@@ -890,10 +890,10 @@ pair<double, double> computeIntegratedScore(const vector<double>& score, const v
         }
         // now compute the integrated score via the trapezoidal rule
         for (size_t t = 1; t < num_unique_event_times; ++t) {
-            ibs += (state_contributions[t] + state_contributions[t - 1]) * (unique_event_times[t] - unique_event_times[t - 1]) / 2;
+            iscore += (state_contributions[t] + state_contributions[t - 1]) * (unique_event_times[t] - unique_event_times[t - 1]) / 2;
         }
     }
-    return {ibs, ibs / unique_event_times.back()};
+    return {iscore, iscore / unique_event_times.back()};
 }
 
 
