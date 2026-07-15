@@ -39,12 +39,16 @@ public:
   vector<vector<double>> computePredictions(const Data& new_data, bool compute_initial, bool compute_censoring);
   // VIMP functions
   double computeVIMPPermute(size_t feature, int feature_seed, string error_type, const vector<double>& state_weights);
-  double computeVIMPRandom(size_t feature, int feature_seed);
+  double computeVIMPRandom(size_t feature, int feature_seed, string error_type, const vector<double>& state_weights);
   
 private:
   void clearVIMPCache();
   void prepareVIMPCache();
   void prepareVIMPBaseline(const string& error_type, const vector<double>& state_weights);
+  void prepareVIMPComputation(size_t feature, const string& error_type, const vector<double>& state_weights);
+  double computeVIMPForLeafAssignments(size_t tree_id, const vector<size_t>& prediction_leaf_ids,
+                                       bool use_brier, const vector<double>& state_weights,
+                                       vector<double>& score);
 
   // quantities of interest specific to multi-state forests
   bool save_predictions;
@@ -55,7 +59,7 @@ private:
   vector<vector<double>> init_dist;             // the estimated initial distribution for the forest
 
   // lazily populated, response- and tree-level quantities shared by every
-  // feature-specific permutation VIMP computation.
+  // feature-specific VIMP computation.
   bool vimp_cache_ready = false;
   vector<double> vimp_event_times;                            // the times used for scoring (excludes zero) (length = T - 1)
   vector<uint8_t> vimp_observed_states;                       // observed states (length = (T - 1) * n)

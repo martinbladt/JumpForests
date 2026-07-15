@@ -1901,12 +1901,15 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     if (find(valid_loss_functions.begin(), valid_loss_functions.end(), loss_cpp) == valid_loss_functions.end()) {
       throw runtime_error("Invalid loss function, please choose between 'brier' or 'kl'");
     }
-    if (method_cpp != "permute") {
-      throw runtime_error("Only permutation VIMP is currently implemented for multi-state forests");
-    }
     const size_t num_states = forest->getData()->getNumberOfStates();
     vector<double> state_weights(num_states, 1.0 / static_cast<double>(num_states));
-    return forest->computeVIMPPermute(feature, feature_seed, loss_cpp, state_weights);
+    if (method_cpp == "permute") {
+      return forest->computeVIMPPermute(feature, feature_seed, loss_cpp, state_weights);
+    } else if (method_cpp == "random") {
+      return forest->computeVIMPRandom(feature, feature_seed, loss_cpp, state_weights);
+    } else {
+      throw runtime_error("Type of VIMP computation method not recognised, use 'permute' or 'random'");
+    }
   }
   throw runtime_error("Type of forest not recognised");
 }

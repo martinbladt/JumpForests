@@ -127,6 +127,33 @@ size_t Tree::predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt199
     return current_node;
 }
 
+size_t Tree::predictionLeafIDVIMP(size_t observation, size_t feature, mt19937& rng) {
+    size_t current_node = 0;
+    const vector<bool>& categorical = data->getCategorical();
+    while (left_daughters[current_node] != 0) {
+        size_t split_feature = feature_IDs[current_node];
+        if (split_feature == feature) {
+            size_t left_daughter = left_daughters[current_node];
+            discrete_distribution<size_t> daughter_id({
+                static_cast<double>(node_sizes[left_daughter]),
+                static_cast<double>(node_sizes[left_daughter + 1])
+            });
+            current_node = left_daughter + daughter_id(rng);
+        } else {
+            double value = data->get_x(observation, split_feature);
+            if (categorical[split_feature]) {
+                const vector<double>& left_subset = thresholds[current_node];
+                current_node = find(left_subset.begin(), left_subset.end(), value) != left_subset.end() ?
+                    left_daughters[current_node] : left_daughters[current_node] + 1;
+            } else {
+                current_node = value <= thresholds[current_node][0] ?
+                    left_daughters[current_node] : left_daughters[current_node] + 1;
+            }
+        }
+    }
+    return current_node;
+}
+
 // samples split points for continuous splits, returns number of final split points (zero indicates no possible splits)
 size_t Tree::sampleSplitPoints(vector<double>& split_points, const vector<size_t>& indices, size_t feature) {
   // extract candidate split points

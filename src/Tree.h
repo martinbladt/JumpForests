@@ -33,6 +33,8 @@ public:
   size_t predictionLeafIDPermuted(size_t observation, size_t feature, double value);
   // returns the ID of the leaf containing x when computing VIMP (random daughter assignments of feature x)
   size_t predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt19937& rng);
+  // as above, but routes a training observation without materialising its feature row
+  size_t predictionLeafIDVIMP(size_t observation, size_t feature, mt19937& rng);
 
   // returns the size of the node containing x
   size_t nodeSize(const vector<double>& x) {

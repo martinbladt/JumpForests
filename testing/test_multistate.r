@@ -285,11 +285,13 @@ forest_survival <- jfforest(Surv(time, status) ~ ., data = sim_data, min_node_si
 forest_survival_src <- rfsrc(Surv(time, status) ~ ., data = sim_data)
 
 print_forest(forest_survival) # C-error: 0.4609178, IBS: 1.187464, normalised IBS: 0.05969983
+print_forest(forest_mm)
 forest_survival_src           # C-error: 0.46226363, IBS: 1.20540655, normalised IBS: 0.06509696
 
 # VIMP
 options(scipen = 999) # I want decimals
 unlist(jfforest.vimp(forest_survival, method = "random", loss = "brier", seed = 2026)$vimp)
+unlist(jfforest.vimp(forest_mm, method = "random", loss = "brier", seed = 2026)$vimp)
 vimp.rfsrc(forest_survival_src,importance = "random", block.size = 1, vimp.measure = "brier", seed = 2026)$importance
 
 unlist(jfforest.vimp(forest_survival, method = "permute", loss = "brier", seed = 2026)$vimp)
