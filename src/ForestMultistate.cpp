@@ -411,6 +411,8 @@ void MultistateForest::computePredictionsCensoring() {
     save_predictions = true;
 }
 
+// function to clear all quantities related to VIMP calculation only, is called before growing the forest
+// and before computing the KM censoring estimators in the leaves
 void MultistateForest::clearVIMPCache() {
     vimp_cache_ready = false;
     vimp_event_times.clear();
@@ -429,6 +431,12 @@ void MultistateForest::clearVIMPCache() {
     vimp_baseline_scores.clear();
 }
 
+/*
+  this function computes all indices needed for computing VIMP across any feature, namely the indices
+  needed in baseline computations, including populating the leaves with occupation probabilities, but
+  only those needed for baseline computations, the rest are computed lazily (only when needed by e.g.
+  a shuffled feature / random daughter assignment)
+*/
 void MultistateForest::prepareVIMPCache() {
     if (vimp_cache_ready) {
         return;
@@ -439,20 +447,17 @@ void MultistateForest::prepareVIMPCache() {
     const size_t num_vimp_times = num_unique_event_times - 1;
     vimp_event_times.assign(unique_event_times.begin() + 1, unique_event_times.end());
 
-    // state membership does not depend on the permuted feature. Store only
-    // the scored (nonzero) event-time rows once for all features
+    // compute the vector of actual observed states (which does not depend on the shuffled feature)
     vimp_observed_states.assign(num_obs * num_vimp_times, static_cast<uint8_t>(num_states));
-    {
-        vector<bool> full_state_indicators = data->computeStateIndicators(response_event_time_ids, unique_event_times);
-        for (size_t obs = 0; obs < num_obs; ++obs) {
-            size_t source_row = obs * num_unique_event_times * num_states + num_states;
-            size_t target_row = obs * num_vimp_times;
-            for (size_t t = 0; t < num_vimp_times; ++t) {
-                for (size_t state = 0; state < num_states; ++state) {
-                    if (full_state_indicators[source_row + t * num_states + state]) {
-                        vimp_observed_states[target_row + t] = static_cast<uint8_t>(state);
-                        break;
-                    }
+    vector<bool> full_state_indicators = data->computeStateIndicators(response_event_time_ids, unique_event_times);
+    for (size_t obs = 0; obs < num_obs; ++obs) {
+        size_t source_row = obs * num_unique_event_times * num_states + num_states;
+        size_t target_row = obs * num_vimp_times;
+        for (size_t t = 0; t < num_vimp_times; ++t) {
+            for (size_t state = 0; state < num_states; ++state) {
+                if (full_state_indicators[source_row + t * num_states + state]) {
+                    vimp_observed_states[target_row + t] = static_cast<uint8_t>(state);
+                    break;
                 }
             }
         }
@@ -465,6 +470,7 @@ void MultistateForest::prepareVIMPCache() {
         vimp_uncensored[obs] = censoring_states[obs] == 0;
     }
 
+    // compute the OOB indices (not as bools) and initialise all temporary VIMP values we need
     OOBNonBoolIndices(vimp_oob_indices, oob_indices);
     vimp_oob_leaf_ids.resize(ntrees);
     vimp_leaf_occupation_probs.resize(ntrees);
@@ -478,24 +484,29 @@ void MultistateForest::prepareVIMPCache() {
     const vector<double>& censoring_times = first_tree->getCensoringTimes();
     const size_t no_censoring_id = numeric_limits<size_t>::max();
 
-    // use upper_bound to find the largest censoring grid time less than or equal to the time under consideration
-    // (in vimp_event_times) to look up the values G(t)
-    vector<size_t> event_censoring_ids(num_vimp_times, no_censoring_id);
+    // use upper_bound to find the smallest censoring time larger than the current event time
+    // (in vimp_event_times), used to look up the values G(t)
+    vector<size_t> event_censoring_ids(num_vimp_times, no_censoring_id);    // initialise with infinity (no censoring)
     for (size_t t = 0; t < num_vimp_times; ++t) {
         auto it = upper_bound(censoring_times.begin(), censoring_times.end(), vimp_event_times[t]);
+        // censoring actually occurs, compute the id of the censoring time
         if (it != censoring_times.begin()) {
             event_censoring_ids[t] = static_cast<size_t>(distance(censoring_times.begin(), it) - 1);
         }
     }
 
-    // for the subject endpoint, we use lower_bound to find the largest censoring time strictly below T_i, yielding G(T_i-)
+    // for the subject endpoint, we use lower_bound to find the largest censoring time <= T_i
+    // recall that pure censoring times are not included in the unique event times for multi-states
     const vector<double>& times = data->getTimes();
     const vector<size_t>& last_observed_times = data->getLastObservedTimes();
     vector<size_t> endpoint_censoring_ids(num_obs, no_censoring_id);
     vimp_first_endpoint_event_ids.resize(num_obs);
     for (size_t obs = 0; obs < num_obs; ++obs) {
         double endpoint = times[last_observed_times[obs]];
+        // determine the id of the endpoint
         vimp_first_endpoint_event_ids[obs] = static_cast<size_t>(distance(vimp_event_times.begin(), lower_bound(vimp_event_times.begin(), vimp_event_times.end(), endpoint)));
+        // now determine where in the censoring time grid the endpoint belongs
+        // (recall that this grid is fixed for all trees, so it only needs to be computed once)
         auto it = lower_bound(censoring_times.begin(), censoring_times.end(), endpoint);
         if (it != censoring_times.begin()) {
             endpoint_censoring_ids[obs] = static_cast<size_t>(distance(censoring_times.begin(), it) - 1);
@@ -504,30 +515,34 @@ void MultistateForest::prepareVIMPCache() {
 
     vector<string> cache_errors(ntrees);
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
-    for (size_t tree_id = 0; tree_id < ntrees; ++tree_id) {
+    for (size_t j = 0; j < ntrees; ++j) {
       try {
-        // here we check (in parallel) what nodes actually use the feature since if the feature
-        // is never used by a particular tree, the contribution to the VIMP will be zero
-        MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[tree_id].get());
+        // fetch tree and initialise pointers (caches) to the different VIMP-related quantities for the
+        // tree such as estimators and tree info
+        MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[j].get());
         const vector<vector<double>>& tree_na = tree->getNA();
         const vector<vector<double>>& tree_init = tree->getInitDist();
-        vector<vector<double>>& occupation_cache = vimp_leaf_occupation_probs[tree_id];
+        vector<vector<double>>& occupation_cache = vimp_leaf_occupation_probs[j];
         occupation_cache.resize(tree_na.size());
-        vector<vector<double>>& event_ipcw_cache = vimp_leaf_event_ipcw[tree_id];
+        vector<vector<double>>& event_ipcw_cache = vimp_leaf_event_ipcw[j];
         event_ipcw_cache.resize(tree_na.size());
-        const vector<size_t>& tree_oob = vimp_oob_indices[tree_id];
+        const vector<size_t>& tree_oob = vimp_oob_indices[j];
         const size_t num_oob_obs = tree_oob.size();
         const vector<vector<double>>& censoring_cache = tree->getKMCensoringFull();
         const vector<size_t>& left_daughters = tree->getLeftDaughters();
         const vector<size_t>& feature_ids = tree->getFeatureIDs();
+
+        // here we check (in parallel) what nodes actually use the feature since if the feature
+        // is never used by a particular tree, the contribution to the VIMP will be zero
         for (size_t node = 0; node < left_daughters.size(); ++node) {
             // ensures that we don't check terminal nodes (such nodes contain the placeholder value 0)
             if (left_daughters[node] != 0) {
-                vimp_tree_uses_feature[tree_id][feature_ids[node]] = true;
+                vimp_tree_uses_feature[j][feature_ids[node]] = true;
             }
         }
 
-        vector<size_t>& leaf_ids = vimp_oob_leaf_ids[tree_id];
+        // compute the leaf ids once and for all for OOB observations for this tree (j)
+        vector<size_t>& leaf_ids = vimp_oob_leaf_ids[j];
         leaf_ids.resize(tree_oob.size());
         for (size_t row = 0; row < tree_oob.size(); ++row) {
             leaf_ids[row] = tree->predictionLeafID(tree_oob[row]);
@@ -550,16 +565,19 @@ void MultistateForest::prepareVIMPCache() {
             vector<double>& event_ipcw = event_ipcw_cache[node];
             event_ipcw.resize(num_vimp_times, 0);
             for (size_t t = 0; t < num_vimp_times; ++t) {
+                // here the weight is computed; if censoring does not occur (== no_censoring_id = infinity),
+                // then the weight is 1/n, otherwise 1 / nG(t) (the subject is still at risk)
                 size_t censoring_id = event_censoring_ids[t];
                 double censoring = censoring_id == no_censoring_id ?
-                    1.0 : censoring_cache[node][censoring_id];
+                    1.0 : censoring_cache[node][censoring_id];  // recall censoring_cache is the KM estimator
                 if (censoring > 0) {
                     event_ipcw[t] = 1.0 / (static_cast<double>(num_oob_obs) * censoring);
                 }
             }
         }
 
-        vector<double>& endpoint_ipcw = vimp_oob_endpoint_ipcw[tree_id];
+        // repeat the logic but for the endpoint, here the IPCW weight is 1 / nG(T_i-) in the case of censoring
+        vector<double>& endpoint_ipcw = vimp_oob_endpoint_ipcw[j];
         endpoint_ipcw.resize(tree_oob.size(), 0);
         for (size_t row = 0; row < tree_oob.size(); ++row) {
             size_t obs_id = tree_oob[row];
@@ -571,7 +589,7 @@ void MultistateForest::prepareVIMPCache() {
             }
         }
       } catch (const std::exception& error) {
-        cache_errors[tree_id] = error.what();
+        cache_errors[j] = error.what();
       }
     }
 
@@ -585,7 +603,9 @@ void MultistateForest::prepareVIMPCache() {
     vimp_cache_ready = true;
 }
 
+// computes the baseline score for VIMP, since this is the same across all features (used for all VIMP methods)
 void MultistateForest::prepareVIMPBaseline(const string& error_type, const vector<double>& state_weights) {
+    // check if the baseline VIMP quantities for this particular choice of error and state_weights have already been computed
     if (vimp_baseline_ready && vimp_baseline_error_type == error_type &&
         vimp_baseline_state_weights == state_weights) {
         return;
@@ -598,49 +618,57 @@ void MultistateForest::prepareVIMPBaseline(const string& error_type, const vecto
     vector<string> tree_errors(ntrees);
 
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
-    for (size_t tree_id = 0; tree_id < ntrees; ++tree_id) {
+    for (size_t j = 0; j < ntrees; ++j) {
       try {
-        const vector<size_t>& tree_oob = vimp_oob_indices[tree_id];
+        // fetch all tree-specific VIMP indices and estimators
+        const vector<size_t>& tree_oob = vimp_oob_indices[j];
         if (tree_oob.empty()) {
             continue;
         }
         vector<double> score(score_size, 0);
-        const vector<size_t>& leaf_ids = vimp_oob_leaf_ids[tree_id];
-        const vector<vector<double>>& occupation_cache = vimp_leaf_occupation_probs[tree_id];
-        const vector<vector<double>>& event_ipcw_cache = vimp_leaf_event_ipcw[tree_id];
-        const vector<double>& endpoint_ipcw_cache = vimp_oob_endpoint_ipcw[tree_id];
+        const vector<size_t>& leaf_ids = vimp_oob_leaf_ids[j];
+        const vector<vector<double>>& occupation_cache = vimp_leaf_occupation_probs[j];
+        const vector<vector<double>>& event_ipcw_cache = vimp_leaf_event_ipcw[j];
+        const vector<double>& endpoint_ipcw_cache = vimp_oob_endpoint_ipcw[j];
 
         for (size_t row = 0; row < tree_oob.size(); ++row) {
+            // fetch all relevant quantities for this observation
             size_t obs_id = tree_oob[row];
             size_t leaf_id = leaf_ids[row];
             const vector<double>& occupation = occupation_cache[leaf_id];
             const vector<double>& event_ipcw = event_ipcw_cache[leaf_id];
             size_t first_endpoint_event = vimp_first_endpoint_event_ids[obs_id];
+
             for (size_t t = 0; t < num_vimp_times; ++t) {
+                // if t is before the endpoint, the IPCW weight is in the vimp_leaf_event_ipcw vector,
+                // otherwise in the vimp_oob_endpoint_ipcw vector
                 double ipcw = t < first_endpoint_event ? event_ipcw[t] :
                     (vimp_uncensored[obs_id] ? endpoint_ipcw_cache[row] : 0.0);
                 if (ipcw == 0) {
                     continue;
                 }
+
+                // here we compute the score (either Brier score or Kullback-Leibler error for now)
                 size_t time_offset = t * num_states;
                 size_t observed_state = vimp_observed_states[obs_id * num_vimp_times + t];
                 if (error_type == "brier") {
-                    for (size_t state = 0; state < num_states; ++state) {
-                        size_t offset = time_offset + state;
+                    for (size_t k = 0; k < num_states; ++k) {
+                        size_t offset = time_offset + k;
                         double prediction = occupation[offset];
-                        double residual = state == observed_state ? 1.0 - prediction : prediction;
-                        score[offset] += ipcw * residual * residual * state_weights[state];
+                        double residual = k == observed_state ? 1.0 - prediction : prediction;
+                        score[offset] += ipcw * residual * residual * state_weights[k];
                     }
-                } else if (observed_state < num_states && state_weights[observed_state] != 0) {
+                } else if (error_type == "kl" && observed_state < num_states && state_weights[observed_state] != 0) {
                     size_t offset = time_offset + observed_state;
                     score[offset] -= ipcw * log(probabilityForLogScore(occupation[offset])) *
                                      state_weights[observed_state];
                 }
             }
         }
-        baseline_scores[tree_id] = computeIntegratedScore(score, vimp_event_times, true).second;
+        // save the baseline score, which is the same across all features
+        baseline_scores[j] = computeIntegratedScore(score, vimp_event_times, true).second;
       } catch (const std::exception& error) {
-        tree_errors[tree_id] = error.what();
+        tree_errors[j] = error.what();
       }
     }
 
@@ -656,6 +684,7 @@ void MultistateForest::prepareVIMPBaseline(const string& error_type, const vecto
     vimp_baseline_ready = true;
 }
 
+// simply a wrapper function for the two functions above with some messages
 void MultistateForest::prepareVIMPComputation(size_t feature, const string& error_type,
                                               const vector<double>& state_weights) {
     if (error_type != "brier" && error_type != "kl") {
@@ -681,16 +710,16 @@ void MultistateForest::prepareVIMPComputation(size_t feature, const string& erro
     prepareVIMPBaseline(error_type, state_weights);
 }
 
-double MultistateForest::computeVIMPForLeafAssignments(size_t tree_id,
-                                                        const vector<size_t>& prediction_leaf_ids,
-                                                        bool use_brier,
-                                                        const vector<double>& state_weights,
-                                                        vector<double>& score) {
+// computes VIMP contribution for a single tree (tree_id) given the predicted VIMP leafs and the baseline values
+// computed earlier
+double MultistateForest::computeVIMPForLeafAssignments(size_t tree_id, const vector<size_t>& prediction_leaf_ids, string error_type,
+                                                       const vector<double>& state_weights, vector<double>& score) {
     const vector<size_t>& tree_oob = vimp_oob_indices[tree_id];
     if (prediction_leaf_ids.size() != tree_oob.size()) {
         throw runtime_error("Internal error: VIMP leaf assignments do not match the OOB sample");
     }
 
+    // fetch tree and all relevant tree info
     MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[tree_id].get());
     const size_t num_states = data->getNumberOfStates();
     const size_t num_score_event_times = vimp_event_times.size();
@@ -698,37 +727,45 @@ double MultistateForest::computeVIMPForLeafAssignments(size_t tree_id,
     const vector<vector<double>>& tree_na = tree->getNA();
     const vector<vector<double>>& tree_init = tree->getInitDist();
 
+    // here we compute occupation probabilities in a leaf if these have not already
+    // been computed earlier when we prepared the baseline (in prepareVIMPCache)
     for (size_t leaf_id : prediction_leaf_ids) {
         if (leaf_id >= occupation_cache.size()) {
             throw runtime_error("Internal error: VIMP routed an observation to an invalid leaf");
         }
         if (occupation_cache[leaf_id].empty()) {
-            occupation_cache[leaf_id] = occupationProbabilitiesVIMP(
-                tree_na[leaf_id], tree_init[leaf_id], num_states);
+            occupation_cache[leaf_id] = occupationProbabilitiesVIMP(tree_na[leaf_id], tree_init[leaf_id], num_states);
         }
     }
 
+    // fetch IPCW values and leaf IDs for the tree
     score.assign(num_score_event_times * num_states, 0);
     const vector<size_t>& original_leaf_ids = vimp_oob_leaf_ids[tree_id];
     const vector<vector<double>>& event_ipcw_cache = vimp_leaf_event_ipcw[tree_id];
     const vector<double>& endpoint_ipcw_cache = vimp_oob_endpoint_ipcw[tree_id];
 
     for (size_t row = 0; row < tree_oob.size(); ++row) {
+        // fetch values for current OOB observation
         const size_t obs_id = tree_oob[row];
         const size_t original_leaf_id = original_leaf_ids[row];
         const vector<double>& occupation = occupation_cache[prediction_leaf_ids[row]];
         const vector<double>& event_ipcw = event_ipcw_cache[original_leaf_id];
         const size_t first_endpoint_event = vimp_first_endpoint_event_ids[obs_id];
+
         for (size_t t = 0; t < num_score_event_times; ++t) {
+            /*
+              if we are below the endpoint, use the IPCW value from before the event, otherwise, if the
+              observation is uncensored, use the endpoint IPCW value, and if the event is censored, the 
+              weight is zero, and the observation contributes zero to the score
+            */
             double ipcw = t < first_endpoint_event ? event_ipcw[t] :
                 (vimp_uncensored[obs_id] ? endpoint_ipcw_cache[row] : 0.0);
             if (ipcw == 0) {
                 continue;
             }
             const size_t time_offset = t * num_states;
-            const size_t observed_state =
-                vimp_observed_states[obs_id * num_score_event_times + t];
-            if (use_brier) {
+            const size_t observed_state = vimp_observed_states[obs_id * num_score_event_times + t];
+            if (error_type == "brier") {
                 for (size_t state = 0; state < num_states; ++state) {
                     const size_t offset = time_offset + state;
                     const double prediction = occupation[offset];
@@ -736,7 +773,7 @@ double MultistateForest::computeVIMPForLeafAssignments(size_t tree_id,
                         1.0 - prediction : prediction;
                     score[offset] += ipcw * residual * residual * state_weights[state];
                 }
-            } else if (observed_state < num_states && state_weights[observed_state] != 0) {
+            } else if (error_type == "kl" && observed_state < num_states && state_weights[observed_state] != 0) {
                 const size_t offset = time_offset + observed_state;
                 score[offset] -= ipcw * log(probabilityForLogScore(occupation[offset])) *
                                  state_weights[observed_state];
@@ -744,12 +781,12 @@ double MultistateForest::computeVIMPForLeafAssignments(size_t tree_id,
         }
     }
 
-    return computeIntegratedScore(score, vimp_event_times, true).second -
-           vimp_baseline_scores[tree_id];
+    // finally, compute VIMP for this tree (we use the normalised version by convention)
+    return computeIntegratedScore(score, vimp_event_times, true).second - vimp_baseline_scores[tree_id];
 }
 
-double MultistateForest::computeVIMPPermute(size_t feature, int feature_seed, string error_type,
-                                            const vector<double>& state_weights) {
+// computes VIMP for multi-state forests using permutation of the feature values across OOB observations
+double MultistateForest::computeVIMPPermute(size_t feature, int feature_seed, string error_type, const vector<double>& state_weights) {
     prepareVIMPComputation(feature, error_type, state_weights);
 
     vector<double> tree_vimp(ntrees, 0);
@@ -765,15 +802,19 @@ double MultistateForest::computeVIMPPermute(size_t feature, int feature_seed, st
         #pragma omp for schedule(dynamic)
         for (size_t i = 0; i < ntrees; ++i) {
           try {
+            // fetch tree and the indices for its OOB observations
             MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[i].get());
             const vector<size_t>& tree_oob_indices = vimp_oob_indices[i];
             const size_t num_oob_obs = tree_oob_indices.size();
             if (num_oob_obs == 0) continue;
             tree_valid[i] = 1;
+            // if the feature is never split upon, the VIMP contribution is zero, 
+            // and the tree can be safely skipped
             if (!vimp_tree_uses_feature[i][feature]) {
                 continue;
             }
 
+            // fetch feature values and shuffle these
             shuffled_oob_values.resize(num_oob_obs);
             for (size_t j = 0; j < num_oob_obs; ++j) {
                 shuffled_oob_values[j] = data->get_x(tree_oob_indices[j], feature);
@@ -781,6 +822,8 @@ double MultistateForest::computeVIMPPermute(size_t feature, int feature_seed, st
             mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
             shuffle(shuffled_oob_values.begin(), shuffled_oob_values.end(), local_rng);
 
+            // compute the leaf that the shuffled observation ends up and check whether it is the same
+            // as the original one, in which case we may again skip the VIMP computation entirely
             const vector<size_t>& original_leaf_ids = vimp_oob_leaf_ids[i];
             shuffled_leaf_ids.resize(num_oob_obs);
             bool any_leaf_changed = false;
@@ -792,8 +835,8 @@ double MultistateForest::computeVIMPPermute(size_t feature, int feature_seed, st
                 continue;
             }
 
-            tree_vimp[i] = computeVIMPForLeafAssignments(
-                i, shuffled_leaf_ids, error_type == "brier", state_weights, score_shuffled);
+            // this is where the actual tree VIMP computation takes place
+            tree_vimp[i] = computeVIMPForLeafAssignments(i, shuffled_leaf_ids, error_type, state_weights, score_shuffled);
           } catch (const std::exception& error) {
             tree_errors[i] = error.what();
           }
@@ -806,6 +849,7 @@ double MultistateForest::computeVIMPPermute(size_t feature, int feature_seed, st
         }
     }
 
+    // aggregate VIMP over the whole forest
     double total_vimp = 0;
     size_t valid_trees = 0;
     for (size_t i = 0; i < ntrees; ++i) {
@@ -820,8 +864,9 @@ double MultistateForest::computeVIMPPermute(size_t feature, int feature_seed, st
     return total_vimp / static_cast<double>(valid_trees);
 }
 
-double MultistateForest::computeVIMPRandom(size_t feature, int feature_seed, string error_type,
-                                           const vector<double>& state_weights) {
+// computes VIMP for multi-state forests using random daughter assignment when the feature of interest
+// is encountered across OOB observations
+double MultistateForest::computeVIMPRandom(size_t feature, int feature_seed, string error_type, const vector<double>& state_weights) {
     prepareVIMPComputation(feature, error_type, state_weights);
 
     vector<double> tree_vimp(ntrees, 0);
@@ -836,6 +881,7 @@ double MultistateForest::computeVIMPRandom(size_t feature, int feature_seed, str
         #pragma omp for schedule(dynamic)
         for (size_t i = 0; i < ntrees; ++i) {
           try {
+            // fetch tree and the indices for its OOB observations
             MultistateTree* tree = dynamic_cast<MultistateTree*>(trees[i].get());
             const vector<size_t>& tree_oob = vimp_oob_indices[i];
             const size_t num_oob_obs = tree_oob.size();
@@ -843,24 +889,27 @@ double MultistateForest::computeVIMPRandom(size_t feature, int feature_seed, str
                 continue;
             }
             tree_valid[i] = 1;
+            // if the feature is never split upon, the VIMP contribution is zero, 
+            // and the tree can be safely skipped
             if (!vimp_tree_uses_feature[i][feature]) {
                 continue;
             }
 
+            // compute the leaf that the observation ends up after random daughter assignment and check whether
+            // it is the same as the original one, in which case we may again skip the VIMP computation entirely
             mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
             const vector<size_t>& original_leaf_ids = vimp_oob_leaf_ids[i];
             random_leaf_ids.resize(num_oob_obs);
             bool any_leaf_changed = false;
             for (size_t row = 0; row < num_oob_obs; ++row) {
-                random_leaf_ids[row] = tree->predictionLeafIDVIMP(
-                    tree_oob[row], feature, local_rng);
-                any_leaf_changed = any_leaf_changed ||
-                    random_leaf_ids[row] != original_leaf_ids[row];
+                random_leaf_ids[row] = tree->predictionLeafIDVIMP(tree_oob[row], feature, local_rng);
+                any_leaf_changed = any_leaf_changed || random_leaf_ids[row] != original_leaf_ids[row];
             }
             if (!any_leaf_changed) {
                 continue;
             }
 
+            // this is where the actual tree VIMP computation takes place
             tree_vimp[i] = computeVIMPForLeafAssignments(
                 i, random_leaf_ids, error_type == "brier", state_weights, score_random);
           } catch (const std::exception& error) {
@@ -875,6 +924,7 @@ double MultistateForest::computeVIMPRandom(size_t feature, int feature_seed, str
         }
     }
 
+    // aggregate VIMP over the whole forest
     double total_vimp = 0;
     size_t valid_trees = 0;
     for (size_t i = 0; i < ntrees; ++i) {

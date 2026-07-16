@@ -138,6 +138,8 @@ occupation_prob(init = predictions_new_data$initial[[1]], na = predictions_new_d
 # testing VIMP (X1 is signal, X2 is noise)
 unlist(jfforest.vimp(fitted_forest, method = "permute", loss = "brier")$vimp)
 unlist(jfforest.vimp(fitted_forest, method = "permute", loss = "kl")$vimp)
+unlist(jfforest.vimp(fitted_forest, method = "random", loss = "brier")$vimp)
+unlist(jfforest.vimp(fitted_forest, method = "random", loss = "kl")$vimp)
 
 # can't really distinguish, it seems, should compare to the survival implementation below
 

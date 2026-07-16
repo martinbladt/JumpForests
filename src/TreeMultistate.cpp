@@ -1048,7 +1048,7 @@ vector<double> uniqueCensoringTimesMultistate(const vector<double>& unique_event
 }
 
 /*
-  Maps each response time to the fitted event-time grid. When the grid is thinned, several successive transitions can
+  maps each response time to the fitted event-time grid. When the grid is thinned, several successive transitions can
   otherwise map to the same time. Keep the mapped transitions strictly ordered within each observation, and delay censoring
   until after the final mapped transition, so the binned paths remain valid paths.
 */
@@ -1067,6 +1067,9 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
 
     for (size_t obs = 0; obs < num_obs; ++obs) {
         const size_t offset = obs * max_response_length;
+
+        // determine the response length of the observation 
+        // (the total number of states occupied until absorption)
         size_t response_length = 1;
         while (response_length < max_response_length && states[offset + response_length] != 0) {
             ++response_length;
@@ -1079,12 +1082,16 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
 
         for (size_t j = 1; j < response_length; ++j) {
             const size_t index = offset + j;
+            // means that censoring has occured
             if (states[index] == states[index - 1]) {
                 continue;
             }
 
+            // find the smallest unique event time larger than or equal to the current observation time
             auto it = lower_bound(unique_event_times.begin(), unique_event_times.end(), times[index]);
+            // find the number of steps from the first unique event time until the current observation time
             size_t event_time_id = static_cast<size_t>(distance(unique_event_times.begin(), it));
+            // ensures that we don't choose an event time which is out of bounds
             if (event_time_id >= num_event_times) {
                 event_time_id = num_event_times - 1;
             }
@@ -1092,20 +1099,22 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
             mapped_transition_ids.push_back(event_time_id);
         }
 
+        // we compute the number of transitions separately to ensure that the grid is big enough to handle it
         const size_t num_transitions = mapped_transition_ids.size();
         if (num_transitions >= num_event_times) {
             throw invalid_argument("num_event_times is too small to preserve the order of a multi-state response path");
         }
 
-        // Prefer the existing lower-bound mapping and only move a transition when
-        // thinning would collapse it onto an earlier transition from the same path.
+        // prefer the existing lower-bound mapping and only move a transition when
+        // thinning would collapse it onto an earlier transition from the same path
         for (size_t j = 0; j < num_transitions; ++j) {
+            // ensure that the earliest jump time is never zero and that a new transition always gets its own time
             const size_t earliest_id = j == 0 ? 1 : mapped_transition_ids[j - 1] + 1;
             mapped_transition_ids[j] = max(mapped_transition_ids[j], earliest_id);
         }
 
-        // Near the right edge there may not be room to move transitions forward.
-        // Move the affected tail backwards while retaining strict ordering.
+        // near the right edge there may not be room to move transitions forward
+        // move the affected tail backwards while retaining strict ordering
         if (num_transitions > 0 && mapped_transition_ids.back() >= num_event_times) {
             mapped_transition_ids.back() = num_event_times - 1;
             for (size_t j = num_transitions - 1; j > 0; --j) {
@@ -1117,14 +1126,15 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
             response_event_time_ids[transition_positions[j]] = mapped_transition_ids[j];
         }
 
-        // A repeated final state denotes censoring. Store the first grid index at
-        // which censoring should remove the observation. num_event_times is a valid
-        // sentinel meaning that censoring occurs beyond the fitted grid.
         if (response_length >= 2) {
             const size_t last_index = offset + response_length - 1;
+            // if censoring occurs
             if (states[last_index] == states[last_index - 1]) {
+                // determine the first element in unique_event_times larger than the current time
                 auto it = upper_bound(unique_event_times.begin(), unique_event_times.end(), times[last_index]);
+                // determine number of jumps until the censoring time
                 size_t censoring_time_id = static_cast<size_t>(distance(unique_event_times.begin(), it));
+                // for ensuring that censoring always occurs after the final event has taken place
                 if (num_transitions > 0) {
                     censoring_time_id = max(censoring_time_id, mapped_transition_ids.back() + 1);
                 }

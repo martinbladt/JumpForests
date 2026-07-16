@@ -46,9 +46,7 @@ private:
   void prepareVIMPCache();
   void prepareVIMPBaseline(const string& error_type, const vector<double>& state_weights);
   void prepareVIMPComputation(size_t feature, const string& error_type, const vector<double>& state_weights);
-  double computeVIMPForLeafAssignments(size_t tree_id, const vector<size_t>& prediction_leaf_ids,
-                                       bool use_brier, const vector<double>& state_weights,
-                                       vector<double>& score);
+  double computeVIMPForLeafAssignments(size_t tree_id, const vector<size_t>& prediction_leaf_ids, string error_type, const vector<double>& state_weights, vector<double>& score);
 
   // quantities of interest specific to multi-state forests
   bool save_predictions;
@@ -59,12 +57,12 @@ private:
   vector<vector<double>> init_dist;             // the estimated initial distribution for the forest
 
   // lazily populated, response- and tree-level quantities shared by every
-  // feature-specific VIMP computation.
+  // feature-specific VIMP computation
   bool vimp_cache_ready = false;
   vector<double> vimp_event_times;                            // the times used for scoring (excludes zero) (length = T - 1)
-  vector<uint8_t> vimp_observed_states;                       // observed states (length = (T - 1) * n)
+  vector<uint8_t> vimp_observed_states;                       // observed states used for scoring (length = (T - 1) * n)
   vector<unsigned char> vimp_uncensored;                      // is the observation censored? no = 0 (length = n)
-  vector<size_t> vimp_first_endpoint_event_ids;               // first scoring time at or after the endpoint (length = n)
+  vector<size_t> vimp_first_endpoint_event_ids;               // id for the first scoring time at or after the endpoint (length = n)
   vector<vector<size_t>> vimp_oob_indices;                    // original observation IDs
   vector<vector<size_t>> vimp_oob_leaf_ids;                   // original terminal node IDs
   vector<vector<bool>> vimp_tree_uses_feature;                // whether a feature appears in an internal split (for skipping unnecessary paths)
