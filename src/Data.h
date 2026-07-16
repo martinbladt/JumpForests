@@ -53,11 +53,11 @@ struct Data {
   }
 
   // extract y for classification and regression
-  double get_y(size_t row) {
+  double get_y(size_t row) const {
     return y[row];
   }
   // return y (regression, classification and survival)
-  vector<double> get_y() const {
+  const vector<double>& get_y() const {
     return y;
   }
   // extract y for survival
@@ -87,7 +87,7 @@ struct Data {
   }
 
   // for extracting possible split values
-  vector<double> getValues(const vector<size_t>& subset_indices, size_t feature);
+  vector<double> getValues(const vector<size_t>& subset_indices, size_t feature) const;
 
   // for getting misc. information
   size_t getNumberOfObs() const {

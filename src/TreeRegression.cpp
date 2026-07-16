@@ -11,10 +11,10 @@ Functions for regression trees
 // constructor for RegressionTree
 //--------------------------------------------------------------------------------------
 
-RegressionTree::RegressionTree(const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices) {
-  this->node_obs.push_back(subset_indices);
-  this->holdout_node_obs.push_back(estimation_indices);
+RegressionTree::RegressionTree(vector<size_t> subset_indices, vector<size_t> estimation_indices) {
   this->node_sizes.push_back(subset_indices.size());
+  this->node_obs.push_back(std::move(subset_indices));
+  this->holdout_node_obs.push_back(std::move(estimation_indices));
 }
 
 // functions for growing regression trees
@@ -29,21 +29,26 @@ double RegressionTree::computeSum(const vector<size_t>& indices) {
 }
 
 double RegressionTree::computeAbsoluteDeviation(const vector<size_t>& indices) {
-  if (indices.empty()) {
-    return 0;
-  }
-
   vector<double> response_values;
   response_values.reserve(indices.size());
   for (size_t i : indices) {
     response_values.push_back(data->get_y(i));
   }
-  sort(response_values.begin(), response_values.end());
+  return computeAbsoluteDeviation(response_values);
+}
+
+double RegressionTree::computeAbsoluteDeviation(vector<double>& response_values) {
+  if (response_values.empty()) {
+    return 0;
+  }
 
   size_t n = response_values.size();
-  double median = response_values[n / 2];
+  auto middle = response_values.begin() + n / 2;
+  nth_element(response_values.begin(), middle, response_values.end());
+  double median = *middle;
   if (n % 2 == 0) {
-    median = (response_values[n / 2 - 1] + median) / 2.0;
+    // nth_element only sorts around the upper median, so find the lower median in the first half
+    median = (*max_element(response_values.begin(), middle) + median) / 2.0;
   }
 
   double absolute_deviation = 0;
@@ -62,15 +67,31 @@ double RegressionTree::computeMAESplitValue(const vector<size_t>& left_indices, 
   return parent_absolute_deviation - computeAbsoluteDeviation(left_indices) - computeAbsoluteDeviation(right_indices);
 }
 
-void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature,
-                                         vector<double>& best_threshold, double& best_sum_left) {
+void RegressionTree::reserveTreeMemory(size_t num_obs) {
+  // the minimal node size gives an upper bound for the number of nodes in the tree
+  size_t max_terminal_nodes = min_node_size == 0 ? max(static_cast<size_t>(1), num_obs) :
+    max(static_cast<size_t>(1), num_obs / min_node_size);
+  size_t max_num_nodes = 2 * max_terminal_nodes - 1;
+  // avoid excessive reservation for unusually large shallow trees
+  max_num_nodes = min(max_num_nodes, static_cast<size_t>(1024));
+
+  node_obs.reserve(max_num_nodes);
+  if (honest) {
+    holdout_node_obs.reserve(max_num_nodes);
+  }
+  node_sizes.reserve(max_num_nodes);
+  left_daughters.reserve(max_num_nodes);
+  feature_IDs.reserve(max_num_nodes);
+  thresholds.reserve(max_num_nodes);
+  depths.reserve(max_num_nodes);
+  means.reserve(max_num_nodes);
+  sum_node.reserve(max_num_nodes);
+}
+
+void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, bool use_mae, double parent_sum, double parent_absolute_deviation,
+                                         double& best_split_val, size_t& best_feature, vector<double>& best_threshold, double& best_sum_left) {
   const vector<size_t>& current_node_obs = node_obs[node_index];
   size_t num_obs_parent = current_node_obs.size();
-  double parent_sum = computeSum(current_node_obs);
-  double parent_absolute_deviation = 0;
-  if (splitrule == "mae") {
-    parent_absolute_deviation = computeAbsoluteDeviation(current_node_obs);
-  }
 
   // samples split points
   vector<double> split_points;
@@ -87,16 +108,23 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
   for (size_t i : current_node_obs) {
     double feature_val = data->get_x(i, feature);
     double response_val = data->get_y(i);
-    for (size_t s = 0; s < nsplits_final; ++s) {
-      if (feature_val > split_points[s]) {
-          // add one to the number of observations in right node for split s
-          ++num_obs_right[s];
-          sums_right[s] += response_val;
-      } else {
-        break;
-      }
+    // missing feature values are sent to the right daughter during prediction
+    size_t num_splits_right = std::isnan(feature_val) ? nsplits_final :
+      lower_bound(split_points.begin(), split_points.end(), feature_val) - split_points.begin();
+    for (size_t s = 0; s < num_splits_right; ++s) {
+      // add one to the number of observations in right node for split s
+      ++num_obs_right[s];
+      sums_right[s] += response_val;
     }
   }
+
+  vector<double> left_responses;
+  vector<double> right_responses;
+  if (use_mae) {
+    left_responses.reserve(num_obs_parent);
+    right_responses.reserve(num_obs_parent);
+  }
+
   // now find the best split
   for (size_t s = 0; s < nsplits_final; ++s) {
     // if one of the daughter nodes are too small, skip the computation for that split
@@ -107,19 +135,17 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
 
     double sum_left = parent_sum - sums_right[s];
     double split_val;
-    if (splitrule == "mae") {
-      vector<size_t> left_indices;
-      vector<size_t> right_indices;
-      left_indices.reserve(num_obs_left);
-      right_indices.reserve(num_obs_right[s]);
+    if (use_mae) {
+      left_responses.clear();
+      right_responses.clear();
       for (size_t i : current_node_obs) {
         if (data->get_x(i, feature) <= split_points[s]) {
-          left_indices.push_back(i);
+          left_responses.push_back(data->get_y(i));
         } else {
-          right_indices.push_back(i);
+          right_responses.push_back(data->get_y(i));
         }
       }
-      split_val = computeMAESplitValue(left_indices, right_indices, parent_absolute_deviation);
+      split_val = parent_absolute_deviation - computeAbsoluteDeviation(left_responses) - computeAbsoluteDeviation(right_responses);
     } else {
       split_val = computeMSESplitValue(num_obs_left, sum_left, num_obs_right[s], sums_right[s]);
     }
@@ -134,13 +160,13 @@ void RegressionTree::bestSplitContinuous(size_t node_index, size_t feature, doub
 }
 
 void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature,
-                           vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices, double& best_sum_left) {
-  const vector<double>& feature_values = uniqueValues(data->getValues(node_obs[node_index], feature));
+                           vector<double>& best_threshold, double& best_sum_left, bool use_mae, double parent_absolute_deviation) {
+  const vector<size_t>& current_node_obs = node_obs[node_index];
+  vector<double> feature_values = data->getValues(current_node_obs, feature);
+  feature_values.erase(remove_if(feature_values.begin(), feature_values.end(),
+    [](double value) { return std::isnan(value); }), feature_values.end());
+  feature_values = uniqueValues(std::move(feature_values));
   double parent_sum = sum_node[node_index];
-  double parent_absolute_deviation = 0;
-  if (splitrule == "mae") {
-    parent_absolute_deviation = computeAbsoluteDeviation(node_obs[node_index]);
-  }
   size_t num_feature_values = feature_values.size();
 
   unordered_set<uint64_t> partition_masks;
@@ -149,37 +175,59 @@ void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, dou
       return;
   }
 
+  // compute the number of observations and sum of responses for each category once
+  vector<size_t> observation_categories(current_node_obs.size());
+  vector<size_t> category_counts(num_feature_values, 0);
+  vector<double> category_sums(num_feature_values, 0);
+  for (size_t i = 0; i < current_node_obs.size(); ++i) {
+    size_t obs_id = current_node_obs[i];
+    double feature_value = data->get_x(obs_id, feature);
+    // missing feature values are sent to the right daughter during prediction
+    size_t category = std::isnan(feature_value) ? num_feature_values :
+      lower_bound(feature_values.begin(), feature_values.end(), feature_value) - feature_values.begin();
+    observation_categories[i] = category;
+    if (category < num_feature_values) {
+      ++category_counts[category];
+      category_sums[category] += data->get_y(obs_id);
+    }
+  }
+
+  vector<size_t> current_left_indices;
+  vector<size_t> current_right_indices;
+  if (use_mae) {
+    current_left_indices.reserve(current_node_obs.size());
+    current_right_indices.reserve(current_node_obs.size());
+  }
+
   // consider each partition (bitmask)
   for (const auto& mask : partition_masks) {
-    unordered_set<double> left_values;
+    size_t n_left = 0;
+    double sum_left = 0;
     for (size_t i = 0; i < num_feature_values; ++i) {
         if ((mask >> i) & 1) {
-            left_values.insert(feature_values[i]);
+            n_left += category_counts[i];
+            sum_left += category_sums[i];
         }
     }
 
-    vector<size_t> current_left_indices;
-    vector<size_t> current_right_indices;
-    for (size_t obs_id : node_obs[node_index]) {
-        if (left_values.count(data->get_x(obs_id, feature))) {
-            current_left_indices.push_back(obs_id);
-        } else {
-            current_right_indices.push_back(obs_id);
-        }
-    }
-
-    size_t n_left = current_left_indices.size();
-    size_t n_right = current_right_indices.size();
+    size_t n_right = current_node_obs.size() - n_left;
 
     if (n_left < min_node_size || n_right < min_node_size) {
         continue;
     }
 
-    // here we have to compute the means in one of the daughters from scratch
-    double sum_left = computeSum(current_left_indices);
     double sum_right = parent_sum - sum_left;
     double split_val;
-    if (splitrule == "mae") {
+    if (use_mae) {
+      current_left_indices.clear();
+      current_right_indices.clear();
+      for (size_t i = 0; i < current_node_obs.size(); ++i) {
+        if (observation_categories[i] < num_feature_values && ((mask >> observation_categories[i]) & 1)) {
+          current_left_indices.push_back(current_node_obs[i]);
+        } else {
+          current_right_indices.push_back(current_node_obs[i]);
+        }
+      }
       split_val = computeMAESplitValue(current_left_indices, current_right_indices, parent_absolute_deviation);
     } else {
       split_val = computeMSESplitValue(n_left, sum_left, n_right, sum_right);
@@ -187,10 +235,13 @@ void RegressionTree::bestSplitCategorical(size_t node_index, size_t feature, dou
 
     if (split_val > best_split_val) {
         best_split_val = split_val;
-        best_left_indices = std::move(current_left_indices);
-        best_right_indices = std::move(current_right_indices);
         best_feature = feature;
-        best_threshold.assign(left_values.begin(), left_values.end());
+        best_threshold.clear();
+        for (size_t i = 0; i < num_feature_values; ++i) {
+          if ((mask >> i) & 1) {
+            best_threshold.push_back(feature_values[i]);
+          }
+        }
         best_sum_left = sum_left;
     }
   }
@@ -210,14 +261,29 @@ void RegressionTree::makeLeaf(size_t node_index) {
       prediction_node_IDs[i] = node_index;
     }
   }
+
+  // the observation indices are no longer needed after the node is made terminal
+  vector<size_t>().swap(node_obs[node_index]);
+  if (honest) {
+    vector<size_t>().swap(holdout_node_obs[node_index]);
+  }
 }
 
 // function to create a split for a regression tree. returns true if leaf, otherwise false
 bool RegressionTree::createSplit(size_t node_index) {
-    const vector<size_t>& current_node_obs = node_obs[node_index];
     // if we are in the root node, the sum of the responses needs to be computed
     if (sum_node.empty()) {
+      reserveTreeMemory(node_obs[node_index].size());
+    }
+    const vector<size_t>& current_node_obs = node_obs[node_index];
+    if (sum_node.empty()) {
       sum_node.push_back(computeSum(current_node_obs));
+
+      size_t num_features = data->getNumberOfFeatures();
+      feature_indices.resize(num_features);
+      for (size_t i = 0; i < num_features; ++i) {
+        feature_indices[i] = i;
+      }
     }
     double parent_sum = sum_node[node_index];
 
@@ -237,6 +303,24 @@ bool RegressionTree::createSplit(size_t node_index) {
         return true;
     }
 
+    // sample mtry features
+    vector<size_t> sampled_features = sampleIndices(feature_indices, mtry, false, random_number_generator);
+    const vector<bool>& categorical = data->getCategorical();
+
+    // compute the parent sum once for all sampled continuous features
+    double continuous_parent_sum = parent_sum;
+    for (size_t feature : sampled_features) {
+      if (!categorical[feature]) {
+        continuous_parent_sum = computeSum(current_node_obs);
+        break;
+      }
+    }
+    bool use_mae = splitrule == "mae";
+    double parent_absolute_deviation = 0;
+    if (use_mae) {
+      parent_absolute_deviation = computeAbsoluteDeviation(current_node_obs);
+    }
+
     double best_split_val = -1.0;
     size_t best_feature = 0;
     vector<double> best_threshold;
@@ -248,23 +332,16 @@ bool RegressionTree::createSplit(size_t node_index) {
     vector<size_t> holdout_left_indices;
     vector<size_t> holdout_right_indices;
 
-    // sample mtry features
-    size_t num_features = data->getNumberOfFeatures();
-    vector<size_t> feature_indices(num_features);
-    for (size_t i = 0; i < num_features; ++i) {
-        feature_indices[i] = i;
-    }
-    vector<size_t> sampled_features = sampleIndices(feature_indices, mtry, false, random_number_generator);
-
     // now consider each of the sampled features
     for (size_t i : sampled_features) {
-        if (data->getCategorical()[i]) {
-            // finds the best split and constructs the indices of the best left and right node
-            bestSplitCategorical(node_index, i, best_split_val, best_feature, best_threshold, best_left_indices, best_right_indices, best_sum_left);
+        if (categorical[i]) {
+            bestSplitCategorical(node_index, i, best_split_val, best_feature, best_threshold,
+                                 best_sum_left, use_mae, parent_absolute_deviation);
         }
         else {
             // does not return the best indices, so this has to be done later
-            bestSplitContinuous(node_index, i, best_split_val, best_feature, best_threshold, best_sum_left);
+            bestSplitContinuous(node_index, i, use_mae, continuous_parent_sum, parent_absolute_deviation,
+                                best_split_val, best_feature, best_threshold, best_sum_left);
         }
     }
 
@@ -284,58 +361,63 @@ bool RegressionTree::createSplit(size_t node_index) {
         return true;
     }
 
-    // for a categorical feature, the best indices are already saved, but if the feature is 
-    // continuous, they should be recomputed from scratch (and only once)
-    if (!(data->getCategorical()[best_feature])) {
-        best_left_indices.clear();
-        best_right_indices.clear();
-        for (size_t i : current_node_obs) {
-            if (data->get_x(i, best_feature) <= best_threshold[0]) {
-                best_left_indices.push_back(i);
-            } else {
-                best_right_indices.push_back(i);
-            }
-        }
-        // update the holdout index sets if the tree is honest
-        if (honest) {
-            const vector<size_t>& current_holdout_node_obs = holdout_node_obs[node_index];
-            for (size_t i : current_holdout_node_obs) {
-                if (data->get_x(i, best_feature) <= best_threshold[0]) {
-                    holdout_left_indices.push_back(i);
-                } else {
-                    holdout_right_indices.push_back(i);
-                }
-            }
+    // construct the indices of the two daughters once for the best split
+    bool categorical_split = categorical[best_feature];
+    best_left_indices.reserve(current_node_obs.size());
+    best_right_indices.reserve(current_node_obs.size());
+    for (size_t i : current_node_obs) {
+        double feature_value = data->get_x(i, best_feature);
+        bool goes_left = categorical_split ?
+          find(best_threshold.begin(), best_threshold.end(), feature_value) != best_threshold.end() :
+          feature_value <= best_threshold[0];
+        if (goes_left) {
+            best_left_indices.push_back(i);
+        } else {
+            best_right_indices.push_back(i);
         }
     }
 
-    // the best holdout index sets also need to be constructed if the split is categorical
-    if (honest && data->getCategorical()[best_feature]) {
-        const vector<size_t>& current_holdout_node_obs = holdout_node_obs[node_index];
-        for (size_t i : current_holdout_node_obs) {
-            if (find(best_threshold.begin(), best_threshold.end(), data->get_x(i, best_feature)) != best_threshold.end()) {
-                holdout_left_indices.push_back(i);
-            } else {
-                holdout_right_indices.push_back(i);
-            }
+    // update the holdout index sets if the tree is honest
+    if (honest) {
+      const vector<size_t>& current_holdout_node_obs = holdout_node_obs[node_index];
+      holdout_left_indices.reserve(current_holdout_node_obs.size());
+      holdout_right_indices.reserve(current_holdout_node_obs.size());
+      for (size_t i : current_holdout_node_obs) {
+        double feature_value = data->get_x(i, best_feature);
+        bool goes_left = categorical_split ?
+          find(best_threshold.begin(), best_threshold.end(), feature_value) != best_threshold.end() :
+          feature_value <= best_threshold[0];
+        if (goes_left) {
+          holdout_left_indices.push_back(i);
+        } else {
+          holdout_right_indices.push_back(i);
         }
+      }
     }
     
     // a best split was found, update the tree
-    node_obs.push_back(best_left_indices);          // construct left daughter
-    node_obs.push_back(best_right_indices);         // construct right daughter
-    sum_node.push_back(best_sum_left);              // save sums of responses
+    size_t best_left_size = best_left_indices.size();
+    size_t best_right_size = best_right_indices.size();
+    node_obs.push_back(std::move(best_left_indices));          // construct left daughter
+    node_obs.push_back(std::move(best_right_indices));         // construct right daughter
+    sum_node.push_back(best_sum_left);                         // save sums of responses
     sum_node.push_back(parent_sum - best_sum_left);
-    node_sizes.push_back(best_left_indices.size());
-    node_sizes.push_back(best_right_indices.size());
+    node_sizes.push_back(best_left_size);
+    node_sizes.push_back(best_right_size);
     feature_IDs.push_back(best_feature);
-    thresholds.push_back(best_threshold);
+    thresholds.push_back(std::move(best_threshold));
     means.push_back(0);
 
     // for honest trees, update the holdout indices
     if (honest) {
-        holdout_node_obs.push_back(holdout_left_indices);
-        holdout_node_obs.push_back(holdout_right_indices);
+        holdout_node_obs.push_back(std::move(holdout_left_indices));
+        holdout_node_obs.push_back(std::move(holdout_right_indices));
+    }
+
+    // the parent indices are no longer needed after its daughters have been constructed
+    vector<size_t>().swap(node_obs[node_index]);
+    if (honest) {
+      vector<size_t>().swap(holdout_node_obs[node_index]);
     }
 
     return false;
@@ -353,7 +435,7 @@ vector<double> RegressionTree::computePredictions(const Data& new_data) {
   size_t num_obs = new_data.getNumberOfObs();
   vector<double> predictions(num_obs);
   for (size_t i = 0; i < num_obs; ++i) {
-    predictions[i] = get<double>(predict(new_data.get_x_row(i)));
+    predictions[i] = predictValue(new_data, i);
   }
   return predictions;
 }

@@ -107,6 +107,7 @@ vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, boo
     }
 
     vector<size_t> result;
+    result.reserve(k);
     if (with_replacement) {
         uniform_int_distribution<> dist(0, n - 1);
         for (size_t i = 0; i < k; ++i) {

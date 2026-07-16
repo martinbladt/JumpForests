@@ -89,6 +89,8 @@ vector<vector<double>> Forest::shuffledFeatureValues(const vector<vector<size_t>
 void OOBNonBoolIndices(vector<vector<size_t>>& oob_indices_non_bool, const vector<vector<bool>>& oob_indices) {
     size_t ntrees = oob_indices.size();
     size_t num_obs = oob_indices[0].size();
+    oob_indices_non_bool.clear();
+    oob_indices_non_bool.reserve(ntrees);
     for (size_t i = 0; i < ntrees; ++i) {
         vector<size_t> indices;
         for (size_t j = 0; j < num_obs; ++j) {

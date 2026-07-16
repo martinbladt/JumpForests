@@ -9,9 +9,22 @@ RegressionForest::RegressionForest() {
 
 // grows a regression forest using multithreading via OpenMP
 void RegressionForest::grow() {
-    int n = data->getNumberOfObs();
+    if (ntrees == 0) {
+        throw runtime_error("The number of trees must be at least one");
+    }
+    if (min_node_size == 0) {
+        throw runtime_error("The minimal node size must be at least one");
+    }
+    const vector<bool>& categorical = data->getCategorical();
+    vector<size_t> unique_values = data->getUniqueValues();
+    for (size_t i = 0; i < categorical.size(); ++i) {
+        if (categorical[i] && unique_values[i] > 63) {
+            throw runtime_error("Categorical features with more than 63 values are not supported");
+        }
+    }
+    size_t n = data->getNumberOfObs();
     
-    // create vector of indices from 1 to n
+    // create vector of indices from 0 to n - 1
     vector<size_t> global_indices(n);
     for (size_t i = 0; i < n; ++i) {
         global_indices[i] = i;
@@ -19,27 +32,28 @@ void RegressionForest::grow() {
 
     trees.resize(ntrees);
     oob_indices.resize(ntrees);
+    vimp_oob_indices.clear();
+    vimp_tree_uses_feature.clear();
+    vimp_tree_errors.clear();
 
     size_t n_threads = this->nworkers;
-    omp_set_num_threads(n_threads);
     Rcout << "Growing forest using " << n_threads << " threads" << endl;
 
     // use OpenMP for parallel tree growing
     #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
-    for (size_t i = 0; i < static_cast<int>(ntrees); ++i) {
+    for (size_t i = 0; i < ntrees; ++i) {
         // give each thread its own random number generator to prevent races
         mt19937 local_rng(seed + i);
         unique_ptr<RegressionTree> tree;
 
         vector<size_t> bootstrap_indices;
-        vector<size_t> holdout_indices;     // only relevant for honest trees
 
         // bootstrap
         if (!honest) {
             size_t subsample_size = floor(sample_rate * n);
             bootstrap_indices = sampleIndices(global_indices, subsample_size, swr, local_rng);
             oob_indices[i] = computeOOBIndices(bootstrap_indices, n);
-            tree = make_unique<RegressionTree>(bootstrap_indices);
+            tree = make_unique<RegressionTree>(std::move(bootstrap_indices));
         } 
         // for honest trees, we differ between double and single bootstrap
         else {
@@ -50,16 +64,16 @@ void RegressionForest::grow() {
                 size_t holdout_size = floor(sample_rate * partition.second.size());
                 vector<size_t> grow = sampleIndices(partition.first, grow_size, swr, local_rng);
                 vector<size_t> holdout = sampleIndices(partition.second, holdout_size, swr, local_rng);
-                tree = make_unique<RegressionTree>(grow, holdout);
                 oob_indices[i] = computeOOBIndicesDouble(grow, holdout, n);
+                tree = make_unique<RegressionTree>(std::move(grow), std::move(holdout));
 
             } else {
                 // if no double bootstrap, bootstrap the whole dataset and then split
                 size_t subsample_size = floor(sample_rate * n);
                 bootstrap_indices = sampleIndices(global_indices, subsample_size, swr, local_rng);
                 pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(bootstrap_indices, local_rng);
-                tree = make_unique<RegressionTree>(partition.first, partition.second);
                 oob_indices[i] = computeOOBIndices(bootstrap_indices, n);
+                tree = make_unique<RegressionTree>(std::move(partition.first), std::move(partition.second));
             }
         }
 
@@ -80,8 +94,8 @@ void RegressionForest::grow() {
 double RegressionForest::predict(const vector<double>& x) {
     double result = 0;
     for (const auto& tree : trees) {
-        double prediction = get<double>(tree->predict(x));
-        result += prediction;
+        RegressionTree* regression_tree = static_cast<RegressionTree*>(tree.get());
+        result += regression_tree->predictValue(x);
     }
     return result / ntrees;
 }
@@ -91,54 +105,104 @@ pair<vector<double>, vector<double>> RegressionForest::computePredictions() {
     vector<double> predictions(num_obs);
     vector<double> oob_predictions(num_obs);
 
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    vector<RegressionTree*> regression_trees(ntrees);
+    for (size_t i = 0; i < ntrees; ++i) {
+        regression_trees[i] = static_cast<RegressionTree*>(trees[i].get());
+    }
+
+    #pragma omp parallel for schedule(static) num_threads(this->nworkers)
     for (size_t i = 0; i < num_obs; ++i) {
         double pred = 0;
         double pred_oob = 0;
-        double num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
+        size_t num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
 
         // compute the sum of all predictions for observation i
         for (size_t j = 0; j < ntrees; ++j) {
-            RegressionTree* tree = dynamic_cast<RegressionTree*>(trees[j].get());
+            RegressionTree* tree = regression_trees[j];
+            const vector<double>& tree_means = tree->getMeans();
+            const vector<size_t>& prediction_node_IDs = tree->getPredictionNodeIDs();
             
             if (oob_indices[j][i]) {
                 ++num_oob_trees;
-                double tree_pred = get<double>(tree->predict(data->get_x_row(i)));
+                double tree_pred = tree->predictValue(i);
                 pred += tree_pred;
                 pred_oob += tree_pred;
             }
             // no need to predict from scratch for in-bag observations since we save the terminal node ID during fitting
             else {
-                double tree_pred = tree->getMeans()[tree->getPredictionNodeIDs()[i]];
+                double tree_pred = tree_means[prediction_node_IDs[i]];
                 pred += tree_pred;
             }
         }
 
         // normalise and save predictions
         predictions[i] = pred / ntrees;
-        oob_predictions[i] = pred_oob / num_oob_trees;
+        oob_predictions[i] = num_oob_trees > 0 ? pred_oob / num_oob_trees : NA_REAL;
     }
 
     return {predictions, oob_predictions};
 }
 
 vector<double> RegressionForest::computePredictions(const Data& new_data) {
-    size_t num_features = new_data.getNumberOfFeatures();
     size_t num_obs = new_data.getNumberOfObs();
     vector<double> predictions(num_obs);
 
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    vector<RegressionTree*> regression_trees(ntrees);
+    for (size_t i = 0; i < ntrees; ++i) {
+        regression_trees[i] = static_cast<RegressionTree*>(trees[i].get());
+    }
+
+    #pragma omp parallel for schedule(static) num_threads(this->nworkers)
     for (size_t i = 0; i < num_obs; ++i) {
         double pred = 0;
 
         // compute the sum of all predictions for observation i
         for (size_t j = 0; j < ntrees; ++j) {
-            RegressionTree* tree = dynamic_cast<RegressionTree*>(trees[j].get());
-            pred += get<double>(tree->predict(new_data.get_x_row(i)));
+            pred += regression_trees[j]->predictValue(new_data, i);
         }
         predictions[i] = pred / ntrees;
     }
     return predictions;
+}
+
+void RegressionForest::prepareVIMPCache() {
+    if (!vimp_oob_indices.empty()) {
+        return;
+    }
+
+    // quantities below are the same for every feature and only have to be computed once
+    OOBNonBoolIndices(vimp_oob_indices, oob_indices);
+    vimp_tree_uses_feature.assign(ntrees, vector<bool>(data->getNumberOfFeatures(), false));
+    vimp_tree_errors.assign(ntrees, 0);
+    const vector<double>& y = data->get_y();
+
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
+    for (size_t i = 0; i < ntrees; ++i) {
+        RegressionTree* tree = static_cast<RegressionTree*>(trees[i].get());
+        const vector<size_t>& left_daughters = tree->getLeftDaughters();
+        const vector<size_t>& feature_IDs = tree->getFeatureIDs();
+
+        // leaf nodes have a dummy feature ID, so only consider internal nodes
+        for (size_t j = 0; j < left_daughters.size(); ++j) {
+            if (left_daughters[j] != 0) {
+                vimp_tree_uses_feature[i][feature_IDs[j]] = true;
+            }
+        }
+
+        const vector<size_t>& tree_oob_indices = vimp_oob_indices[i];
+        if (tree_oob_indices.empty()) {
+            continue;
+        }
+
+        const vector<double>& tree_means = tree->getMeans();
+        double tree_oob_error = 0;
+        for (size_t obs_id : tree_oob_indices) {
+            double tree_pred = tree_means[tree->predictionLeafID(obs_id)];
+            double residual = y[obs_id] - tree_pred;
+            tree_oob_error += residual * residual;
+        }
+        vimp_tree_errors[i] = tree_oob_error;
+    }
 }
 
 /*
@@ -149,40 +213,65 @@ vector<double> RegressionForest::computePredictions(const Data& new_data) {
 */
 
 double RegressionForest::computeVIMPPermute(size_t feature, int feature_seed) {
-    size_t num_obs = data->getNumberOfObs();
-    const vector<double> y = data->get_y();
-    double result = 0;
-
-    // shuffle feature values for all trees among the oob covariates
-    vector<vector<size_t>> oob_indices_non_bool;
-    OOBNonBoolIndices(oob_indices_non_bool, oob_indices);
-    const vector<vector<double>>& shuffled_values_feature = shuffledFeatureValues(oob_indices_non_bool, feature, feature_seed);
-
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers) reduction(+:result)
-    for (size_t i = 0; i < ntrees; ++i) {
-        RegressionTree* tree = dynamic_cast<RegressionTree*>(trees[i].get());
-        size_t num_oob_obs = oob_indices_non_bool[i].size();
-        double tree_oob_error = 0;
-        double tree_oob_error_shuffled = 0;
-
-        for (size_t j = 0; j < num_obs; ++j) {
-            if (oob_indices[i][j]) {
-                // fetch tree predictions with and without shuffled values for 'feature'
-                vector<double> x = data->get_x_row(j);
-                double tree_pred = get<double>(tree->predict(x));
-                x[feature] = shuffled_values_feature[i][j];
-                double tree_pred_shuffled = get<double>(tree->predict(x));
-
-                // NB: should generalise to other potential error functions than MSE
-                tree_oob_error += (y[j] - tree_pred) * (y[j] - tree_pred);
-                tree_oob_error_shuffled += (y[j] - tree_pred_shuffled) * (y[j] - tree_pred_shuffled);
-            }
-        }
-        // add VIMP contribution from the tree
-        result += (tree_oob_error_shuffled - tree_oob_error) / (double) num_oob_obs;
+    if (feature >= data->getNumberOfFeatures()) {
+        throw runtime_error("Feature index is out of range");
     }
-    // return final forest VIMP
-    return result / (double) ntrees;
+    prepareVIMPCache();
+    const vector<double>& y = data->get_y();
+    vector<double> tree_vimp(ntrees, 0);
+    vector<unsigned char> tree_has_oob(ntrees, 0);
+
+    #pragma omp parallel num_threads(this->nworkers)
+    {
+        vector<double> shuffled_oob_values;
+
+        #pragma omp for schedule(dynamic)
+        for (size_t i = 0; i < ntrees; ++i) {
+            RegressionTree* tree = static_cast<RegressionTree*>(trees[i].get());
+            const vector<size_t>& tree_oob_indices = vimp_oob_indices[i];
+            size_t num_oob_obs = tree_oob_indices.size();
+            if (num_oob_obs == 0) {
+                continue;
+            }
+            tree_has_oob[i] = 1;
+
+            // a feature which is not used in the tree has VIMP contribution zero
+            if (!vimp_tree_uses_feature[i][feature]) {
+                continue;
+            }
+
+            shuffled_oob_values.resize(num_oob_obs);
+            for (size_t j = 0; j < num_oob_obs; ++j) {
+                shuffled_oob_values[j] = data->get_x(tree_oob_indices[j], feature);
+            }
+            mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
+            shuffle(shuffled_oob_values.begin(), shuffled_oob_values.end(), local_rng);
+
+            const vector<double>& tree_means = tree->getMeans();
+            double tree_oob_error_shuffled = 0;
+            for (size_t j = 0; j < num_oob_obs; ++j) {
+                size_t obs_id = tree_oob_indices[j];
+                size_t leaf_id = tree->predictionLeafIDPermuted(obs_id, feature, shuffled_oob_values[j]);
+                double residual = y[obs_id] - tree_means[leaf_id];
+                tree_oob_error_shuffled += residual * residual;
+            }
+            tree_vimp[i] = (tree_oob_error_shuffled - vimp_tree_errors[i]) / (double) num_oob_obs;
+        }
+    }
+
+    // average the VIMP over trees with OOB observations
+    double result = 0;
+    size_t valid_trees = 0;
+    for (size_t i = 0; i < ntrees; ++i) {
+        if (tree_has_oob[i]) {
+            result += tree_vimp[i];
+            ++valid_trees;
+        }
+    }
+    if (valid_trees == 0) {
+        throw runtime_error("Cannot compute VIMP without OOB observations");
+    }
+    return result / (double) valid_trees;
 }
 
 /*
@@ -192,35 +281,52 @@ double RegressionForest::computeVIMPPermute(size_t feature, int feature_seed) {
 */
 
 double RegressionForest::computeVIMPRandom(size_t feature, int feature_seed) {
-    size_t num_obs = data->getNumberOfObs();
-    const vector<double> y = data->get_y();
-    double result = 0;
+    if (feature >= data->getNumberOfFeatures()) {
+        throw runtime_error("Feature index is out of range");
+    }
+    prepareVIMPCache();
+    const vector<double>& y = data->get_y();
+    vector<double> tree_vimp(ntrees, 0);
+    vector<unsigned char> tree_has_oob(ntrees, 0);
 
-    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers) reduction(+:result)
+    #pragma omp parallel for schedule(dynamic) num_threads(this->nworkers)
     for (size_t i = 0; i < ntrees; ++i) {
-        RegressionTree* tree = dynamic_cast<RegressionTree*>(trees[i].get());
+        RegressionTree* tree = static_cast<RegressionTree*>(trees[i].get());
+        const vector<size_t>& tree_oob_indices = vimp_oob_indices[i];
+        size_t num_oob_obs = tree_oob_indices.size();
+        if (num_oob_obs == 0) {
+            continue;
+        }
+        tree_has_oob[i] = 1;
+
+        // a feature which is not used in the tree has VIMP contribution zero
+        if (!vimp_tree_uses_feature[i][feature]) {
+            continue;
+        }
+
         mt19937 local_rng = makeVIMPTreeRNG(feature_seed, i);
-        size_t num_oob_obs = 0;
-        double tree_oob_error = 0;
+        const vector<double>& tree_means = tree->getMeans();
         double tree_oob_error_random = 0;
         
-        for (size_t j = 0; j < num_obs; ++j) {
-            if (oob_indices[i][j]) {
-                ++num_oob_obs;
-
-                // fetch tree predictions with and without random daughter assignment
-                vector<double> x = data->get_x_row(j);
-                double tree_pred = get<double>(tree->predict(x));
-                double tree_pred_random = get<double>(tree->predictVIMP(x, feature, local_rng));
-
-                // NB: should generalise to other potential error functions than MSE
-                tree_oob_error += (y[j] - tree_pred) * (y[j] - tree_pred);
-                tree_oob_error_random += (y[j] - tree_pred_random) * (y[j] - tree_pred_random);
-            }
+        for (size_t obs_id : tree_oob_indices) {
+            size_t leaf_id = tree->predictionLeafIDVIMP(obs_id, feature, local_rng);
+            double residual = y[obs_id] - tree_means[leaf_id];
+            tree_oob_error_random += residual * residual;
         }
-        // add VIMP contribution from the tree
-        result += (tree_oob_error_random - tree_oob_error) / num_oob_obs;
+        tree_vimp[i] = (tree_oob_error_random - vimp_tree_errors[i]) / (double) num_oob_obs;
     }
-    // return final forest VIMP
-    return result / (double) ntrees;
+
+    // average the VIMP over trees with OOB observations
+    double result = 0;
+    size_t valid_trees = 0;
+    for (size_t i = 0; i < ntrees; ++i) {
+        if (tree_has_oob[i]) {
+            result += tree_vimp[i];
+            ++valid_trees;
+        }
+    }
+    if (valid_trees == 0) {
+        throw runtime_error("Cannot compute VIMP without OOB observations");
+    }
+    return result / (double) valid_trees;
 }

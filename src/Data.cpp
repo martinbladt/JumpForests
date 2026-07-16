@@ -20,6 +20,7 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
     this->num_classes = 0;
     sort(feature_indices.begin(), feature_indices.end());
     this->feature_indices = feature_indices;
+    CharacterVector column_names = data.names();
 
     x.assign(num_features * num_obs, 0);
 
@@ -28,7 +29,7 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
         // classification or regression
         if (response_indices.size() == 1) {
             vector<double> y_res = as<vector<double>>(data[response_indices[0]]);
-            this->y = y_res;
+            this->y = std::move(y_res);
 
             // only relevant for classification
             if (categorical[response_indices[0]]) {
@@ -49,7 +50,7 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
         // update response names
         vector<string> response_names(response_indices.size());
         for (size_t i = 0; i < response_indices.size(); ++i) {
-            response_names[i] = as<vector<string>>(data.names())[response_indices[i]];
+            response_names[i] = as<string>(column_names[response_indices[i]]);
         }
     
         this->response_names = response_names;
@@ -68,7 +69,7 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
         }
         
         // update names of features and response(s)
-        feature_names[i] = as<vector<string>>(data.names())[feature_indices[i]];
+        feature_names[i] = as<string>(column_names[feature_indices[i]]);
 
         // update the number of unique values
         unique_values_features[i] = unique[feature_indices[i]];
@@ -86,11 +87,10 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
     this->feature_names = feature_names;
 }
 
-vector<double> Data::getValues(const vector<size_t>& subset_indices, size_t feature) {
-    vector<double> unfiltered_values = get_x_col(feature);
+vector<double> Data::getValues(const vector<size_t>& subset_indices, size_t feature) const {
     vector<double> result(subset_indices.size());
     for (size_t i = 0; i < subset_indices.size(); ++i) {
-        result[i] = unfiltered_values[subset_indices[i]];
+        result[i] = get_x(subset_indices[i], feature);
     }
     return(result);
 }
@@ -120,6 +120,7 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
     this->max_response_length = max_response_length;
     this->num_states = num_states;
     this->feature_indices = feature_indices;
+    CharacterVector column_names = feature_data.names();
     
     // fill the response vectors if response variables are supplied
     if (!jump_data.isNULL() || jump_data.size() != 0) {
@@ -177,7 +178,7 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
         }
         
         // update names of features
-        feature_names[i] = as<vector<string>>(feature_data.names())[feature_indices[i]];
+        feature_names[i] = as<string>(column_names[feature_indices[i]]);
 
         // update the number of unique values
         unique_values_features[i] = unique[feature_indices[i]];

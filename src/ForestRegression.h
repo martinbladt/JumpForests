@@ -29,6 +29,12 @@ public:
 
 private:
   vector<double> means;
+
+  // quantities reused when computing VIMP for several features
+  vector<vector<size_t>> vimp_oob_indices;
+  vector<vector<bool>> vimp_tree_uses_feature;
+  vector<double> vimp_tree_errors;
+  void prepareVIMPCache();
 };
 
 #endif // FORESTREGRESSION_H

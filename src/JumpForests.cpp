@@ -82,6 +82,17 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
   
   // the tree is a regression tree
   if (tree_type == 1) {
+    if (min_node_size == 0) {
+      throw runtime_error("The minimal node size must be at least one");
+    }
+    const vector<bool>& categorical_features = data->getCategorical();
+    vector<size_t> unique_feature_values = data->getUniqueValues();
+    for (size_t i = 0; i < categorical_features.size(); ++i) {
+      if (categorical_features[i] && unique_feature_values[i] > 63) {
+        throw runtime_error("Categorical features with more than 63 values are not supported");
+      }
+    }
+
     // check validity of splitrule argument
     vector<string> valid_splitrules = {"mse", "variance", "mae"};
     if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
@@ -318,11 +329,12 @@ void JFCppTreePredict(List& JFTree) {
   if (type == "Regression") {
     RegressionTree* tree = ((XPtr<RegressionTree>) JFTree["Tree"]).get();
     NumericVector predictions(num_obs);
+    const vector<double>& means = tree->getMeans();
+    const vector<size_t>& prediction_node_IDs = tree->getPredictionNodeIDs();
 
     // we saved the corresponding terminal node ID for every observation
     for (int i = 0; i < num_obs; ++i) {
-      double pred = tree->getMeans()[tree->getPredictionNodeIDs()[i]];
-      predictions[i] = pred;
+      predictions[i] = means[prediction_node_IDs[i]];
     }
     JFTree["predictions"] = predictions;
   }
@@ -452,7 +464,7 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
     RegressionTree* tree = ((XPtr<RegressionTree>) JFTree["Tree"]).get();
     NumericMatrix predictions(num_obs, 1);
     for (size_t i = 0; i < num_obs; ++i) {
-      predictions(i, 0) = get<double>(tree->predict(new_data.get_x_row(i)));
+      predictions(i, 0) = tree->predictValue(new_data, i);
     }
     return predictions;
   }
@@ -489,6 +501,7 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
     predictions = selectColumns(predictions, tree->getTrueEventTimeIDs());
     return predictions;
   }
+  throw runtime_error("Type of tree not recognised");
 }
 
 // function to compute predictions and the predicted KM estimators for the censoring for survival trees
@@ -735,10 +748,7 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
   string type = as<string>(JFTree["tree.type"]);
   if (type == "Regression") {
     RegressionTree* tree = ((XPtr<RegressionTree>) JFTree["Tree"]).get();
-    vector<double> predictions(num_obs);
-    for (size_t i = 0; i < new_data.getNumberOfObs(); ++i) {
-      predictions[i] = get<double>(tree->predict(new_data.get_x_row(i)));
-    }
+    vector<double> predictions = tree->computePredictions(new_data);
     const vector<double>& response = new_data.get_y();
     List result;
     double mse = computeMSE(predictions, response);
@@ -1330,6 +1340,7 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
     predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
     return predictions;
   }
+  throw runtime_error("Type of forest not recognised");
 }
 
 

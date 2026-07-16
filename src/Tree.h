@@ -29,6 +29,8 @@ public:
   size_t predictionLeafID(const vector<double>& x);
   // returns the leaf for a training observation without materialising its feature row
   size_t predictionLeafID(size_t observation);
+  // returns the leaf for an observation in another dataset without materialising its feature row
+  size_t predictionLeafID(const Data& prediction_data, size_t observation);
   // as above, but substitutes one feature value (used by permutation VIMP)
   size_t predictionLeafIDPermuted(size_t observation, size_t feature, double value);
   // returns the ID of the leaf containing x when computing VIMP (random daughter assignments of feature x)
