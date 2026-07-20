@@ -126,6 +126,17 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
   // the tree is a classification tree
   if (tree_type == 2) {
+    if (min_node_size == 0) {
+      throw runtime_error("The minimal node size must be at least one");
+    }
+    const vector<bool>& categorical_features = data->getCategorical();
+    vector<size_t> unique_feature_values = data->getUniqueValues();
+    for (size_t i = 0; i < categorical_features.size(); ++i) {
+      if (categorical_features[i] && unique_feature_values[i] > 63) {
+        throw runtime_error("Categorical features with more than 63 values are not supported");
+      }
+    }
+
     // check validity of splitrule argument
     vector<string> valid_splitrules = {"gini", "entropy", "misc", "twoing", "hellinger"};
     if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
@@ -134,11 +145,11 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
     ClassificationTree* tree;
     if (!honest) {
-      tree = new ClassificationTree(subset_indices_cpp);
+      tree = new ClassificationTree(std::move(subset_indices_cpp));
     } else {
       mt19937 rng(seed + 1);
       pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
-      tree = new ClassificationTree(partition.first, partition.second);
+      tree = new ClassificationTree(std::move(partition.first), std::move(partition.second));
       tree->setRNG(rng);
     }
     tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
@@ -666,8 +677,9 @@ void JFCppTreeErrorClassification(List& JFTree, const vector<double>& response) 
       prob_predictions[index + c] = prob_predictions_matrix(i, c);
     }
   }
-  JFTree["bs"] = computeBrierScoreError(prob_predictions, response, num_classes);
-  JFTree["bs.normalised"] = computeNormalizedBrierScoreError(prob_predictions, response, num_classes);
+  double brier_score = computeBrierScoreError(prob_predictions, response, num_classes);
+  JFTree["bs"] = brier_score;
+  JFTree["bs.normalised"] = brier_score * (double) num_classes * (double) num_classes / (double) (num_classes - 1);
 
   // compute and save the confusion matrix
   vector<size_t> confusion = computeConfusionMatrix(JFTree["predictions"], response, num_classes);
@@ -759,15 +771,16 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
   if (type == "Classification") {
     ClassificationTree* tree = ((XPtr<ClassificationTree>) JFTree["Tree"]).get();
     const pair<vector<double>, vector<double>>& predictions = tree->computePredictions(new_data);
-    const vector<double>& response = new_data.get_y_col(0);
+    const vector<double>& response = new_data.get_y();
     size_t num_classes = as<size_t>(JFTree["num.classes"]);
 
     NumericVector class_misclassification_errors(num_classes);
     NumericMatrix confusionMatrix(num_classes, num_classes);
 
+    double brier_score = computeBrierScoreError(predictions.second, response, num_classes);
     List result = List::create(
-      Named("BS.error") = computeBrierScoreError(predictions.second, response, num_classes),
-      Named("normalised.BS.error") = computeNormalizedBrierScoreError(predictions.second, response, num_classes)
+      Named("BS.error") = brier_score,
+      Named("normalised.BS.error") = brier_score * (double) num_classes * (double) num_classes / (double) (num_classes - 1)
     );
 
     vector<double> misc = computeMisclassificationError(predictions.first, response, num_classes);
@@ -1531,8 +1544,9 @@ void JFCppForestErrorClassification(List& JFForest, const vector<double>& respon
   JFForest["misc.error"] = class_misclassification_errors;
 
   // compute and save the Brier score error
-  JFForest["bs"] = computeBrierScoreError(prob_predictions, response_oob, num_classes);
-  JFForest["bs.normalised"] = computeNormalizedBrierScoreError(prob_predictions, response_oob, num_classes);
+  double brier_score = computeBrierScoreError(prob_predictions, response_oob, num_classes);
+  JFForest["bs"] = brier_score;
+  JFForest["bs.normalised"] = brier_score * (double) num_classes * (double) num_classes / (double) (num_classes - 1);
   JFForest["num.oob.predictions"] = class_predictions.size();
 
   // compute and save the confusion matrix
@@ -1694,15 +1708,16 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
   if (type == "Classification") {
     ClassificationForest* forest = ((XPtr<ClassificationForest>) JFForest["Forest"]).get();
     const pair<vector<double>, vector<double>>& predictions = forest->computePredictions(new_data, true);
-    const vector<double>& response = new_data.get_y_col(0);
+    const vector<double>& response = new_data.get_y();
 
     size_t num_classes = as<size_t>(JFForest["num.classes"]);
     NumericVector class_misclassification_errors(num_classes);
     NumericMatrix confusionMatrix(num_classes, num_classes);
 
     // create list, compute and save the Brier Score error
-    List result = List::create(Named("BS.error") = computeBrierScoreError(predictions.second, response, num_classes),
-                               Named("normalised.BS.error") = computeNormalizedBrierScoreError(predictions.second, response, num_classes));
+    double brier_score = computeBrierScoreError(predictions.second, response, num_classes);
+    List result = List::create(Named("BS.error") = brier_score,
+                               Named("normalised.BS.error") = brier_score * (double) num_classes * (double) num_classes / (double) (num_classes - 1));
 
     // compute and save overall misclassification error and class-wise misclassification error
     vector<double> misc = computeMisclassificationError(predictions.first, response, num_classes);

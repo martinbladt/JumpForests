@@ -34,6 +34,9 @@ struct Data {
   double get_x(size_t row, size_t col) const {
     return x[row * num_features + col];
   }
+  const double* get_x_row_ptr(size_t row) const {
+    return x.data() + row * num_features;
+  }
   vector<double> get_x() const {
     return x;
   }

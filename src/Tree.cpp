@@ -62,9 +62,10 @@ size_t Tree::predictionLeafID(size_t observation) {
 size_t Tree::predictionLeafID(const Data& prediction_data, size_t observation) {
     size_t current_node = 0;
     const vector<bool>& categorical = data->getCategorical();
+    const double* x = prediction_data.get_x_row_ptr(observation);
     while (left_daughters[current_node] != 0) {
         size_t split_feature = feature_IDs[current_node];
-        double value = prediction_data.get_x(observation, split_feature);
+        double value = x[split_feature];
         if (categorical[split_feature]) {
             const vector<double>& left_subset = thresholds[current_node];
             current_node = find(left_subset.begin(), left_subset.end(), value) != left_subset.end() ?
@@ -80,9 +81,10 @@ size_t Tree::predictionLeafID(const Data& prediction_data, size_t observation) {
 size_t Tree::predictionLeafIDPermuted(size_t observation, size_t feature, double value) {
     size_t current_node = 0;
     const vector<bool>& categorical = data->getCategorical();
+    const double* x = data->get_x_row_ptr(observation);
     while (left_daughters[current_node] != 0) {
         size_t split_feature = feature_IDs[current_node];
-        double split_value = split_feature == feature ? value : data->get_x(observation, split_feature);
+        double split_value = split_feature == feature ? value : x[split_feature];
         if (categorical[split_feature]) {
             const vector<double>& left_subset = thresholds[current_node];
             current_node = find(left_subset.begin(), left_subset.end(), split_value) != left_subset.end() ?
@@ -145,6 +147,7 @@ size_t Tree::predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt199
 size_t Tree::predictionLeafIDVIMP(size_t observation, size_t feature, mt19937& rng) {
     size_t current_node = 0;
     const vector<bool>& categorical = data->getCategorical();
+    const double* x = data->get_x_row_ptr(observation);
     while (left_daughters[current_node] != 0) {
         size_t split_feature = feature_IDs[current_node];
         if (split_feature == feature) {
@@ -155,7 +158,7 @@ size_t Tree::predictionLeafIDVIMP(size_t observation, size_t feature, mt19937& r
             });
             current_node = left_daughter + daughter_id(rng);
         } else {
-            double value = data->get_x(observation, split_feature);
+            double value = x[split_feature];
             if (categorical[split_feature]) {
                 const vector<double>& left_subset = thresholds[current_node];
                 current_node = find(left_subset.begin(), left_subset.end(), value) != left_subset.end() ?

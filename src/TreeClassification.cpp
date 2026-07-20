@@ -27,10 +27,10 @@ double proportionLog2(double proportion) {
 // constructor for ClassificationTree
 //--------------------------------------------------------------------------------------
 
-ClassificationTree::ClassificationTree(const vector<size_t>& subset_indices, const vector<size_t>& estimation_indices) {
-  this->node_obs.push_back(subset_indices);
-  this->holdout_node_obs.push_back(estimation_indices);
+ClassificationTree::ClassificationTree(vector<size_t> subset_indices, vector<size_t> estimation_indices) {
   this->node_sizes.push_back(subset_indices.size());
+  this->node_obs.push_back(std::move(subset_indices));
+  this->holdout_node_obs.push_back(std::move(estimation_indices));
 }
 
 // functions for growing classification trees
@@ -40,14 +40,33 @@ ClassificationTree::ClassificationTree(const vector<size_t>& subset_indices, con
 vector<double> ClassificationTree::computeClassCounts(const vector<size_t>& node_obs) {
   size_t num_classes = data->getNumClasses();
   vector<double> result(num_classes, 0);
-  for (size_t i = 1; i < num_classes + 1; ++i) {
-    for (size_t j : node_obs) {
-      if (data->get_y(j) == i) {
-        ++result[i - 1];
-      }
-    }
+  for (size_t i : node_obs) {
+    size_t class_id = static_cast<size_t>(data->get_y(i)) - 1;
+    ++result[class_id];
   }
   return result;
+}
+
+void ClassificationTree::reserveTreeMemory(size_t num_obs) {
+  // the minimal node size gives an upper bound for the number of nodes in the tree
+  size_t max_terminal_nodes = min_node_size == 0 ? max(static_cast<size_t>(1), num_obs) :
+    max(static_cast<size_t>(1), num_obs / min_node_size);
+  size_t max_num_nodes = 2 * max_terminal_nodes - 1;
+  // avoid excessive reservation for unusually large shallow trees
+  max_num_nodes = min(max_num_nodes, static_cast<size_t>(1024));
+
+  node_obs.reserve(max_num_nodes);
+  if (honest) {
+    holdout_node_obs.reserve(max_num_nodes);
+  }
+  node_sizes.reserve(max_num_nodes);
+  left_daughters.reserve(max_num_nodes);
+  feature_IDs.reserve(max_num_nodes);
+  thresholds.reserve(max_num_nodes);
+  depths.reserve(max_num_nodes);
+  classes.reserve(max_num_nodes);
+  class_proportions.reserve(max_num_nodes);
+  class_counts_node.reserve(max_num_nodes);
 }
 
 // given the class counts, returns a pair consisting of the class with the highest count (the predicted class)
@@ -65,6 +84,23 @@ pair<double, vector<double>> ClassificationTree::computePredictedClass(const vec
   return {predicted_class, proportions};
 }
 
+double ClassificationTree::computeSplitValue(const vector<double>& class_prop_left, const vector<double>& class_prop_right,
+                                             size_t num_obs_left, size_t num_obs_right) {
+  switch (splitrule_id) {
+    case ClassificationSplitRule::Gini:
+      return Gini(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
+    case ClassificationSplitRule::Entropy:
+      return Entropy(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
+    case ClassificationSplitRule::Misclassification:
+      return Misclassification(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
+    case ClassificationSplitRule::Twoing:
+      return Twoing(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
+    case ClassificationSplitRule::Hellinger:
+      return Hellinger(class_prop_left, class_prop_right);
+  }
+  return 0;
+}
+
 void ClassificationTree::makeLeaf(size_t node_index) {
   // update tree info
   feature_IDs.push_back(0);
@@ -78,6 +114,12 @@ void ClassificationTree::makeLeaf(size_t node_index) {
     for (size_t i : holdout_node_obs[node_index]) {
       prediction_node_IDs[i] = node_index;
     }
+  }
+
+  // the observation indices are no longer needed after the node is made terminal
+  vector<size_t>().swap(node_obs[node_index]);
+  if (honest) {
+    vector<size_t>().swap(holdout_node_obs[node_index]);
   }
 }
 
@@ -96,27 +138,38 @@ void ClassificationTree::bestSplitContinuous(size_t node_index, size_t feature, 
     return;
   }
 
-  // do initial sweep to compute the number of observations and class counts in right node
+  // first place each observation at the last split point where it belongs to the right node
   num_obs_right.assign(nsplits_final, 0);
   class_counts_right.assign(nsplits_final * num_classes, 0);
   for (size_t i : current_node_obs) {
     double feature_val = data->get_x(i, feature);
-    double response_val = data->get_y(i);
-    for (size_t s = 0; s < nsplits_final; ++s) {
-      if (feature_val > split_points[s]) {
-        // add one to the number of observations in right node for split s
-        ++num_obs_right[s];
-        // update the class counts in right node for split s
-        for (size_t c = 0; c < num_classes; ++c) {
-          if (response_val == c + 1) {
-            ++class_counts_right[s * num_classes + c];
-          }
-        }
-      } else {
-        break;
-      }
+    // missing feature values are sent to the right daughter during prediction
+    size_t num_splits_right = std::isnan(feature_val) ? nsplits_final :
+      lower_bound(split_points.begin(), split_points.end(), feature_val) - split_points.begin();
+    if (num_splits_right > 0) {
+      size_t split_id = num_splits_right - 1;
+      size_t class_id = static_cast<size_t>(data->get_y(i)) - 1;
+      ++num_obs_right[split_id];
+      ++class_counts_right[split_id * num_classes + class_id];
     }
   }
+
+  // accumulate backwards since an observation to the right of one split point
+  // also belongs to the right of every smaller split point
+  for (size_t s = nsplits_final - 1; s > 0; --s) {
+    num_obs_right[s - 1] += num_obs_right[s];
+    size_t index = s * num_classes;
+    size_t previous_index = index - num_classes;
+    for (size_t c = 0; c < num_classes; ++c) {
+      class_counts_right[previous_index + c] += class_counts_right[index + c];
+    }
+  }
+
+  vector<double> class_counts_left(num_classes, 0);
+  vector<double> class_prop_left(num_classes, 0);
+  vector<double> class_prop_right(num_classes, 0);
+  const vector<double>& class_counts_parent = class_counts_node[node_index];
+
   // now find the best split
   for (size_t s = 0; s < nsplits_final; ++s) {
     size_t index = s * num_classes;
@@ -127,33 +180,13 @@ void ClassificationTree::bestSplitContinuous(size_t node_index, size_t feature, 
     }
 
     // compute class counts in the left node residually
-    vector<double> class_counts_left(num_classes, 0);
-    const vector<double>& class_counts_parent = class_counts_node[node_index];
     for (size_t c = 0; c < num_classes; ++c) {
       class_counts_left[c] = class_counts_parent[c] - class_counts_right[index + c];
+      class_prop_left[c] = class_counts_left[c] / (double) num_obs_left;
+      class_prop_right[c] = class_counts_right[index + c] / (double) num_obs_right[s];
     }
 
-    const vector<double>& class_prop_left = classCountsToProportions(class_counts_left, num_classes, num_obs_left);
-    const vector<double>& class_prop_right = classCountsToProportions(class_counts_right, num_classes, num_obs_right[s], s);
-
-    // since the proportions are computed before calling the splitting rule, we don't need the additional split_index option,
-    // but I keep it for now in case I am going to change it
-    double split_val;
-    if (splitrule == "gini") {
-      split_val = Gini(class_prop_left, class_prop_right, num_obs_left, num_obs_right[s]);
-    }
-    if (splitrule == "entropy") {
-      split_val = Entropy(class_prop_left, class_prop_right, num_obs_left, num_obs_right[s]);
-    }
-    if (splitrule == "misc") {
-      split_val = Misclassification(class_prop_left, class_prop_right, num_obs_left, num_obs_right[s]);
-    }
-    if (splitrule == "twoing") {
-      split_val = Twoing(class_prop_left, class_prop_right, num_obs_left, num_obs_right[s]);
-    }
-    if (splitrule == "hellinger") {
-      split_val = Hellinger(class_prop_left, class_prop_right);
-    }
+    double split_val = computeSplitValue(class_prop_left, class_prop_right, num_obs_left, num_obs_right[s]);
 
     if (split_val > best_split_val) {
       best_split_val = split_val;
@@ -168,8 +201,12 @@ void ClassificationTree::bestSplitContinuous(size_t node_index, size_t feature, 
 }
 
 void ClassificationTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold, 
-                                              vector<size_t>& best_left_indices, vector<size_t>& best_right_indices, vector<double>& best_class_counts_left, vector<double>& best_class_counts_right) {
-  const vector<double>& feature_values = uniqueValues(data->getValues(node_obs[node_index], feature));
+                                              vector<double>& best_class_counts_left, vector<double>& best_class_counts_right) {
+  const vector<size_t>& current_node_obs = node_obs[node_index];
+  vector<double> feature_values = data->getValues(current_node_obs, feature);
+  feature_values.erase(remove_if(feature_values.begin(), feature_values.end(),
+    [](double value) { return std::isnan(value); }), feature_values.end());
+  feature_values = uniqueValues(std::move(feature_values));
   const vector<double>& class_counts_parent = class_counts_node[node_index];
   size_t num_classes = data->getNumClasses();
   size_t num_feature_values = feature_values.size();
@@ -180,82 +217,100 @@ void ClassificationTree::bestSplitCategorical(size_t node_index, size_t feature,
       return;
   }
 
+  // compute the number of observations and class counts for each category once
+  vector<size_t> category_counts(num_feature_values, 0);
+  vector<double> category_class_counts(num_feature_values * num_classes, 0);
+  for (size_t i = 0; i < current_node_obs.size(); ++i) {
+    size_t obs_id = current_node_obs[i];
+    double feature_value = data->get_x(obs_id, feature);
+    // missing feature values are sent to the right daughter during prediction
+    size_t category = std::isnan(feature_value) ? num_feature_values :
+      lower_bound(feature_values.begin(), feature_values.end(), feature_value) - feature_values.begin();
+    if (category < num_feature_values) {
+      size_t class_id = static_cast<size_t>(data->get_y(obs_id)) - 1;
+      ++category_counts[category];
+      ++category_class_counts[category * num_classes + class_id];
+    }
+  }
+
+  vector<double> class_counts_left(num_classes, 0);
+  vector<double> class_counts_right(num_classes, 0);
+  vector<double> class_prop_left(num_classes, 0);
+  vector<double> class_prop_right(num_classes, 0);
+
   // consider each partition (bitmask)
   for (const auto& mask : partition_masks) {
-    unordered_set<double> left_values;
+    size_t n_left = 0;
+    fill(class_counts_left.begin(), class_counts_left.end(), 0);
     for (size_t i = 0; i < num_feature_values; ++i) {
         if ((mask >> i) & 1) {
-            left_values.insert(feature_values[i]);
+            n_left += category_counts[i];
+            size_t index = i * num_classes;
+            for (size_t c = 0; c < num_classes; ++c) {
+              class_counts_left[c] += category_class_counts[index + c];
+            }
         }
     }
 
-    vector<size_t> current_left_indices;
-    vector<size_t> current_right_indices;
-    for (size_t obs_id : node_obs[node_index]) {
-        if (left_values.count(data->get_x(obs_id, feature))) {
-            current_left_indices.push_back(obs_id);
-        } else {
-            current_right_indices.push_back(obs_id);
-        }
-    }
-
-    size_t n_left = current_left_indices.size();
-    size_t n_right = current_right_indices.size();
+    size_t n_right = current_node_obs.size() - n_left;
 
     if (n_left < min_node_size || n_right < min_node_size) {
         continue;
     }
 
-    // here we have to compute the class counts in one of the daughters from scratch
-    vector<double> class_counts_left = computeClassCounts(current_left_indices);
-    // compute the class counts in the other node residually
-    vector<double> class_counts_right(num_classes, 0);
+    // compute the class counts in the right node residually
     for (size_t c = 0; c < num_classes; ++c) {
       class_counts_right[c] = class_counts_parent[c] - class_counts_left[c];
+      class_prop_left[c] = class_counts_left[c] / (double) n_left;
+      class_prop_right[c] = class_counts_right[c] / (double) n_right;
     }
 
-    size_t num_obs_left = current_left_indices.size();
-    size_t num_obs_right = current_right_indices.size();
-    const vector<double>& class_prop_left = classCountsToProportions(class_counts_left, num_classes, num_obs_left);
-    const vector<double>& class_prop_right = classCountsToProportions(class_counts_right, num_classes, num_obs_right);
-
-    // since the proportions are computed before calling the splitting rule, we don't need the additional split_index option,
-    // but I keep it for now in case I am going to change it
-    double split_val;
-    if (splitrule == "gini") {
-      split_val = Gini(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
-    }
-    if (splitrule == "entropy") {
-      split_val = Entropy(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
-    }
-    if (splitrule == "misc") {
-      split_val = Misclassification(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
-    }
-    if (splitrule == "twoing") {
-      split_val = Twoing(class_prop_left, class_prop_right, num_obs_left, num_obs_right);
-    }
-    if (splitrule == "hellinger") {
-      split_val = Hellinger(class_prop_left, class_prop_right);
-    }
+    double split_val = computeSplitValue(class_prop_left, class_prop_right, n_left, n_right);
 
     if (split_val > best_split_val) {
       best_split_val = split_val;
-      best_left_indices = std::move(current_left_indices);
-      best_right_indices = std::move(current_right_indices);
       best_feature = feature;
+      unordered_set<double> left_values;
+      for (size_t i = 0; i < num_feature_values; ++i) {
+        if ((mask >> i) & 1) {
+          left_values.insert(feature_values[i]);
+        }
+      }
       best_threshold.assign(left_values.begin(), left_values.end());
-      best_class_counts_left = std::move(class_counts_left);
-      best_class_counts_right = std::move(class_counts_right);
+      best_class_counts_left = class_counts_left;
+      best_class_counts_right = class_counts_right;
     }
   }
 }
 
 // function to create a split for a classification tree. returns true if leaf, otherwise false
 bool ClassificationTree::createSplit(size_t node_index) {
+    // initialise quantities which are reused throughout the tree
+    if (class_counts_node.empty()) {
+      reserveTreeMemory(node_obs[node_index].size());
+    }
     const vector<size_t>& current_node_obs = node_obs[node_index];
     // if we are in the root node, the class counts need to be computed
     if (class_counts_node.empty()) {
       class_counts_node.push_back(computeClassCounts(current_node_obs));
+
+      size_t num_features = data->getNumberOfFeatures();
+      feature_indices.resize(num_features);
+      for (size_t i = 0; i < num_features; ++i) {
+        feature_indices[i] = i;
+      }
+
+      if (splitrule == "gini") {
+        splitrule_id = ClassificationSplitRule::Gini;
+      } else if (splitrule == "entropy") {
+        splitrule_id = ClassificationSplitRule::Entropy;
+      } else if (splitrule == "misc") {
+        splitrule_id = ClassificationSplitRule::Misclassification;
+      } else if (splitrule == "twoing") {
+        splitrule_id = ClassificationSplitRule::Twoing;
+      } else {
+        splitrule_id = ClassificationSplitRule::Hellinger;
+      }
     }
 
     // if no split is possible, make the node a leaf
@@ -299,19 +354,13 @@ bool ClassificationTree::createSplit(size_t node_index) {
     vector<size_t> holdout_right_indices;
 
     // sample mtry features
-    size_t num_features = data->getNumberOfFeatures();
-    vector<size_t> feature_indices(num_features);
-    for (size_t i = 0; i < num_features; ++i) {
-        feature_indices[i] = i;
-    }
     vector<size_t> sampled_features = sampleIndices(feature_indices, mtry, false, random_number_generator);
+    const vector<bool>& categorical = data->getCategorical();
 
     // now consider each of the sampled features
     for (size_t i : sampled_features) {
-        if (data->getCategorical()[i]) {
-            // finds the best split and constructs the indices of the best left and right node
+        if (categorical[i]) {
             bestSplitCategorical(node_index, i, best_split_val, best_feature, best_threshold,
-                                 best_left_indices, best_right_indices,
                                  best_class_counts_left, best_class_counts_right);
         }
         else {
@@ -347,59 +396,64 @@ bool ClassificationTree::createSplit(size_t node_index) {
       return true;
     }
 
-    // for a categorical feature, the best indices are already saved, but if the feature is 
-    // continuous, they should be recomputed from scratch (and only once)
-    if (!(data->getCategorical()[best_feature])) {
-        best_left_indices.clear();
-        best_right_indices.clear();
-        for (size_t i : current_node_obs) {
-            if (data->get_x(i, best_feature) <= best_threshold[0]) {
-                best_left_indices.push_back(i);
-            } else {
-                best_right_indices.push_back(i);
-            }
-        }
-        // update the holdout index sets if the tree is honest
-        if (honest) {
-            const vector<size_t>& current_holdout_node_obs = holdout_node_obs[node_index];
-            for (size_t i : current_holdout_node_obs) {
-                if (data->get_x(i, best_feature) <= best_threshold[0]) {
-                    holdout_left_indices.push_back(i);
-                } else {
-                    holdout_right_indices.push_back(i);
-                }
-            }
+    // construct the indices of the two daughters once for the best split
+    bool categorical_split = categorical[best_feature];
+    best_left_indices.reserve(current_node_obs.size());
+    best_right_indices.reserve(current_node_obs.size());
+    for (size_t i : current_node_obs) {
+        double feature_value = data->get_x(i, best_feature);
+        bool goes_left = categorical_split ?
+          find(best_threshold.begin(), best_threshold.end(), feature_value) != best_threshold.end() :
+          feature_value <= best_threshold[0];
+        if (goes_left) {
+            best_left_indices.push_back(i);
+        } else {
+            best_right_indices.push_back(i);
         }
     }
 
-    // the best holdout index sets also need to be constructed if the split is categorical
-    if (honest && data->getCategorical()[best_feature]) {
-        const vector<size_t>& current_holdout_node_obs = holdout_node_obs[node_index];
-        for (size_t i : current_holdout_node_obs) {
-            if (find(best_threshold.begin(), best_threshold.end(), data->get_x(i, best_feature)) != best_threshold.end()) {
-                holdout_left_indices.push_back(i);
-            } else {
-                holdout_right_indices.push_back(i);
-            }
+    // update the holdout index sets if the tree is honest
+    if (honest) {
+      const vector<size_t>& current_holdout_node_obs = holdout_node_obs[node_index];
+      holdout_left_indices.reserve(current_holdout_node_obs.size());
+      holdout_right_indices.reserve(current_holdout_node_obs.size());
+      for (size_t i : current_holdout_node_obs) {
+        double feature_value = data->get_x(i, best_feature);
+        bool goes_left = categorical_split ?
+          find(best_threshold.begin(), best_threshold.end(), feature_value) != best_threshold.end() :
+          feature_value <= best_threshold[0];
+        if (goes_left) {
+          holdout_left_indices.push_back(i);
+        } else {
+          holdout_right_indices.push_back(i);
         }
+      }
     }
 
     // a best split was found, update the tree
-    node_obs.push_back(best_left_indices);                // construct left daughter
-    node_obs.push_back(best_right_indices);               // construct right daughter
-    class_counts_node.push_back(best_class_counts_left);  // save class counts
-    class_counts_node.push_back(best_class_counts_right);
-    node_sizes.push_back(best_left_indices.size());
-    node_sizes.push_back(best_right_indices.size());
+    size_t best_left_size = best_left_indices.size();
+    size_t best_right_size = best_right_indices.size();
+    node_obs.push_back(std::move(best_left_indices));                // construct left daughter
+    node_obs.push_back(std::move(best_right_indices));               // construct right daughter
+    class_counts_node.push_back(std::move(best_class_counts_left));  // save class counts
+    class_counts_node.push_back(std::move(best_class_counts_right));
+    node_sizes.push_back(best_left_size);
+    node_sizes.push_back(best_right_size);
     feature_IDs.push_back(best_feature);
-    thresholds.push_back(best_threshold);
+    thresholds.push_back(std::move(best_threshold));
     classes.push_back(0);
     class_proportions.push_back({});
 
     // for honest trees, update the holdout indices
     if (honest) {
-        holdout_node_obs.push_back(holdout_left_indices);
-        holdout_node_obs.push_back(holdout_right_indices);
+        holdout_node_obs.push_back(std::move(holdout_left_indices));
+        holdout_node_obs.push_back(std::move(holdout_right_indices));
+    }
+
+    // the parent indices are no longer needed after its daughters have been constructed
+    vector<size_t>().swap(node_obs[node_index]);
+    if (honest) {
+      vector<size_t>().swap(holdout_node_obs[node_index]);
     }
     return false;
 }
@@ -481,7 +535,7 @@ pair<vector<double>, vector<double>> ClassificationTree::computePredictions() {
 
   // add multithreading here?
   for (size_t i = 0; i < num_obs; ++i) {
-    size_t leaf_id = predictionLeafID(data->get_x_row(i));
+    size_t leaf_id = predictionLeafID(i);
     predictions_class[i] = classes[leaf_id];
     size_t index = i * num_classes;
     for (size_t c = 0; c < num_classes; ++c) {
@@ -500,7 +554,7 @@ pair<vector<double>, vector<double>> ClassificationTree::computePredictions(cons
 
   // add multithreading here?
   for (size_t i = 0; i < num_obs; ++i) {
-    size_t leaf_id = predictionLeafID(new_data.get_x_row(i));
+    size_t leaf_id = predictionLeafID(new_data, i);
     predictions_class[i] = classes[leaf_id];
     size_t index = i * num_classes;
     for (size_t c = 0; c < num_classes; ++c) {
