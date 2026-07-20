@@ -171,7 +171,18 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
   // the tree is a survival tree
   if (tree_type == 3) {
-    // determine the unique sorted (true) event times
+    if (min_node_size == 0) {
+      throw runtime_error("The minimal node size must be at least one");
+    }
+    const vector<bool>& categorical_features = data->getCategorical();
+    vector<size_t> unique_feature_values = data->getUniqueValues();
+    for (size_t i = 0; i < categorical_features.size(); ++i) {
+      if (categorical_features[i] && unique_feature_values[i] > 63) {
+        throw runtime_error("Categorical features with more than 63 values are not supported");
+      }
+    }
+
+    // determine the unique sorted response times
     vector<double> times = as<vector<double>>(df[response_indices_cpp[0]]);
     vector<double> ind = as<vector<double>>(df[response_indices_cpp[1]]);
     vector<double> unique_event_times = uniqueValues(times);
@@ -201,11 +212,13 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 
     SurvivalTree* tree;
     if (!honest) {
-      tree = new SurvivalTree(unique_event_times_ptr, response_event_time_ids_ptr, true_event_time_ids_ptr, subset_indices_cpp, true, {}, censoring_times_ptr);
+      tree = new SurvivalTree(unique_event_times_ptr, response_event_time_ids_ptr, true_event_time_ids_ptr,
+        std::move(subset_indices_cpp), true, {}, censoring_times_ptr);
     } else {
       mt19937 rng(seed + 1);
       pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
-      tree = new SurvivalTree(unique_event_times_ptr, response_event_time_ids_ptr, true_event_time_ids_ptr, partition.first, true, partition.second, censoring_times_ptr);
+      tree = new SurvivalTree(unique_event_times_ptr, response_event_time_ids_ptr, true_event_time_ids_ptr,
+        std::move(partition.first), true, std::move(partition.second), censoring_times_ptr);
       tree->setRNG(rng);
     }
     
@@ -219,7 +232,6 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
     result["tree.type"] = "Survival";
     result["unique.event.times"] = unique_event_times_R;
     result["Tree"] = survival_tree;                 // add the tree (as a pointer, only to be used for prediction in C++)
-    cout << "Computing predictions..." << endl;
     JFCppTreePredict(result);                       // compute and save predictions on the data
     JFCppTreeErrorSurvival(result, times, ind, true_unique_event_times, true_response_event_time_ids);     // compute and save error estimate
 
@@ -371,29 +383,29 @@ void JFCppTreePredict(List& JFTree) {
   }
   if (type == "Survival") {
     SurvivalTree* tree = ((XPtr<SurvivalTree>) JFTree["Tree"]).get();
-    size_t num_unique_event_times = tree->getEventTimes().size();
+    const vector<size_t>& true_event_time_ids = tree->getTrueEventTimeIDs();
+    size_t num_unique_event_times = true_event_time_ids.size();
     size_t num_censoring_times = tree->getCensoringTimes().size();
     NumericMatrix predictions(num_obs, num_unique_event_times);
     NumericMatrix censoring(num_obs, num_unique_event_times);
     NumericMatrix censoring_full(num_obs, num_censoring_times);
+    const vector<size_t>& leaf_ids = tree->getPredictionNodeIDs();
+    const vector<vector<double>>& chf = tree->getCHF();
+    const vector<vector<double>>& km_censoring = tree->getKMCensoring();
+    const vector<vector<double>>& km_censoring_full = tree->getKMCensoringFull();
 
     // we saved the corresponding terminal node ID for every observation
     for (int i = 0; i < num_obs; ++i) {
-      size_t leaf_id = tree->getPredictionNodeIDs()[i];
-      vector<double> pred = tree->getCHF()[leaf_id];
-      vector<double> cens = tree->getKMCensoring()[leaf_id];
-      vector<double> cens_full = tree->getKMCensoringFull()[leaf_id];
-      NumericVector rpred(pred.begin(), pred.end());
-      NumericVector rcens(cens.begin(), cens.end());
-      NumericVector rcens_full(cens_full.begin(), cens_full.end());
-      predictions.row(i) = rpred;
-      censoring.row(i) = rcens;
-      censoring_full.row(i) = rcens_full;
+      size_t leaf_id = leaf_ids[i];
+      const vector<double>& pred = chf[leaf_id];
+      const vector<double>& cens = km_censoring[leaf_id];
+      for (size_t t = 0; t < num_unique_event_times; ++t) {
+        size_t event_time_id = true_event_time_ids[t];
+        predictions(i, t) = pred[event_time_id];
+        censoring(i, t) = cens[event_time_id];
+      }
+      copy(km_censoring_full[leaf_id].begin(), km_censoring_full[leaf_id].end(), censoring_full.row(i).begin());
     }
-
-    // now truncate the time axis to only include non-censored times
-    predictions = selectColumns(predictions, tree->getTrueEventTimeIDs());
-    censoring = selectColumns(censoring, tree->getTrueEventTimeIDs());
     
     JFTree["predictions"] = predictions;
     JFTree["predictions.km"] = KaplanMeier(predictions);
@@ -500,16 +512,17 @@ NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector f
 
   if (type == "Survival") {
     SurvivalTree* tree = ((XPtr<SurvivalTree>) JFTree["Tree"]).get();
-    size_t num_unique_event_times = tree->getEventTimes().size();
+    size_t num_all_event_times = tree->getEventTimes().size();
+    const vector<size_t>& true_event_time_ids = tree->getTrueEventTimeIDs();
+    size_t num_unique_event_times = true_event_time_ids.size();
     NumericMatrix predictions(num_obs, num_unique_event_times);
 
     const vector<double>& predictions_cpp = tree->computePredictions(new_data);
     for (size_t i = 0; i < num_obs; ++i) {
-      copy(predictions_cpp.begin() + i * num_unique_event_times, predictions_cpp.begin() + (i + 1) * num_unique_event_times, predictions.row(i).begin());
+      for (size_t t = 0; t < num_unique_event_times; ++t) {
+        predictions(i, t) = predictions_cpp[i * num_all_event_times + true_event_time_ids[t]];
+      }
     }
-
-    // truncate the predictions to only include non-censored times
-    predictions = selectColumns(predictions, tree->getTrueEventTimeIDs());
     return predictions;
   }
   throw runtime_error("Type of tree not recognised");
@@ -531,23 +544,24 @@ List JFCppTreePredictCensoring(const List& JFTree, DataFrame df, NumericVector f
   
   SurvivalTree* tree = ((XPtr<SurvivalTree>) JFTree["Tree"]).get();
   size_t num_obs = new_data.getNumberOfObs();
-  size_t num_unique_event_times = tree->getEventTimes().size();
+  const vector<size_t>& true_event_time_ids = tree->getTrueEventTimeIDs();
+  vector<double> true_event_times = eventTimesAtIDs(tree->getEventTimes(), true_event_time_ids);
+  size_t num_all_event_times = tree->getEventTimes().size();
+  size_t num_unique_event_times = true_event_time_ids.size();
   size_t num_censoring_times = tree->getCensoringTimes().size();
   NumericMatrix predictions(num_obs, num_unique_event_times);
   NumericMatrix censoring(num_obs, num_unique_event_times);
   NumericMatrix censoring_full(num_obs, num_censoring_times);
 
   const pair<vector<double>, vector<double>>& predictions_cpp = tree->computePredictionsCensoring(new_data);
-  vector<double> censoring_event_cpp = selectCensoringAtTimes(predictions_cpp.second, tree->getCensoringTimes(), tree->getEventTimes(), num_obs);
+  vector<double> censoring_event_cpp = selectCensoringAtTimes(predictions_cpp.second, tree->getCensoringTimes(), true_event_times, num_obs);
   for (size_t i = 0; i < num_obs; ++i) {
-    copy(predictions_cpp.first.begin() + i * num_unique_event_times, predictions_cpp.first.begin() + (i + 1) * num_unique_event_times, predictions.row(i).begin());
+    for (size_t t = 0; t < num_unique_event_times; ++t) {
+      predictions(i, t) = predictions_cpp.first[i * num_all_event_times + true_event_time_ids[t]];
+    }
     copy(censoring_event_cpp.begin() + i * num_unique_event_times, censoring_event_cpp.begin() + (i + 1) * num_unique_event_times, censoring.row(i).begin());
     copy(predictions_cpp.second.begin() + i * num_censoring_times, predictions_cpp.second.begin() + (i + 1) * num_censoring_times, censoring_full.row(i).begin());
   }
-
-  // truncate the predictions to only include non-censored times
-  predictions = selectColumns(predictions, tree->getTrueEventTimeIDs());
-  censoring = selectColumns(censoring, tree->getTrueEventTimeIDs());
   List result = List::create(
     Named("predictions") = predictions,
     Named("censoring") = censoring,
@@ -803,8 +817,8 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
   }
   if (type == "Survival") {
     SurvivalTree* tree = ((XPtr<SurvivalTree>) JFTree["Tree"]).get();
-    vector<double> all_unique_event_times = tree->getEventTimes();
-    vector<size_t> true_event_time_ids = tree->getTrueEventTimeIDs();
+    const vector<double>& all_unique_event_times = tree->getEventTimes();
+    const vector<size_t>& true_event_time_ids = tree->getTrueEventTimeIDs();
     vector<double> unique_event_times = eventTimesAtIDs(all_unique_event_times, true_event_time_ids);
     size_t num_unique_event_times = all_unique_event_times.size();
     size_t num_true_event_times = unique_event_times.size();
@@ -995,10 +1009,11 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 
   // the forest is a survival forest
   if (tree_type == 3) {
-    // determine the unique sorted (true) event times
+    // determine the unique sorted response times
     vector<double> times = as<vector<double>>(df[response_indices_cpp[0]]);
     vector<double> ind = as<vector<double>>(df[response_indices_cpp[1]]);
     vector<double> unique_event_times = uniqueValues(times);
+    vector<double> censoring_times = unique_event_times;
 
     // if the user has specified a number of event times, thin the vector of unique event times
     if (num_event_times > 0) {
@@ -1017,7 +1032,8 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
     }
 
     // create and grow the survival forest
-    SurvivalForest* forest = new SurvivalForest(unique_event_times, response_event_time_ids, true_event_time_ids, save_predictions);
+    SurvivalForest* forest = new SurvivalForest(std::move(unique_event_times), std::move(response_event_time_ids),
+      std::move(true_event_time_ids), std::move(censoring_times), save_predictions);
     forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, double_bootstrap, seed, nworkers);
     forest->grow();
 
@@ -1031,13 +1047,13 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
     result["Forest"] = survival_forest;           // add the forest as a pointer, only to be used for prediction
 
     if (save_predictions) {
-      Rcout << "Computing forest predictions" << endl;
       JFCppForestPredict(result);
       JFCppForestErrorSurvival(result, times, ind, true_unique_event_times, true_response_event_time_ids); // compute and save error result
     } else {
       result["predictions"] = R_NilValue;
       result["oob.predictions"] = R_NilValue;
       result["censoring.oob"] = R_NilValue;
+      result["censoring.before.event"] = R_NilValue;
       result["C.error"] = R_NilValue;
       result["ibs"] = R_NilValue;
       result["ibs.normalised"] = R_NilValue;
@@ -1198,29 +1214,29 @@ void JFCppForestPredict(List& JFForest, bool compute_censoring) {
     }
 
     const vector<vector<double>>& predictions_cpp = forest->computePredictions(compute_censoring);
-    size_t num_unique_event_times = forest->getNumUniqueEventTimes();
+    size_t num_all_event_times = forest->getNumUniqueEventTimes();
+    const vector<size_t>& true_event_time_ids = forest->getTrueEventTimeIDs();
+    size_t num_unique_event_times = true_event_time_ids.size();
     size_t num_obs = JFForest["num.obs"];
     
     // now fill the matrices of predictions
     NumericMatrix predictions(num_obs, num_unique_event_times);
     NumericMatrix predictions_oob(num_obs, num_unique_event_times);
-    NumericMatrix censoring_oob(num_obs, num_unique_event_times);
+    NumericMatrix censoring_oob(compute_censoring ? num_obs : 0,
+                                compute_censoring ? num_unique_event_times : 0);
+    NumericVector censoring_before_event(compute_censoring ? num_obs : 0);
     for (size_t i = 0; i < num_obs; ++i) {
       for (size_t j = 0; j < num_unique_event_times; ++j) {
-        size_t index = i * num_unique_event_times + j;
+        size_t index = i * num_all_event_times + true_event_time_ids[j];
         predictions(i, j) = predictions_cpp[0][index];
         predictions_oob(i, j) = predictions_cpp[1][index];
         if (compute_censoring) {
           censoring_oob(i, j) = predictions_cpp[2][index];
         }
       }
-    }
-
-    // now truncate the time axis to only include non-censored times
-    predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
-    predictions_oob = selectColumns(predictions_oob, forest->getTrueEventTimeIDs());
-    if (compute_censoring) {
-      censoring_oob = selectColumns(censoring_oob, forest->getTrueEventTimeIDs());
+      if (compute_censoring) {
+        censoring_before_event[i] = predictions_cpp[3][i];
+      }
     }
 
     // save predictions
@@ -1228,6 +1244,7 @@ void JFCppForestPredict(List& JFForest, bool compute_censoring) {
     JFForest["oob.predictions"] = predictions_oob;
     if (compute_censoring) {
       JFForest["censoring.oob"] = censoring_oob;
+      JFForest["censoring.before.event"] = censoring_before_event;
     }
   }
   
@@ -1341,16 +1358,16 @@ NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVect
 
   if (type == "Survival") {
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
-    size_t num_unique_event_times = forest->getNumUniqueEventTimes();
+    size_t num_all_event_times = forest->getNumUniqueEventTimes();
+    const vector<size_t>& true_event_time_ids = forest->getTrueEventTimeIDs();
+    size_t num_unique_event_times = true_event_time_ids.size();
     NumericMatrix predictions(num_obs, num_unique_event_times);
-    cout << "Computing predictions" << endl;
     const vector<vector<double>>& predictions_cpp = forest->computePredictions(new_data, false);
     for (size_t i = 0; i < num_obs; ++i) {
-      copy(predictions_cpp[0].begin() + i * num_unique_event_times, predictions_cpp[0].begin() + (i + 1) * num_unique_event_times, predictions.row(i).begin());
+      for (size_t t = 0; t < num_unique_event_times; ++t) {
+        predictions(i, t) = predictions_cpp[0][i * num_all_event_times + true_event_time_ids[t]];
+      }
     }
-
-    // truncate the predictions to only include non-censored times
-    predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
     return predictions;
   }
   throw runtime_error("Type of forest not recognised");
@@ -1373,7 +1390,9 @@ List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVect
 
   SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
   size_t num_obs = new_data.getNumberOfObs();
-  size_t num_unique_event_times = forest->getEventTimes().size();
+  size_t num_all_event_times = forest->getEventTimes().size();
+  const vector<size_t>& true_event_time_ids = forest->getTrueEventTimeIDs();
+  size_t num_unique_event_times = true_event_time_ids.size();
   NumericMatrix predictions(num_obs, num_unique_event_times);
   NumericMatrix censoring(num_obs, num_unique_event_times);
   
@@ -1384,13 +1403,12 @@ List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVect
 
   const vector<vector<double>> predictions_cpp = forest->computePredictions(new_data, true);
   for (size_t i = 0; i < num_obs; ++i) {
-    copy(predictions_cpp[0].begin() + i * num_unique_event_times, predictions_cpp[0].begin() + (i + 1) * num_unique_event_times, predictions.row(i).begin());
-    copy(predictions_cpp[1].begin() + i * num_unique_event_times, predictions_cpp[1].begin() + (i + 1) * num_unique_event_times, censoring.row(i).begin());
+    for (size_t t = 0; t < num_unique_event_times; ++t) {
+      size_t index = i * num_all_event_times + true_event_time_ids[t];
+      predictions(i, t) = predictions_cpp[0][index];
+      censoring(i, t) = predictions_cpp[1][index];
+    }
   }
-
-  // truncate the predictions to only include non-censored times
-  predictions = selectColumns(predictions, forest->getTrueEventTimeIDs());
-  censoring = selectColumns(censoring, forest->getTrueEventTimeIDs());
   List result = List::create(
     Named("predictions") = predictions,
     Named("censoring") = censoring
@@ -1568,8 +1586,10 @@ void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const
   JFForest["outcomes.oob"] = outcomes;
   JFForest["C.error"] = 1 - computeConcordanceIndex(outcomes, times, ind);
 
-  // compute IPCS weights and the censoring Kaplan-Meier estimators
-  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"], times);
+  // compute IPCW weights and the censoring Kaplan-Meier estimators
+  vector<double> censoring_before_event = as<vector<double>>(JFForest["censoring.before.event"]);
+  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids,
+    JFForest["censoring.oob"], times, {}, {}, censoring_before_event);
   const NumericMatrix& censoring_km = KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"]));
 
   // compute Brier score and integrated Brier score
@@ -1601,7 +1621,9 @@ List JFCppForestErrorSurvivalExternal(List& JFForest) {
   JFForest["outcomes.oob"] = outcomes;
 
   // now compute IPCW weights and Kaplan-Meier estimator for the censoring distribution
-  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids, JFForest["censoring.oob"], times);
+  vector<double> censoring_before_event = as<vector<double>>(JFForest["censoring.before.event"]);
+  vector<double> IPCW_weights = computeIPCW(ind, unique_event_times, response_event_time_ids,
+    JFForest["censoring.oob"], times, {}, {}, censoring_before_event);
   const NumericMatrix& censoring_km = KaplanMeier(as<NumericMatrix>(JFForest["oob.predictions"]));
 
   // compute Brier score and integrated Brier score
@@ -1616,10 +1638,10 @@ List JFCppForestErrorSurvivalExternal(List& JFForest) {
   double c_error = 1 - computeConcordanceIndex(outcomes, times, ind);
   List result = List::create(
     Named("C.error") = c_error,
-    Named("IBS") = ibs.first,
-    Named("IBS.normalised") = ibs.second,
-    Named("IKL") = ikl.first,
-    Named("IKL.normalised") = ikl.second
+    Named("IBS.error") = ibs.first,
+    Named("normalised.IBS.error") = ibs.second,
+    Named("KL.error") = ikl.first,
+    Named("normalised.KL.error") = ikl.second
   );
 
   return result;
@@ -1740,8 +1762,8 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
   }
   if (type == "Survival") {
     SurvivalForest* forest = ((XPtr<SurvivalForest>) JFForest["Forest"]).get();
-    vector<double> all_unique_event_times = forest->getEventTimes();
-    vector<size_t> true_event_time_ids = forest->getTrueEventTimeIDs();
+    const vector<double>& all_unique_event_times = forest->getEventTimes();
+    const vector<size_t>& true_event_time_ids = forest->getTrueEventTimeIDs();
     vector<double> unique_event_times = eventTimesAtIDs(all_unique_event_times, true_event_time_ids);
     size_t num_unique_event_times = all_unique_event_times.size();
     size_t num_true_event_times = unique_event_times.size();
@@ -1750,16 +1772,15 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
     if (!forest->predictionsSaved()) {
       forest->computePredictionsCensoring();
     }
-    
-    const vector<vector<double>>& predictions = forest->computePredictions(new_data, true);
-
-    // truncate the predictions to only include non-censored times
-    vector<double> predictions_final = selectColumns(predictions[0], true_event_time_ids, num_unique_event_times);
-    vector<double> censoring_final = selectColumns(predictions[1], true_event_time_ids, num_unique_event_times);
 
     // fetch data
     const vector<double>& times = new_data.get_y_col(0);
     const vector<double>& ind = new_data.get_y_col(1);
+    const vector<vector<double>>& predictions = forest->computePredictions(new_data, true, &times);
+
+    // truncate the predictions to only include non-censored times
+    vector<double> predictions_final = selectColumns(predictions[0], true_event_time_ids, num_unique_event_times);
+    vector<double> censoring_final = selectColumns(predictions[1], true_event_time_ids, num_unique_event_times);
 
     // compute Harrell's C-index error
     const vector<double>& outcomes = computeOutcomes(predictions_final, num_true_event_times);
@@ -1768,7 +1789,8 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
     // compute the response event time ids based on the new data, the IPCW weights and the Kaplan-Meier
     // estimators of the predictions
     vector<size_t> response_event_time_ids_new_data = computeResponseEventTimeIDs(unique_event_times, times);
-    vector<double> IPCW_weights = computeIPCWCpp(times, ind, unique_event_times, response_event_time_ids_new_data, censoring_final);
+    vector<double> IPCW_weights = computeIPCWCpp(times, ind, unique_event_times,
+      response_event_time_ids_new_data, censoring_final, {}, {}, {}, predictions[2]);
     vector<double> km_pred = KaplanMeier(predictions_final, times.size());
 
     // now compute the Brier score and integrated Brier score

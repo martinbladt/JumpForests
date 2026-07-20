@@ -196,4 +196,3 @@ vimp_random
 # conclusion: the misclassification and Brier based VIMP values seem to be correctly implemented
 
 #nolint end
-

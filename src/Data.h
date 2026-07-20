@@ -64,8 +64,11 @@ struct Data {
     return y;
   }
   // extract y for survival
-  double get_y(size_t row, size_t col) {
+  double get_y(size_t row, size_t col) const {
     return y[col * num_obs + row];
+  }
+  const double* get_y_col_ptr(size_t col) const {
+    return y.data() + col * num_obs;
   }
   // return a specific y column for survival data (0: times, 1: indicators)
   vector<double> get_y_col(size_t col) const {
