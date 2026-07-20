@@ -30,43 +30,30 @@ SurvivalTree::SurvivalTree(shared_ptr<vector<double>> unique_event_times, shared
 // computes the number of deaths and the number at risk in each event time
 // for the observations given by indices
 void SurvivalTree::computeSurvivalQuantities(const vector<size_t>& indices, vector<size_t>& deaths, vector<size_t>& at_risk) {
-    size_t n = indices.size();
-    vector<double> times(n);
-    vector<double> indicators(n);
-
     deaths.assign(num_unique_event_times, 0);
     at_risk.assign(num_unique_event_times, 0);
+    // stores the first event time where an observation is no longer at risk
+    // the last element is for observations which remain at risk throughout the event-time grid
+    vector<size_t> num_removed(num_unique_event_times + 1, 0);
 
-    // save times and indicators instead of fetching each time
-    for (size_t i = 0; i < n; ++i) {
-        times[i] = data->get_y(indices[i], 0);
-        indicators[i] = data->get_y(indices[i], 1);
+    for (size_t i : indices) {
+        if (data->get_y(i, 1) == 1) {
+            size_t event_time_id = (*response_event_time_ids)[i];
+            ++deaths[event_time_id];
+            // an observation experiencing the event is still at risk at the event time
+            ++num_removed[event_time_id + 1];
+        } else {
+            // censoring occurs after the last retained time which is smaller than or equal to the censoring time
+            auto it = upper_bound(unique_event_times->begin(), unique_event_times->end(), data->get_y(i, 0));
+            size_t censoring_time_id = static_cast<size_t>(distance(unique_event_times->begin(), it));
+            ++num_removed[censoring_time_id];
+        }
     }
-    
-    // sort the indices by their times
-    vector<size_t> sorted_indices(n);
-    iota(sorted_indices.begin(), sorted_indices.end(), 0);
-    sort(sorted_indices.begin(), sorted_indices.end(),
-        [&](size_t a, size_t b) {return times[a] < times[b]; });
 
-    size_t obs_idx = 0;
-    for (size_t t_idx = 0; t_idx < num_unique_event_times; ++t_idx) {
-        double current_event_time = (*unique_event_times)[t_idx];
-
-        // move pointer obs_idx to the first time larger than or equal to the current event time
-        while (obs_idx < n && times[sorted_indices[obs_idx]] < current_event_time) {
-            obs_idx++;
-        }
-        at_risk[t_idx] = n - obs_idx;
-
-        // count the deaths
-        size_t j = obs_idx;
-        while (j < n && times[sorted_indices[j]] == current_event_time) {
-            if (indicators[sorted_indices[j]] == 1) {
-                deaths[t_idx]++;
-            }
-            j++;
-        }
+    size_t current_num_at_risk = indices.size();
+    for (size_t t = 0; t < num_unique_event_times; ++t) {
+        current_num_at_risk -= num_removed[t];
+        at_risk[t] = current_num_at_risk;
     }
 }
 
@@ -74,18 +61,29 @@ void SurvivalTree::computeSurvivalQuantities(const vector<size_t>& indices, vect
 void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
                                                      vector<size_t>& num_at_risk_right, vector<size_t>& num_deaths_right, size_t nsplits_final) {
     
-    vector<size_t> delta_num_at_risk_right(nsplits_final * num_unique_event_times);
+    // stores the first event time where an observation is no longer at risk
+    vector<size_t> num_removed_right(nsplits_final * (num_unique_event_times + 1));
     // counts number of deaths in right daughter at every event time for every possible split
     const vector<size_t>& current_node_obs = node_obs[node_index];
     for (size_t i : current_node_obs) {
         double feature_val = data->get_x(i, feature);
         size_t time_id = (*response_event_time_ids)[i];
+        bool is_event = data->get_y(i, 1) == 1;
+        size_t removal_time_id;
+        if (is_event) {
+            // an observation experiencing the event is still at risk at the event time
+            removal_time_id = time_id + 1;
+        } else {
+            // censoring occurs after the last retained time which is smaller than or equal to the censoring time
+            auto it = upper_bound(unique_event_times->begin(), unique_event_times->end(), data->get_y(i, 0));
+            removal_time_id = static_cast<size_t>(distance(unique_event_times->begin(), it));
+        }
 
         for (size_t j = 0; j < nsplits_final; ++j) {
             if (feature_val > split_points[j]) {
                 ++num_obs_right[j];
-                ++delta_num_at_risk_right[j * num_unique_event_times + time_id];
-                if (data->get_y(i, 1) == 1) {
+                ++num_removed_right[j * (num_unique_event_times + 1) + removal_time_id];
+                if (is_event) {
                     ++num_deaths_right[j * num_unique_event_times + time_id];
                 }
             } else {
@@ -95,10 +93,10 @@ void SurvivalTree::computeSurvivalQuantitiesDaughter(size_t node_index, size_t f
     }
     // compute number at risk in the right node
     for (size_t i = 0; i < nsplits_final; ++i) {
-        size_t total_events = 0;
+        size_t current_num_at_risk = num_obs_right[i];
         for (size_t j = 0; j < num_unique_event_times; ++j) {
-            num_at_risk_right[i * num_unique_event_times + j] = num_obs_right[i] - total_events;
-            total_events += delta_num_at_risk_right[i * num_unique_event_times + j];
+            current_num_at_risk -= num_removed_right[i * (num_unique_event_times + 1) + j];
+            num_at_risk_right[i * num_unique_event_times + j] = current_num_at_risk;
         }
     }
 }
@@ -903,12 +901,21 @@ pair<double, double> computeIntegratedScore(const vector<double>& score, const v
 
 // for computing the ids in the observed times corresponding to the unique event times (including censored times)
 vector<size_t> computeResponseEventTimeIDs(const vector<double>& unique_event_times, const vector<double>& times) {
+    if (unique_event_times.empty()) {
+        throw invalid_argument("The survival event-time grid cannot be empty");
+    }
+
     vector<size_t> response_event_time_ids;
     response_event_time_ids.reserve(times.size());
     for (const double& time : times) {
         // use binary search to find lower bound
         auto it = lower_bound(unique_event_times.begin(), unique_event_times.end(), time);
-        response_event_time_ids.push_back(static_cast<size_t>(distance(unique_event_times.begin(), it)));
+        size_t event_time_id = static_cast<size_t>(distance(unique_event_times.begin(), it));
+        // ensures that we don't choose an event time which is out of bounds
+        if (event_time_id >= unique_event_times.size()) {
+            event_time_id = unique_event_times.size() - 1;
+        }
+        response_event_time_ids.push_back(event_time_id);
     }
     return(response_event_time_ids);
 }
