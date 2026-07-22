@@ -6,6 +6,7 @@ Functions for multi-state trees
 
 #include "TreeMultistate.h"
 #include "TreeSurvival.h"
+#include <cmath>
 
 
 // constructor for MultistateTree
@@ -14,173 +15,202 @@ Functions for multi-state trees
 // the second to final argument is only used for honest trees
 MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, 
                                const vector<size_t>& subset_indices, uint8_t num_states, bool save_predictions, const vector<size_t>& estimation_indices, shared_ptr<vector<double>> censoring_times) : 
-    unique_event_times {unique_event_times}, response_event_time_ids {response_event_time_ids}, save_predictions {save_predictions} {
+    unique_event_times {unique_event_times}, response_event_time_ids {response_event_time_ids}, num_states {num_states},
+    dim {static_cast<size_t>(num_states) * num_states}, save_predictions {save_predictions} {
     this->node_obs.push_back(subset_indices);
     this->holdout_node_obs.push_back(estimation_indices);
     this->num_unique_event_times = unique_event_times->size();
     this->censoring_times = censoring_times == nullptr ? unique_event_times : censoring_times;
     this->num_censoring_times = this->censoring_times->size();
     this->node_sizes.push_back(subset_indices.size());
-    this->num_jumps.resize(num_unique_event_times * num_states * num_states);
+    this->num_jumps.resize(num_unique_event_times * dim);
     this->num_at_risk.resize(num_unique_event_times * num_states);
+    this->num_censored.resize(num_unique_event_times * num_states);
+
+    // the lookup from event times to the censoring grid is fixed for the whole lifetime of the tree
+    this->event_censoring_time_ids.resize(num_unique_event_times, num_censoring_times);
+    size_t censoring_time_id = 0;
+    for (size_t t = 0; t < num_unique_event_times; ++t) {
+        // both grids are sorted, so one forward pass replaces a separate binary search for every event time
+        while (censoring_time_id + 1 < num_censoring_times && (*this->censoring_times)[censoring_time_id + 1] <= (*unique_event_times)[t]) {
+            ++censoring_time_id;
+        }
+        if (censoring_time_id < num_censoring_times && (*this->censoring_times)[censoring_time_id] <= (*unique_event_times)[t]) {
+            this->event_censoring_time_ids[t] = censoring_time_id;
+        }
+    }
 }
 
 // functions for growing multi-state trees
 //--------------------------------------------------------------------------------------
 
-void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& jumps, vector<size_t>& at_risk) {
-    // fetch states and other relevant data quantities
+void MultistateTree::reserveTreeMemory(size_t num_obs) {
+    // use the minimal node size to estimate the largest plausible tree and cap unusually large reservations
+    size_t max_terminal_nodes = min_node_size == 0 ? max(static_cast<size_t>(1), num_obs) :
+      max(static_cast<size_t>(1), num_obs / min_node_size);
+    size_t max_num_nodes = min(2 * max_terminal_nodes - 1, static_cast<size_t>(1024));
+
+    node_obs.reserve(max_num_nodes);
+    if (honest) {
+        holdout_node_obs.reserve(max_num_nodes);
+    }
+    node_sizes.reserve(max_num_nodes);
+    left_daughters.reserve(max_num_nodes);
+    feature_IDs.reserve(max_num_nodes);
+    thresholds.reserve(max_num_nodes);
+    depths.reserve(max_num_nodes);
+    na.reserve(max_num_nodes);
+    init_dist.reserve(max_num_nodes);
+    if (save_predictions) {
+        KM_censoring.reserve(max_num_nodes);
+        KM_censoring_full.reserve(max_num_nodes);
+    }
+}
+
+void MultistateTree::prepareMultistateData() {
+    if (multistate_data_prepared) {
+        return;
+    }
+
+    reserveTreeMemory(node_obs[0].size());
+
+    // save feature indices once since the same vector is sampled in every non-terminal node
+    feature_indices.resize(data->getNumberOfFeatures());
+    for (size_t feature = 0; feature < feature_indices.size(); ++feature) {
+        feature_indices[feature] = feature;
+    }
+
+    // turn the splitting-rule string into a small integer once instead of comparing strings for every split
+    if (splitrule == "gehan") {
+        splitrule_id = MultistateSplitRule::Gehan;
+    } else if (splitrule == "taroneware") {
+        splitrule_id = MultistateSplitRule::TaroneWare;
+    } else if (splitrule == "conserve") {
+        splitrule_id = MultistateSplitRule::Conserve;
+    } else if (splitrule == "approxlogrank") {
+        splitrule_id = MultistateSplitRule::ApproxLogRank;
+    } else {
+        splitrule_id = MultistateSplitRule::LogRank;
+    }
+
+    // save both the state indices and the flattened matrix index for each transition which can occur
+    // this is to avoid computing the exact entry every time a jump is considered
+    const vector<pair<uint8_t, uint8_t>> data_valid_jumps = data->getValidJumps();
+    valid_jumps.reserve(data_valid_jumps.size());
+    for (const auto& jump : data_valid_jumps) {
+        size_t from_state = static_cast<size_t>(jump.first - 1);
+        size_t to_state = static_cast<size_t>(jump.second - 1);
+        valid_jumps.push_back({from_state, to_state, from_state * num_states + to_state});
+    }
+
+    /*
+      convert every padded response path to a compact range of flattened transition indices. During splitting an
+      observation can consequently be added with one initial-state update, one censoring update and one short loop.
+    */
     const vector<uint8_t>& states = data->getStates();
     const vector<size_t>& last_observed_times = data->getLastObservedTimes();
     const vector<uint8_t>& censoring_states = data->getCensoringStates();
+    size_t max_response_length = data->getMaxResponseLength();
+    size_t num_obs = data->getNumberOfObs();
+    size_t risk_array_size = num_unique_event_times * num_states;
 
-    uint8_t max_response_length = data->getMaxResponseLength();
-    uint8_t num_states = data->getNumberOfStates();
-    uint8_t dim = num_states * num_states;
-    
-    // initialise vectors of number of jumps and at risk
-    jumps.assign(num_unique_event_times * dim, 0);
-    at_risk.assign(num_unique_event_times * num_states, 0);
-    censoring_contribution.assign(num_unique_event_times * num_states, 0);
-    vector<size_t> num_jumps_acc(num_unique_event_times * dim, 0);
+    initial_state_ids.resize(num_obs);
+    transition_offsets.resize(num_obs + 1);
+    transition_ids.clear();
+    transition_ids.reserve(num_obs);
+    censoring_risk_ids.assign(num_obs, risk_array_size);
 
-    // compute the initial rates, the censoring contribution C and the number of jumps across all event times and observations
-    for (size_t i : indices) {
-        // initial rates I0
-        ++at_risk[states[i * max_response_length] - 1];
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t response_index = i * max_response_length;
+        initial_state_ids[i] = states[response_index] - 1;
+        transition_offsets[i] = transition_ids.size();
 
-        // compute the censoring contribution C
-        uint8_t censoring_state = censoring_states[i];
-        if (censoring_state != 0) {     // censoring actually occurs
-            size_t censoring_time_id = (*response_event_time_ids)[last_observed_times[i]];
-            for (size_t k = censoring_time_id; k < num_unique_event_times; ++k) {
-                ++censoring_contribution[k * num_states + censoring_state - 1];
+        for (size_t j = 1; j < max_response_length && states[response_index + j] != 0; ++j) {
+            size_t current_state = static_cast<size_t>(states[response_index + j] - 1);
+            size_t previous_state = static_cast<size_t>(states[response_index + j - 1] - 1);
+            if (current_state != previous_state) {
+                size_t event_time_id = (*response_event_time_ids)[response_index + j];
+                transition_ids.push_back(event_time_id * dim + previous_state * num_states + current_state);
             }
         }
-        // compute number of jumps (we assume that at least one event of some kind occurs so that max_response_length > 1)
-        size_t j = 1;
-        size_t index = i * max_response_length + 1;
-        // a state is 0 if and only if it is not valid e.g. a dead entry in the flattened array of observations
-        while (j < max_response_length && states[index] != 0) {
-            size_t id = (*response_event_time_ids)[index];
-            int current_state_index = states[index] - 1;     // states are always indexed by 1, 2, ... with 0 reserved for 'dead' entries in the flattened array
-            int prev_state_index = states[index - 1] - 1;
-            if (current_state_index != prev_state_index) {
-                ++jumps[id * dim + prev_state_index * num_states + current_state_index];
-            } 
-            ++j;
-            ++index;
+
+        // compute the index of the censoring time for this observation and save it
+        uint8_t censoring_state = censoring_states[i];
+        if (censoring_state != 0) {
+            size_t censoring_time_id = (*response_event_time_ids)[last_observed_times[i]];
+            if (censoring_time_id < num_unique_event_times) {
+                censoring_risk_ids[i] = censoring_time_id * num_states + censoring_state - 1;
+            }
         }
     }
-    // compute the cumulative number of jumps
-    cumulativeMatrixSums(num_jumps_acc, jumps, num_states);
+    transition_offsets[num_obs] = transition_ids.size();
+    transition_ids.shrink_to_fit();
+    multistate_data_prepared = true;
+}
 
-    // now compute number at risk via the key decomposition
-    for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above
-        vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc, j * dim, (j + 1) * dim - 1, transpose(num_jumps_acc, j * dim, (j + 1) * dim - 1)), static_cast<size_t>(num_states));
-        for (size_t k = 0; k < num_states; ++k) {
-            // key decomposition
-            at_risk[j * num_states + k] = at_risk[k] - censoring_contribution[j * num_states + k] + jump_contributions[k];
+void MultistateTree::addObservationToQuantities(size_t observation, vector<size_t>& jumps, vector<size_t>& at_risk,
+                                                vector<size_t>& censored) {
+    // the first row of at_risk temporarily holds the initial state counts and remains the time-zero row
+    ++at_risk[initial_state_ids[observation]];
+
+    // censoring actually occurs
+    size_t censoring_id = censoring_risk_ids[observation];
+    if (censoring_id < censored.size()) {
+        ++censored[censoring_id];
+    }
+
+    // use the compact representation with offsets and IDs to update number of jumps
+    for (size_t j = transition_offsets[observation]; j < transition_offsets[observation + 1]; ++j) {
+        ++jumps[transition_ids[j]];
+    }
+}
+
+void MultistateTree::materialiseAtRisk(const vector<size_t>& jumps, const vector<size_t>& censored, vector<size_t>& at_risk) {
+    // start with the state counts at time zero and update these counts as time advances
+    current_num_at_risk.assign(at_risk.begin(), at_risk.begin() + num_states);
+    for (size_t t = 1; t < num_unique_event_times; ++t) {
+        size_t previous_jump_index = (t - 1) * dim;
+
+        // a jump at the preceding time removes one individual from its old state and adds it to its new state
+        for (const ValidJumpInfo& jump : valid_jumps) {
+            size_t count = jumps[previous_jump_index + jump.matrix_index];
+            if (count != 0) {
+                current_num_at_risk[jump.from_state] -= count;
+                current_num_at_risk[jump.to_state] += count;
+            }
+        }
+
+        // censoring at t removes an individual before the at-risk counts at t are stored
+        size_t risk_index = t * num_states;
+        for (size_t state = 0; state < num_states; ++state) {
+            current_num_at_risk[state] -= censored[risk_index + state];
+            at_risk[risk_index + state] = current_num_at_risk[state];
         }
     }
 }
 
-// version of feb10 (makes pre-sweep and checks for invalid splits before computing quantities)
-// for computing multi-state quantities (number at risk and number of jumps) for all splits in a node (for splits on continuous features)
-void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size_t feature, const vector<double>& split_points, vector<size_t>& num_obs_right,
-                                         vector<size_t>& num_at_risk_right, vector<size_t>& num_jumps_right, size_t nsplits_final) {
-    // fetch states and other relevant data quantities
-    const vector<uint8_t>& states = data->getStates();
-    const vector<size_t>& last_observed_times = data->getLastObservedTimes();
-    const vector<uint8_t>& censoring_states = data->getCensoringStates();
-    uint8_t max_response_length = data->getMaxResponseLength();
-    uint8_t num_states = data->getNumberOfStates();
-    uint8_t dim = num_states * num_states;
-    const vector<size_t>& current_node_obs = node_obs[node_index];
+void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& jumps, vector<size_t>& at_risk) {
+    jumps.assign(num_unique_event_times * dim, 0);
+    at_risk.assign(num_unique_event_times * num_states, 0);
+    num_censored.assign(num_unique_event_times * num_states, 0);
 
-    // all temporary quantities used for the key decomposition (for the right node)
-    vector<size_t> censoring_contribution_right(nsplits_final * num_unique_event_times * num_states, 0);
-    vector<size_t> num_jumps_acc_right(nsplits_final * num_unique_event_times * dim, 0);
-
-    // do initial sweep to check for invalid splits
-    for (size_t i : current_node_obs) {
-        double feature_val = data->get_x(i, feature);
-        for (size_t s = 0; s < nsplits_final; ++s) {
-            if (feature_val > split_points[s]) {
-                // add one to the number of observations in right node for split s
-                ++num_obs_right[s];
-            } else {
-                break;
-            }
-        }
+    for (size_t i : indices) {
+        addObservationToQuantities(i, jumps, at_risk, num_censored);
     }
+    materialiseAtRisk(jumps, num_censored, at_risk);
+}
 
-    // compute initial rates, the censoring contribution C and the number of jumps across all event times and
-    // observations in the right node
-    for (size_t i : current_node_obs) {
-        double feature_val = data->get_x(i, feature);
-        for (size_t s = 0; s < nsplits_final; ++s) {
-            // if one of the daughter nodes are too small, skip the computation for that split
-            size_t num_obs_left = current_node_obs.size() - num_obs_right[s];
-            if (num_obs_right[s] < min_node_size || num_obs_left < min_node_size) {
-                continue;
-            }
-            if (feature_val > split_points[s]) {
-                // update I0
-                ++num_at_risk_right[s * num_unique_event_times * num_states + states[i * max_response_length] - 1];
-
-                // censoring contribution
-                uint8_t censoring_state = censoring_states[i];
-                if (censoring_state != 0) {     // censoring actually occurs
-                    size_t censoring_time_id = (*response_event_time_ids)[last_observed_times[i]];
-                    for (size_t k = censoring_time_id; k < num_unique_event_times; ++k) {
-                        ++censoring_contribution_right[s * num_unique_event_times * num_states + k * num_states + censoring_state - 1];
-                    }
-                }
-                // compute the number of jumps
-                size_t j = 1;
-                size_t index = i * max_response_length + 1;
-                while(j < max_response_length && states[index] != 0) {
-                    size_t id = (*response_event_time_ids)[index];
-                    int current_state_index = states[index] - 1;
-                    int prev_state_index = states[index - 1] - 1;
-                    if (current_state_index != prev_state_index) {
-                        ++num_jumps_right[s * num_unique_event_times * dim + id * dim + prev_state_index * num_states + current_state_index];
-                    }
-                    ++j;
-                    ++index;
-                }
-
-            } else {
-                break;  // since the split points are sorted
-            }
-        }
+void MultistateTree::prepareJumpEventTimeIDs() {
+    if (jump_event_time_ids.size() != valid_jumps.size()) {
+        jump_event_time_ids.resize(valid_jumps.size());
     }
-    
-    // compute the cumulative number of jumps across all splits
-    cumulativeMatrixSums(num_jumps_acc_right, num_jumps_right, num_states, nsplits_final);
-
-    // now compute number at risk for each possible split via the key decomposition
-    for (size_t s = 0; s < nsplits_final; ++s) {
-        size_t begin = s * num_unique_event_times * dim + dim;
-        size_t end = s * num_unique_event_times * dim + 2 * dim - 1;
-        for (size_t j = 1; j < num_unique_event_times; ++j) {   // j = 1 since we already computed I0 above for each split
-            vector<int> jump_contributions = columnSums(subtractMatrices(num_jumps_acc_right, begin, end, transpose(num_jumps_acc_right, begin, end)), static_cast<size_t>(num_states));
-            begin += dim;
-            end += dim;
-            for (size_t k = 0; k < num_states; ++k) {
-                // key decomposition
-                size_t split_stride = s * num_unique_event_times * num_states;
-                // for debugging
-                int addition = (int) num_at_risk_right[split_stride + k] - (int) censoring_contribution_right[split_stride + j * num_states + k] + (int) jump_contributions[k];
-                if (addition < 0) {
-                    cout << "Warning: Key decomposition negative, causing underflow in num_at_risk_right" << endl;
-                    cout << "Addition = " << addition << endl;
-                    cout << "num_at_risk_0 = " << num_at_risk_right[split_stride + k] << endl;
-                    cout << "Censoring contribution = " << censoring_contribution_right[split_stride + j * num_states + k] << endl;
-                    cout << "Jump contribution = " << jump_contributions[k] << endl;
-                }
-                num_at_risk_right[split_stride + j * num_states + k] = num_at_risk_right[split_stride + k] - censoring_contribution_right[split_stride + j * num_states + k] + jump_contributions[k];
+    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
+        const ValidJumpInfo& jump = valid_jumps[jump_id];
+        vector<size_t>& event_ids = jump_event_time_ids[jump_id];
+        event_ids.clear();   // retain capacity from the preceding node instead of reallocating the same sparse list
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            if (num_jumps[t * dim + jump.matrix_index] != 0) {
+                event_ids.push_back(t);
             }
         }
     }
@@ -188,7 +218,6 @@ void MultistateTree::computeMultistateQuantitiesDaughter(size_t node_index, size
 
 void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
-    size_t num_states = data->getNumberOfStates();
 
     // samples split points
     vector<double> split_points;
@@ -199,58 +228,65 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
         return;
     }
 
-    // initialise node info for the right daughter as flattened 2D arrays
-    vector<size_t> num_obs_right(nsplits_final);
-    vector<size_t> num_jumps_right(nsplits_final * num_unique_event_times * num_states * num_states);
-    vector<size_t> num_at_risk_right(nsplits_final * num_unique_event_times * num_states);
+    /*
+      place each observation in the largest split where it belongs to the right daughter. Sweeping the buckets backwards
+      then adds every response path exactly once, while the old implementation added it separately to every smaller split
+    */
+    vector<vector<size_t>> split_buckets(nsplits_final);
+    for (size_t i : current_node_obs) {
+        double feature_value = data->get_x(i, feature);
+        /*
+          missing feature values are sent right, which agrees with prediction where NaN <= threshold is false.
+          Otherwise, determine the index of the first split point larger than or equal to the feature value.
+          This index is also the number right nodes, the observation belongs to and this number minus 1 is
+          the index of the largest threshold where the observation still goes to the right
+        */
+        size_t num_splits_right = std::isnan(feature_value) ? nsplits_final : static_cast<size_t>(lower_bound(split_points.begin(), split_points.end(), feature_value) - split_points.begin());
+        if (num_splits_right != 0) {
+            split_buckets[num_splits_right - 1].push_back(i);
+        }
+    }
 
-    computeMultistateQuantitiesDaughter(node_index, feature, split_points, num_obs_right, num_at_risk_right, num_jumps_right, nsplits_final);
+    num_jumps_daughter.assign(num_unique_event_times * dim, 0);
+    num_at_risk_daughter.assign(num_unique_event_times * num_states, 0);
+    // the parent's censoring counts have already been materialised and can now be reused by the daughter sweep
+    num_censored.assign(num_unique_event_times * num_states, 0);
+    vector<double> split_values(nsplits_final, -1);
+    size_t current_num_obs_right = 0;
 
-    // now determine the best split
-    for (size_t i = 0; i < nsplits_final; ++i) {
-        // if a node is too small, skip the split
-        size_t num_obs_left = current_node_obs.size() - num_obs_right[i];
-        if (num_obs_left < min_node_size || num_obs_right[i] < min_node_size) {
+    for (size_t s = nsplits_final; s-- > 0;) {
+        for (size_t observation : split_buckets[s]) {
+            addObservationToQuantities(observation, num_jumps_daughter, num_at_risk_daughter, num_censored);
+            ++current_num_obs_right;
+        }
+        size_t num_obs_left = current_node_obs.size() - current_num_obs_right;
+        if (current_num_obs_right < min_node_size || num_obs_left < min_node_size) {
             continue;
         }
 
-        double split_val;
+        materialiseAtRisk(num_jumps_daughter, num_censored, num_at_risk_daughter);
+        split_values[s] = computeSplitValue(num_jumps_daughter, num_at_risk_daughter);
+    }
 
-        // choose splitrule
-        if (splitrule == "logrank") {
-            split_val = logRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
-        }
-        if (splitrule == "gehan") {
-            split_val = Gehan(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
-        }
-        if (splitrule == "taroneware") {
-            split_val = TaroneWare(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
-        }
-        if (splitrule == "conserve") {
-            split_val = conserve(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
-        }
-        if (splitrule == "approxlogrank") {
-            split_val = approxLogRank(num_jumps, num_at_risk, num_jumps_right, num_at_risk_right, i);
-        }
-
-        if (split_val > best_split_val) {
-            best_split_val = split_val;
+    // inspect split values in their original ascending order to retain deterministic tie handling
+    for (size_t i = 0; i < nsplits_final; ++i) {
+        if (split_values[i] > best_split_val) {
+            best_split_val = split_values[i];
             best_feature = feature;
-            // use average of split points unless it is the final split value
-            if (i == nsplits_final - 1) {
-                best_threshold = {split_points[i]};
-            } else {
-                best_threshold = {(split_points[i] + split_points[i + 1])/2.0};
-            }
+            // save the threshold which was actually evaluated, also when only some feature values were sampled
+            best_threshold = {split_points[i]};
         }
     }
 }
 
 void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
-                           vector<double>& best_threshold, vector<size_t>& best_left_indices, vector<size_t>& best_right_indices) {
-    const vector<double>& feature_values = uniqueValues(data->getValues(node_obs[node_index], feature));
+                           vector<double>& best_threshold) {
+    const vector<size_t>& current_node_obs = node_obs[node_index];
+    vector<double> feature_values = data->getValues(current_node_obs, feature);
+    feature_values.erase(remove_if(feature_values.begin(), feature_values.end(), [](double value) { return std::isnan(value); }), feature_values.end());
+    feature_values = uniqueValues(std::move(feature_values));
     size_t num_feature_values = feature_values.size();
-    size_t num_states = data->getNumberOfStates();
+    size_t num_partition_values = min(num_feature_values, static_cast<size_t>(63));
 
     unordered_set<uint64_t> partition_masks;
     // generate partitions (breaks if no possible splits)
@@ -258,57 +294,56 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
         return;
     }
 
+    // group observations once, so a partition only visits categories included by its bitmask
+    vector<vector<size_t>> category_observations(num_feature_values);
+    for (size_t i : current_node_obs) {
+        double feature_value = data->get_x(i, feature);
+        if (std::isnan(feature_value)) {
+            continue;   // as during prediction, missing categorical values belong to the right daughter
+        }
+        size_t category = static_cast<size_t>(lower_bound(feature_values.begin(), feature_values.end(), feature_value) - feature_values.begin());
+        if (category < num_feature_values) {
+            category_observations[category].push_back(i);
+        }
+    }
+
     // consider each partition (bitmask)
     for (const auto& mask : partition_masks) {
-        unordered_set<double> left_values;
-        for (size_t i = 0; i < num_feature_values; ++i) {
-            if ((mask >> i) & 1) {
-                left_values.insert(feature_values[i]);
+        size_t num_obs_left = 0;
+        // partition masks have 63 usable bits; any additional categories always remain in the right daughter
+        for (size_t category = 0; category < num_partition_values; ++category) {
+            if ((mask >> category) & 1) {
+                num_obs_left += category_observations[category].size();
             }
         }
-
-        vector<size_t> current_left_indices;
-        vector<size_t> current_right_indices;
-        for (size_t obs_id : node_obs[node_index]) {
-            if (left_values.count(data->get_x(obs_id, feature))) {
-                current_left_indices.push_back(obs_id);
-            } else {
-                current_right_indices.push_back(obs_id);
-            }
-        }
-
-        if (current_left_indices.size() < min_node_size || current_right_indices.size() < min_node_size) {
+        size_t num_obs_right = current_node_obs.size() - num_obs_left;
+        if (num_obs_left < min_node_size || num_obs_right < min_node_size) {
             continue;
         }
 
-        // here we have to compute the multi-state info in one of the daughters from scratch
-        vector<size_t> num_jumps_left(num_unique_event_times * num_states * num_states);
-        vector<size_t> num_at_risk_left(num_unique_event_times * num_states);
-        computeMultistateQuantities(current_left_indices, num_jumps_left, num_at_risk_left);
-        double split_val;
-        // choose splitrule
-        if (splitrule == "logrank") {
-            split_val = logRank(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
+        num_jumps_daughter.assign(num_unique_event_times * dim, 0);
+        num_at_risk_daughter.assign(num_unique_event_times * num_states, 0);
+        // reuse the same censoring workspace which was used for the parent and earlier partitions
+        num_censored.assign(num_unique_event_times * num_states, 0);
+        for (size_t category = 0; category < num_partition_values; ++category) {
+            if ((mask >> category) & 1) {
+                for (size_t i : category_observations[category]) {
+                    addObservationToQuantities(i, num_jumps_daughter, num_at_risk_daughter, num_censored);
+                }
+            }
         }
-        if (splitrule == "gehan") {
-            split_val = Gehan(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
-        }
-        if (splitrule == "taroneware") {
-            split_val = TaroneWare(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
-        }
-        if (splitrule == "conserve") {
-            split_val = conserve(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
-        }
-        if (splitrule == "approxlogrank") {
-            split_val = approxLogRank(num_jumps, num_at_risk, num_jumps_left, num_at_risk_left);
-        }
+        materialiseAtRisk(num_jumps_daughter, num_censored, num_at_risk_daughter);
+        double split_val = computeSplitValue(num_jumps_daughter, num_at_risk_daughter);
 
         if (split_val > best_split_val) {
             best_split_val = split_val;
-            best_left_indices = std::move(current_left_indices);
-            best_right_indices = std::move(current_right_indices);
             best_feature = feature;
-            best_threshold.assign(left_values.begin(), left_values.end());
+            best_threshold.clear();
+            for (size_t category = 0; category < num_partition_values; ++category) {
+                if ((mask >> category) & 1) {
+                    best_threshold.push_back(feature_values[category]);
+                }
+            }
         }
     }
 }
@@ -335,32 +370,31 @@ void MultistateTree::makeLeaf(size_t node_index) {
             prediction_node_IDs[i] = node_index;
         }
     }
+
+    // response indices are no longer needed once all leaf quantities and training leaf IDs have been saved
+    vector<size_t>().swap(node_obs[node_index]);
+    if (honest) {
+        vector<size_t>().swap(holdout_node_obs[node_index]);
+    }
 }
 
 // function to create a split for a multi-state tree. returns true if leaf, otherwise false
 bool MultistateTree::createSplit(size_t node_index) {
+    // initialise response summaries and quantities which are reused throughout the tree only once
+    prepareMultistateData();
+
     const vector<size_t>& current_node_obs = node_obs[node_index];
 
     // if no split is possible, make the node a leaf
     if (current_node_obs.size() < 2 * min_node_size) {
-        if (!honest) {
-            computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);               // for dishonest trees, use the growing indices
-        } else {
-            computeMultistateQuantities(holdout_node_obs[node_index], num_jumps, num_at_risk);   // for honest trees, use the holdout set for computing the CHF
-        }
-
-        // for debugging purposes
-        
-        size_t total_number_at_risk = 0;
-        for (size_t j = 0; j < data->getNumberOfStates(); ++j) {
-            total_number_at_risk += num_at_risk[j];
-        }
-
+        const vector<size_t>& estimation_obs = honest ? holdout_node_obs[node_index] : current_node_obs;
+        computeMultistateQuantities(estimation_obs, num_jumps, num_at_risk);
         makeLeaf(node_index);
         return true;
     }
 
     computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);   // update parent multi-state info
+    prepareJumpEventTimeIDs();                                               // empty event times cannot affect most split rules
 
     double best_split_val = -1.0;
     size_t best_feature = 0;
@@ -372,79 +406,76 @@ bool MultistateTree::createSplit(size_t node_index) {
     vector<size_t> holdout_left_indices;
     vector<size_t> holdout_right_indices;
 
-    // sample mtry features
-    size_t num_features = data->getNumberOfFeatures();
-    vector<size_t> feature_indices(num_features);
-    for (size_t i = 0; i < num_features; ++i) {
-        feature_indices[i] = i;
-    }
+    // sample mtry features from the vector prepared once at the root
     vector<size_t> sampled_features = sampleIndices(feature_indices, mtry, false, random_number_generator);
+    const vector<bool>& categorical = data->getCategorical();
 
     // now consider each of the sampled features
     for (size_t i : sampled_features) {
-        if (data->getCategorical()[i]) {
-            // finds the best split and constructs the indices of the best left and right node
-            bestSplitCategorical(node_index, i, best_split_val, best_feature, best_threshold, best_left_indices, best_right_indices);
+        if (categorical[i]) {
+            bestSplitCategorical(node_index, i, best_split_val, best_feature, best_threshold);
         }
         else {
-            // does not return the best indices, so this has to be done later
             bestSplitContinuous(node_index, i, best_split_val, best_feature, best_threshold);
         }
     }
     // if no best split is found, make the node a leaf
     if (best_split_val < 0) {
         if (honest) {
-            computeMultistateQuantities(holdout_node_obs[node_index], num_jumps, num_at_risk);   // for honest trees, use the holdout set for computing the CHF
+            computeMultistateQuantities(holdout_node_obs[node_index], num_jumps, num_at_risk);
         }
         // otherwise, use parent survival info already computed earlier
         makeLeaf(node_index);
         return true;
     }
 
-    // for a categorical feature, the best indices are already saved, but if the feature is 
-    // continuous, they should be recomputed from scratch (and only once)
-    if (!(data->getCategorical()[best_feature])) {
-        best_left_indices.clear();
-        best_right_indices.clear();
-        for (size_t i : current_node_obs) {
-            if (data->get_x(i, best_feature) <= best_threshold[0]) {
-                best_left_indices.push_back(i);
-            } else {
-                best_right_indices.push_back(i);
-            }
-        }
-        // update the holdout index sets if the tree is honest
-        if (honest) {
-            const vector<size_t>& current_holdout_node_obs = holdout_node_obs[node_index];
-            for (size_t i : current_holdout_node_obs) {
-                if (data->get_x(i, best_feature) <= best_threshold[0]) {
-                    holdout_left_indices.push_back(i);
-                } else {
-                    holdout_right_indices.push_back(i);
-                }
-            }
+    // construct both daughter index sets only once, after all features and split points have been compared
+    bool categorical_split = categorical[best_feature];
+    best_left_indices.reserve(current_node_obs.size());
+    best_right_indices.reserve(current_node_obs.size());
+    for (size_t i : current_node_obs) {
+        double feature_value = data->get_x(i, best_feature);
+        bool goes_left = categorical_split ? find(best_threshold.begin(), best_threshold.end(), feature_value) != best_threshold.end() : feature_value <= best_threshold[0];
+        if (goes_left) {
+            best_left_indices.push_back(i);
+        } else {
+            best_right_indices.push_back(i);
         }
     }
 
-    // the best holdout index sets also need to be constructed if the split is categorical
-    if (honest && data->getCategorical()[best_feature]) {
+    // update the holdout index sets in exactly the same way if the tree is honest
+    if (honest) {
         const vector<size_t>& current_holdout_node_obs = holdout_node_obs[node_index];
+        holdout_left_indices.reserve(current_holdout_node_obs.size());
+        holdout_right_indices.reserve(current_holdout_node_obs.size());
         for (size_t i : current_holdout_node_obs) {
-            if (find(best_threshold.begin(), best_threshold.end(), data->get_x(i, best_feature)) != best_threshold.end()) {
+            double feature_value = data->get_x(i, best_feature);
+            bool goes_left = categorical_split ? find(best_threshold.begin(), best_threshold.end(), feature_value) != best_threshold.end() : feature_value <= best_threshold[0];
+            if (goes_left) {
                 holdout_left_indices.push_back(i);
             } else {
                 holdout_right_indices.push_back(i);
             }
         }
     }
+
+    /*
+      an honest leaf must contain estimation observations. If the selected split empties one holdout daughter, keep the
+      current node as a leaf instead of borrowing growing observations and silently weakening honesty.
+    */
+    if (honest && (holdout_left_indices.empty() || holdout_right_indices.empty())) {
+        computeMultistateQuantities(holdout_node_obs[node_index], num_jumps, num_at_risk);
+        makeLeaf(node_index);
+        return true;
+    }
     
     // a best split was found, update the tree
-    node_obs.push_back(best_left_indices);          // construct left daughter
-    node_obs.push_back(best_right_indices);         // construct right daughter
     node_sizes.push_back(best_left_indices.size());
     node_sizes.push_back(best_right_indices.size());
+    node_obs.push_back(std::move(best_left_indices));          // construct left daughter
+    node_obs.push_back(std::move(best_right_indices));         // construct right daughter
     feature_IDs.push_back(best_feature);
-    thresholds.push_back(best_threshold);
+    thresholds.push_back(std::move(best_threshold));
     na.push_back(vector<double>());
     init_dist.push_back(vector<double>());
     if (save_predictions) {
@@ -454,57 +485,47 @@ bool MultistateTree::createSplit(size_t node_index) {
 
     // for honest trees, update the holdout indices
     if (honest) {
-        holdout_node_obs.push_back(holdout_left_indices);
-        holdout_node_obs.push_back(holdout_right_indices);
+        holdout_node_obs.push_back(std::move(holdout_left_indices));
+        holdout_node_obs.push_back(std::move(holdout_right_indices));
     }
 
+    // the parent indices are no longer needed after its two daughters have been constructed
+    vector<size_t>().swap(node_obs[node_index]);
+    if (honest) {
+        vector<size_t>().swap(holdout_node_obs[node_index]);
+    }
     return false;
 }
 
 // computes the initial distribution in a node
 void MultistateTree::computeInitialDist(size_t node_index) {
-    uint8_t num_states = data->getNumberOfStates();
     vector<double> init_dist(num_states, 0);
-    double num_obs;
-    if (honest) {
-        num_obs = holdout_node_obs[node_index].size();
-    } else {
-        num_obs = node_obs[node_index].size();
-    }
-    for (size_t j = 0; j < num_states; ++j) {
-        init_dist[j] = (double) num_at_risk[j] / num_obs;
+    size_t num_obs = honest ? holdout_node_obs[node_index].size() : node_obs[node_index].size();
+    double inverse_num_obs = 1.0 / static_cast<double>(num_obs);
+    for (size_t state = 0; state < num_states; ++state) {
+        init_dist[state] = static_cast<double>(num_at_risk[state]) * inverse_num_obs;
     }
     this->init_dist.push_back(std::move(init_dist));
 }
 
 // computes the matrix of Nelson--Aalen estimators in node node_index
 void MultistateTree::computeNA(size_t node_index) {
-    uint8_t num_states = data->getNumberOfStates();
-    uint8_t dim = num_states * num_states;
     vector<double> na(num_unique_event_times * dim, 0);
 
-    // for each unique event time i, loop over all entries (j, k) in the matrix
-    // we start at i = 1 since 0 is always the first unique event time and no jump takes place at time zero
-    for (size_t i = 1; i < num_unique_event_times; ++i) {
-        for (size_t j = 0; j < num_states; ++j) {
-            size_t index = i * dim + j * num_states;
-            double diag = 0;
-            for (size_t k = 0; k < num_states; ++k) {
-                if (j != k) {
-                    na[index + k] = na[index - dim + k];
-                    // for debugging only
-                    if (num_at_risk[i * num_states + j] == 0 && num_jumps[index + k] > 0) {
-                        Rcout << "Warning in computeNA: num_at_risk[i * num_states + j] = 0, but num_jumps[index + k] = " << num_jumps[index + k] << endl; 
-                    }
+    // each cumulative matrix starts as the preceding matrix, after which only observed transitions have to be updated
+    for (size_t t = 1; t < num_unique_event_times; ++t) {
+        size_t matrix_index = t * dim;
+        copy(na.begin() + matrix_index - dim, na.begin() + matrix_index, na.begin() + matrix_index);
 
-                    if (num_at_risk[i * num_states + j] != 0) {
-                        na[index + k] += double(num_jumps[index + k]) / double(num_at_risk[i * num_states + j]);
-                    }
-                    diag -= na[index + k];
-                }
+        for (const ValidJumpInfo& jump : valid_jumps) {
+            size_t count = num_jumps[matrix_index + jump.matrix_index];
+            size_t at_risk = num_at_risk[t * num_states + jump.from_state];
+            if (count != 0 && at_risk != 0) {
+                double increment = static_cast<double>(count) / static_cast<double>(at_risk);
+                na[matrix_index + jump.matrix_index] += increment;
+                // the diagonal is minus the sum of the off-diagonal entries in its row
+                na[matrix_index + jump.from_state * num_states + jump.from_state] -= increment;
             }
-            // the diagonal is minus the sum of all other row entries
-            na[index + j] = diag;
         }
     }
     this->na.push_back(std::move(na));
@@ -516,22 +537,50 @@ void MultistateTree::computeCensoringKM(size_t node_index) {
 }
 
 void MultistateTree::computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index) {
-    // initialise and fetch data
-    size_t num_obs = data->getNumberOfObs();
-    vector<double> endpoint_times(num_obs, 0);
-    vector<double> uncensored_indicators(num_obs, 0);
+    vector<double> KM_full(num_censoring_times, 1);
+    vector<size_t> num_events(num_censoring_times, 0);
+    vector<size_t> num_censored_endpoints(num_censoring_times, 0);
     const vector<double>& times = data->getTimes();
     const vector<size_t>& last_observed_times = data->getLastObservedTimes();
     const vector<uint8_t>& censoring_states = data->getCensoringStates();
 
-    for (size_t i = 0; i < num_obs; ++i) {
-        size_t last_observed_time_id = last_observed_times[i];
-        endpoint_times[i] = times[last_observed_time_id];
-        uncensored_indicators[i] = censoring_states[i] == 0 ? 1 : 0;
+    // every selected observation belongs to one terminal leaf, so looking up endpoints here costs no more searches than
+    // precomputing them for the full data and avoids retaining another size_t for every observation while growing
+    for (size_t i : indices) {
+        double endpoint = times[last_observed_times[i]];
+        size_t endpoint_id = static_cast<size_t>(lower_bound(censoring_times->begin(), censoring_times->end(), endpoint) - censoring_times->begin());
+        // no censoring or event
+        if (endpoint_id >= num_censoring_times) {
+            continue;
+        }
+        // no censoring but an event has occured
+        if (censoring_states[i] == 0) {
+            ++num_events[endpoint_id];
+        } else {
+            // otherwise censoring
+            ++num_censored_endpoints[endpoint_id];
+        }
     }
 
-    vector<double> KM_full = computeCensoringKMFromEndpoints(endpoint_times, uncensored_indicators, *censoring_times, indices);
-    vector<double> KM_event = selectCensoringAtTimes(KM_full, *censoring_times, *unique_event_times, 1);
+    // endpoints at a time remain at risk at that time and are removed before the next censoring time
+    size_t current_num_at_risk = indices.size();
+    for (size_t t = 0; t < num_censoring_times; ++t) {
+        double previous_KM = t == 0 ? 1.0 : KM_full[t - 1];
+        double denominator = static_cast<double>(current_num_at_risk) - num_events[t];
+        if (denominator > 0) {
+            KM_full[t] = previous_KM * (1.0 - num_censored_endpoints[t] / denominator);
+        } else {
+            KM_full[t] = previous_KM;
+        }
+        current_num_at_risk -= num_events[t] + num_censored_endpoints[t];
+    }
+
+    vector<double> KM_event(num_unique_event_times, 1);
+    for (size_t t = 0; t < num_unique_event_times; ++t) {
+        if (event_censoring_time_ids[t] < num_censoring_times) {
+            KM_event[t] = KM_full[event_censoring_time_ids[t]];
+        }
+    }
     if (node_index < KM_censoring.size()) {
         KM_censoring_full[node_index] = std::move(KM_full);
         KM_censoring[node_index] = std::move(KM_event);
@@ -544,250 +593,183 @@ void MultistateTree::computeCensoringKMExternal(const vector<size_t>& indices, s
 // splitting rules for multi-state trees
 //--------------------------------------------------------------------------------------
 
-double MultistateTree::logRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
-    // fetch relevant data quantities
-    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
-    uint8_t num_states = data->getNumberOfStates();
-    uint8_t dim = num_states * num_states;
+double MultistateTree::computeSplitValue(const vector<size_t>& num_jumps_daughter,
+                                         const vector<size_t>& num_at_risk_daughter) {
+    switch (splitrule_id) {
+        case MultistateSplitRule::LogRank:
+            return logRank(num_jumps_daughter, num_at_risk_daughter);
+        case MultistateSplitRule::Gehan:
+            return Gehan(num_jumps_daughter, num_at_risk_daughter);
+        case MultistateSplitRule::TaroneWare:
+            return TaroneWare(num_jumps_daughter, num_at_risk_daughter);
+        case MultistateSplitRule::Conserve:
+            return conserve(num_jumps_daughter, num_at_risk_daughter);
+        case MultistateSplitRule::ApproxLogRank:
+            return approxLogRank(num_jumps_daughter, num_at_risk_daughter);
+    }
+    return -1;
+}
 
+double MultistateTree::logRank(const vector<size_t>& num_jumps_daughter,
+                               const vector<size_t>& num_at_risk_daughter) {
     double LR = 0;
-    for (auto jump : valid_jumps) {
-        uint8_t j = jump.first - 1;
-        uint8_t k = jump.second - 1;
+    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
+        const ValidJumpInfo& jump = valid_jumps[jump_id];
         double sum_num = 0;
         double sum_den = 0;
-        size_t jump_index = split_id * num_unique_event_times * dim;
-        size_t at_risk_index = split_id * num_unique_event_times * num_states;
-        for (size_t i = 0; i < num_unique_event_times; ++i) {
-            const double d = (double) num_jumps[i * dim + j * num_states + k];
-            const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
-            const double Y = (double) num_at_risk[i * num_states + j];
-            const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
-            
-            // temporary for debugging
-            if (Y < Y1) {
-                Rcout << "Warning: Y = " << Y << " < Y1 = " << Y1 << endl; 
-            }
-            if (d > Y) {
-                Rcout << "Warning: Number of jumps d = " << d << ", but Y = " << Y << " at event time i = " << i << " and jump (" << static_cast<size_t>(j + 1) << ", " << static_cast<size_t>(k + 1) << ")" << endl;
-            }
-            if (d1 > Y1) {
-                Rcout << "Warning: Number of jumps d1 = " << d1 << ", but Y1 = " << Y1 << " at event time i = " << i << " and jump (" << static_cast<size_t>(j + 1) << ", " << static_cast<size_t>(k + 1) << ")" << endl;
-            }
 
-            // prevent division by zero in the log-rank test
+        // event times without this transition have zero contribution and were collected once for the parent node
+        for (size_t t : jump_event_time_ids[jump_id]) {
+            const double d = static_cast<double>(num_jumps[t * dim + jump.matrix_index]);
+            const double d1 = static_cast<double>(num_jumps_daughter[t * dim + jump.matrix_index]);
+            const double Y = static_cast<double>(num_at_risk[t * num_states + jump.from_state]);
+            const double Y1 = static_cast<double>(num_at_risk_daughter[t * num_states + jump.from_state]);
+
+            // state-specific risk sets can be replenished later, so an unusable time is skipped rather than ending the loop
             if (Y < 2 || Y1 < 1) {
-                break;  // since the event times are ordered, all subsequent numbers at risk will also be too small 
+                continue;
             }
-            if (d > 0) {
-                double at_risk_frac = Y1 / Y;
-                sum_num += d1 - d * at_risk_frac;
-                sum_den += d * at_risk_frac * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
-            }
+            double at_risk_frac = Y1 / Y;
+            sum_num += d1 - d * at_risk_frac;
+            sum_den += d * at_risk_frac * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
         }
 
-        // update the final log-rank statistic
         if (sum_den != 0) {
             LR += sum_num * sum_num / sum_den;
         }
     }
-    if (LR > 0) {
-        return LR;
-    } else {
-        return -1;  // if a non-sensical value has been computed, treat as invalid split
-    }
+    return LR > 0 ? LR : -1;
 }
 
-double MultistateTree::Gehan(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
-    // fetch relevant data quantities
-    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
-    uint8_t num_states = data->getNumberOfStates();
-    uint8_t dim = num_states * num_states;
-
+double MultistateTree::Gehan(const vector<size_t>& num_jumps_daughter,
+                             const vector<size_t>& num_at_risk_daughter) {
     double G = 0;
-    for (auto jump : valid_jumps) {
-        uint8_t j = jump.first - 1;
-        uint8_t k = jump.second - 1;
+    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
+        const ValidJumpInfo& jump = valid_jumps[jump_id];
         double sum_num = 0;
         double sum_den = 0;
-        size_t jump_index = split_id * num_unique_event_times * dim;
-        size_t at_risk_index = split_id * num_unique_event_times * num_states;
-        for (size_t i = 0; i < num_unique_event_times; ++i) {
-            const double d = (double) num_jumps[i * dim + j * num_states + k];
-            const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
-            const double Y = (double) num_at_risk[i * num_states + j];
-            const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
 
-            // prevent division by zero in the log-rank test
+        for (size_t t : jump_event_time_ids[jump_id]) {
+            const double d = static_cast<double>(num_jumps[t * dim + jump.matrix_index]);
+            const double d1 = static_cast<double>(num_jumps_daughter[t * dim + jump.matrix_index]);
+            const double Y = static_cast<double>(num_at_risk[t * num_states + jump.from_state]);
+            const double Y1 = static_cast<double>(num_at_risk_daughter[t * num_states + jump.from_state]);
             if (Y < 2 || Y1 < 1) {
-                break;  // since the event times are ordered, all subsequent numbers at risk will also be too small 
+                continue;
             }
-            if (d > 0) {
-                sum_num += Y * d1 - d * Y1;
-                sum_den += d * Y1 * (Y - Y1) * (Y - d) / (Y - 1.0);
-            }
+            sum_num += Y * d1 - d * Y1;
+            sum_den += d * Y1 * (Y - Y1) * (Y - d) / (Y - 1.0);
         }
 
-        // update the final log-rank statistic
         if (sum_den != 0) {
             G += sum_num * sum_num / sum_den;
         }
     }
-    if (G > 0) {
-        return G;
-    } else {
-        return -1;  // if a non-sensical value has been computed, treat as unvalid split
-    }
+    return G > 0 ? G : -1;
 }
 
-double MultistateTree::TaroneWare(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
-    // fetch relevant data quantities
-    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
-    uint8_t num_states = data->getNumberOfStates();
-    uint8_t dim = num_states * num_states;
-
+double MultistateTree::TaroneWare(const vector<size_t>& num_jumps_daughter,
+                                  const vector<size_t>& num_at_risk_daughter) {
     double TW = 0;
-    for (auto jump : valid_jumps) {
-        uint8_t j = jump.first - 1;
-        uint8_t k = jump.second - 1;
+    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
+        const ValidJumpInfo& jump = valid_jumps[jump_id];
         double sum_num = 0;
         double sum_den = 0;
-        size_t jump_index = split_id * num_unique_event_times * dim;
-        size_t at_risk_index = split_id * num_unique_event_times * num_states;
-        for (size_t i = 0; i < num_unique_event_times; ++i) {
-            const double d = (double) num_jumps[i * dim + j * num_states + k];
-            const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
-            const double Y = (double) num_at_risk[i * num_states + j];
-            const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
 
-            // prevent division by zero in the log-rank test
+        for (size_t t : jump_event_time_ids[jump_id]) {
+            const double d = static_cast<double>(num_jumps[t * dim + jump.matrix_index]);
+            const double d1 = static_cast<double>(num_jumps_daughter[t * dim + jump.matrix_index]);
+            const double Y = static_cast<double>(num_at_risk[t * num_states + jump.from_state]);
+            const double Y1 = static_cast<double>(num_at_risk_daughter[t * num_states + jump.from_state]);
             if (Y < 2 || Y1 < 1) {
-                break;  // since the event times are ordered, all subsequent numbers at risk will also be too small 
+                continue;
             }
-            if (d > 0) {
-                double at_risk_frac = Y1 / Y;
-                sum_num += sqrt(Y) * (d1 - d * at_risk_frac);
-                sum_den += d * Y1 * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
-            }
+            double at_risk_frac = Y1 / Y;
+            sum_num += sqrt(Y) * (d1 - d * at_risk_frac);
+            sum_den += d * Y1 * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
         }
 
-        // update the final log-rank statistic
         if (sum_den != 0) {
             TW += sum_num * sum_num / sum_den;
         }
     }
-    if (TW > 0) {
-        return TW;
-    } else {
-        return -1;  // if a non-sensical value has been computed, treat as unvalid split
-    }
+    return TW > 0 ? TW : -1;
 }
 
 // WARNING: This splitting rule may be completely nonsensical for multi-states (but it seems to work with the absolute value fix)
-double MultistateTree::conserve(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
-    // fetch relevant data quantities
-    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
-    uint8_t num_states = data->getNumberOfStates();
-    uint8_t dim = num_states * num_states;
-
-    //initialise vectors to hold the sums and the numbers at risk in the other daughter
-    vector<double> NAsum1(num_unique_event_times, 0);
-    vector<double> NAsum2(num_unique_event_times, 0);
-    vector<size_t> num_at_risk_daughter_2(num_unique_event_times, 0);
-
+double MultistateTree::conserve(const vector<size_t>& num_jumps_daughter,
+                                const vector<size_t>& num_at_risk_daughter) {
     double cons = 0;
-    for (auto jump : valid_jumps) {
-        // save indices
-        uint8_t j = jump.first - 1;
-        uint8_t k = jump.second - 1;
-        size_t jump_index = split_id * num_unique_event_times * dim;
-        size_t at_risk_index = split_id * num_unique_event_times * num_states;
-
-        // temporary quantities, including info on the other daughter computed residually
+    for (const ValidJumpInfo& jump : valid_jumps) {
+        double NAsum1 = 0;
+        double NAsum2 = 0;
         double sum1_jump = 0;
         double sum2_jump = 0;
-        size_t num_jumps_daughter_2 = num_jumps[j * num_states + k] - num_jumps_daughter[jump_index + j * num_states + k];
-        num_at_risk_daughter_2[0] = num_at_risk[j] - num_at_risk_daughter[at_risk_index + j];
 
-        // compute vectors containing the innermost sum in the approximation used by Ishwaran and Kogalur
-        if (num_jumps_daughter[jump_index + j * num_states + k] > 0) {
-            NAsum1[0] = (double) num_jumps_daughter[jump_index + j * num_states + k] / num_at_risk_daughter[at_risk_index + j];
-        } else {
-            NAsum1[0] = 0;  // ensures that NAsum1 gets reset for every jump
-        }
-        if (num_jumps_daughter_2 > 0) {
-            NAsum2[0] = (double) num_jumps_daughter_2 / num_at_risk_daughter_2[0];
-        } else {
-            NAsum2[0] = 0;  // ensures that NAsum2 gets reset for every jump
-        }
-
-        for (size_t i = 1; i < num_unique_event_times; ++i) {
-            NAsum1[i] = NAsum1[i - 1];
-            NAsum2[i] = NAsum2[i - 1];
-
-            // update quantities for the other daughter
-            size_t d1 = num_jumps_daughter[jump_index + i * dim + j * num_states + k];
-            num_jumps_daughter_2 = num_jumps[i * dim + j * num_states + k] - d1;
-            num_at_risk_daughter_2[i] = num_at_risk[i * num_states + j] - num_at_risk_daughter[at_risk_index + i * num_states + j];
-            Rcout << "num_at_risk_daughter_2[i] = " << num_at_risk_daughter_2[i] << endl;
-
-            if (d1 > 0) {
-                NAsum1[i] += (double) d1 / num_at_risk_daughter[at_risk_index + i * num_states + j];
+        /*
+          Keep the two cumulative Nelson--Aalen sums as scalars. The old implementation stored three full event-time
+          vectors for every candidate even though each value was consumed in order and never needed again.
+        */
+        for (size_t t = 0; t + 1 < num_unique_event_times; ++t) {
+            size_t matrix_index = t * dim + jump.matrix_index;
+            size_t d1 = num_jumps_daughter[matrix_index];
+            size_t d2 = num_jumps[matrix_index] - d1;
+            size_t at_risk1 = num_at_risk_daughter[t * num_states + jump.from_state];
+            size_t at_risk2 = num_at_risk[t * num_states + jump.from_state] - at_risk1;
+            if (d1 != 0 && at_risk1 != 0) {
+                NAsum1 += static_cast<double>(d1) / at_risk1;
             }
-            if (num_jumps_daughter_2 > 0) {
-                NAsum2[i] += (double) num_jumps_daughter_2 / num_at_risk_daughter_2[i];     // something is weird here...
+            if (d2 != 0 && at_risk2 != 0) {
+                NAsum2 += static_cast<double>(d2) / at_risk2;
             }
+
+            size_t at_risk1_next = num_at_risk_daughter[(t + 1) * num_states + jump.from_state];
+            size_t at_risk2_next = num_at_risk[(t + 1) * num_states + jump.from_state] - at_risk1_next;
+            // unlike in survival, a state can gain individuals, hence the absolute differences
+            size_t difference1 = at_risk1 > at_risk1_next ? at_risk1 - at_risk1_next : at_risk1_next - at_risk1;
+            size_t difference2 = at_risk2 > at_risk2_next ? at_risk2 - at_risk2_next : at_risk2_next - at_risk2;
+            sum1_jump += difference1 * at_risk1_next * NAsum1;
+            sum2_jump += difference2 * at_risk2_next * NAsum2;
         }
 
-        // now compute the outer sums
-        for (size_t i = 0; i < num_unique_event_times - 1; ++i) {
-            // in survival, you would not need the abs (maybe this adaptation to multi-states does not even make sense)
-            Rcout << "num_at_risk_daughter_2[i + 1] = " << num_at_risk_daughter_2[i + 1] << ", NAsum2[i] = " << NAsum1[i] << endl;
-            sum1_jump += abs(static_cast<int>(num_at_risk_daughter[at_risk_index + i * num_states + j]) - static_cast<int>(num_at_risk_daughter[at_risk_index + (i + 1) * num_states + j])) * num_at_risk_daughter[at_risk_index + (i + 1) * num_states + j] * NAsum1[i];
-            sum2_jump += abs(static_cast<int>(num_at_risk_daughter_2[i]) - static_cast<int>(num_at_risk_daughter_2[i + 1])) * num_at_risk_daughter_2[i + 1] * NAsum2[i];
+        size_t parent_initial = num_at_risk[jump.from_state];
+        if (parent_initial != 0) {
+            size_t daughter_initial = num_at_risk_daughter[jump.from_state];
+            size_t other_initial = parent_initial - daughter_initial;
+            cons += (daughter_initial * sum1_jump + other_initial * sum2_jump) / parent_initial;
         }
-        Rcout << "Added to cons: " << (num_at_risk_daughter[at_risk_index + j] * sum1_jump + num_at_risk_daughter_2[0] * sum2_jump) / num_at_risk[j] << endl;
-        cons += (num_at_risk_daughter[at_risk_index + j] * sum1_jump + num_at_risk_daughter_2[0] * sum2_jump) / num_at_risk[j];
-        Rcout << "cons = " << cons << endl;
     }
-    return 1/(1 + cons);
+    return 1.0 / (1.0 + cons);
 }
 
-double MultistateTree::approxLogRank(const vector<size_t>& num_jumps, const vector<size_t>& num_at_risk, const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
-    // fetch relevant data quantities
-    const vector<pair<uint8_t, uint8_t>>& valid_jumps = data->getValidJumps();
-    uint8_t num_states = data->getNumberOfStates();
-    uint8_t dim = num_states * num_states;
-
+double MultistateTree::approxLogRank(const vector<size_t>& num_jumps_daughter,
+                                     const vector<size_t>& num_at_risk_daughter) {
     double aLR = 0;
-    for (auto jump : valid_jumps) {
-        uint8_t j = jump.first - 1;
-        uint8_t k = jump.second - 1;
+    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
+        const ValidJumpInfo& jump = valid_jumps[jump_id];
         double D1 = 0;
         double D = 0;
         double sum_num = 0;
-        size_t jump_index = split_id * num_unique_event_times * dim;
-        size_t at_risk_index = split_id * num_unique_event_times * num_states;
-        for (size_t i = 0; i < num_unique_event_times; ++i) {
-            const double d = (double) num_jumps[i * dim + j * num_states + k];
-            const double d1 = (double) num_jumps_daughter[jump_index + i * dim + j * num_states + k];
-            const double Y = (double) num_at_risk[i * num_states + j];
-            const double Y1 = (double) num_at_risk_daughter[at_risk_index + i * num_states + j];
+
+        for (size_t t : jump_event_time_ids[jump_id]) {
+            const double d = static_cast<double>(num_jumps[t * dim + jump.matrix_index]);
+            const double d1 = static_cast<double>(num_jumps_daughter[t * dim + jump.matrix_index]);
+            const double Y = static_cast<double>(num_at_risk[t * num_states + jump.from_state]);
+            const double Y1 = static_cast<double>(num_at_risk_daughter[t * num_states + jump.from_state]);
+            if (Y == 0) {
+                continue;
+            }
             sum_num += d1 - Y1 * d / Y;
             D1 += d1;
-            D += d;     // I think this is ok, check that it makes sense
+            D += d;
         }
 
-        double den = sqrt((D1 - sum_num) * (D - D1 + sum_num));
-        if (den != 0) {
-            aLR += abs((sqrt(D) * sum_num ) / den); // alternative: take absolute values in the end, but this is more in line with the log-rank test
+        double denominator_squared = (D1 - sum_num) * (D - D1 + sum_num);
+        if (denominator_squared > 0 && D > 0) {
+            aLR += abs(sqrt(D) * sum_num / sqrt(denominator_squared));
         }
     }
-    if (aLR > 0) {
-        return aLR;
-    } else {
-        return -1;  // if a non-sensical value has been computed, treat as unvalid split
-    }
+    return aLR > 0 ? aLR : -1;
 }
 
 // prediction for multi-state trees
@@ -795,19 +777,13 @@ double MultistateTree::approxLogRank(const vector<size_t>& num_jumps, const vect
 
 // compute a flattened vector of predictions (the Nelson-Aalen estimators at each event time)
 vector<double> MultistateTree::computePredictions(const Data& new_data) {
-    uint8_t num_states = data->getNumberOfStates();
-    size_t dim = num_states * num_states;
     size_t num_obs = new_data.getNumberOfObs();
-    vector<double> predictions(num_obs * num_unique_event_times * dim);
+    size_t prediction_size = num_unique_event_times * dim;
+    vector<double> predictions(num_obs * prediction_size);
     for (size_t i = 0; i < num_obs; ++i) {
-        const vector<double>& pred = get<vector<double>>(predict(new_data.get_x_row(i)));   // the na vector has for unknown reasons been destroyed...
-        for (size_t t = 0; t < num_unique_event_times; ++t) {
-            for (size_t j = 0; j < num_states; ++j) {
-                for (size_t k = 0; k < num_states; ++k) {
-                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
-                }
-            }
-        }
+        size_t leaf_id = predictionLeafID(new_data, i);
+        const vector<double>& pred = na[leaf_id];
+        copy(pred.begin(), pred.end(), predictions.begin() + i * prediction_size);
     }
     return predictions;
 }
@@ -823,77 +799,85 @@ are added to the result vector.
 */
 
 vector<vector<double>> MultistateTree::computePredictions(bool compute_initial, bool compute_censoring, const Data& new_data) {
-    size_t num_obs;
-    bool new_data_provided;
-    if (new_data.getNumberOfObs() == 0) {
-        new_data_provided = false;
-    } else {
-        new_data_provided = true;
-    }
+    bool new_data_provided = new_data.getNumberOfObs() != 0;
+    size_t num_obs = new_data_provided ? new_data.getNumberOfObs() : data->getNumberOfObs();
+    size_t prediction_size = num_unique_event_times * dim;
 
-    // if new data has not been provided, compute in-bag predictions
-    if (new_data_provided) {
-        num_obs = new_data.getNumberOfObs();
-    } else {
-        num_obs = data->getNumberOfObs();
+    // optional outputs are not allocated unless they were requested
+    vector<double> predictions(num_obs * prediction_size);
+    vector<double> predictions_init;
+    vector<double> censoring;
+    if (compute_initial) {
+        predictions_init.resize(num_obs * num_states);
     }
-    uint8_t num_states = data->getNumberOfStates();
-    size_t dim = num_states * num_states;
-
-    // initialise vectors of predictions
-    vector<double> predictions(num_obs * num_unique_event_times * num_states * num_states);
-    vector<double> predictions_init(num_obs * num_states);
-    vector<double> censoring(num_obs * num_censoring_times);
+    if (compute_censoring) {
+        censoring.resize(num_obs * num_censoring_times);
+    }
 
     for (size_t i = 0; i < num_obs; ++i) {
-        size_t leaf_id;
-        if (new_data_provided) {
-            leaf_id = predictionLeafID(new_data.get_x_row(i));
-        } else {
-            leaf_id = predictionLeafID(data->get_x_row(i));
-        }
+        // route observations here as this method is also available to forest-owned trees, where prediction_node_IDs
+        // only contains IDs for the observations used by the tree
+        size_t leaf_id = new_data_provided ? predictionLeafID(new_data, i) : predictionLeafID(i);
         const vector<double>& pred = na[leaf_id];
-        vector<double> init;
+        copy(pred.begin(), pred.end(), predictions.begin() + i * prediction_size);
+
         if (compute_initial) {
-            init = init_dist[leaf_id];
+            const vector<double>& init = init_dist[leaf_id];
+            copy(init.begin(), init.end(), predictions_init.begin() + i * num_states);
         }
-        vector<double> cens;
         if (compute_censoring) {
-            cens = KM_censoring_full[leaf_id];
-        }
-        for (size_t t = 0; t < num_unique_event_times; ++t) {
-            // first save predicted NA estimators
-            for (size_t j = 0; j < num_states; ++j) {
-                for (size_t k = 0; k < num_states; ++k) {
-                    predictions[i * num_unique_event_times * dim + t * dim + j * num_states + k] = pred[t * dim + j * num_states + k];
-                }
-            }
-        }
-        // save censoring distribution
-        if (compute_censoring) {
-            for (size_t t = 0; t < num_censoring_times; ++t) {
-                censoring[i * num_censoring_times + t] = cens[t];
-            }
-        }
-        // save initial distribution
-        if (compute_initial) {
-            for (size_t j = 0; j < num_states; ++j) {
-                predictions_init[i * num_states + j] = init[j];
-            }
+            const vector<double>& cens = KM_censoring_full[leaf_id];
+            copy(cens.begin(), cens.end(), censoring.begin() + i * num_censoring_times);
         }
     }
 
-    if (compute_initial && compute_censoring) {
-        return {predictions, predictions_init, censoring};
+    // initializer-list construction copies every inner vector, so move the potentially large outputs explicitly
+    vector<vector<double>> result;
+    result.reserve(1 + static_cast<size_t>(compute_initial) + static_cast<size_t>(compute_censoring));
+    result.push_back(std::move(predictions));
+    if (compute_initial) {
+        result.push_back(std::move(predictions_init));
     }
-    else if (compute_initial) {
-        return {predictions, predictions_init};
+    if (compute_censoring) {
+        result.push_back(std::move(censoring));
     }
-    else if (compute_censoring) {
-        return {predictions, censoring};
-    } else {
-        return {predictions};
+    return result;
+}
+
+/*
+  Error computations need occupation probabilities and censoring predictions, not one complete Nelson--Aalen matrix for
+  every observation. Compute an occupation curve once for each visited leaf and copy the much smaller curve to its rows.
+  This removes a num_states factor from the observation-level prediction memory used during scoring.
+*/
+vector<vector<double>> MultistateTree::computeErrorPredictions(const Data& new_data) {
+    bool new_data_provided = new_data.getNumberOfObs() != 0;
+    size_t num_obs = new_data_provided ? new_data.getNumberOfObs() : data->getNumberOfObs();
+    size_t occupation_size = num_unique_event_times * num_states;
+
+    vector<double> occupation_probabilities(num_obs * occupation_size);
+    vector<double> censoring(num_obs * num_censoring_times);
+    vector<vector<double>> occupation_cache(num_nodes);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t leaf_id = new_data_provided ? predictionLeafID(new_data, i) : predictionLeafID(i);
+        vector<double>& leaf_occupation = occupation_cache[leaf_id];
+
+        // observations in the same leaf have identical Nelson--Aalen estimators and initial distributions
+        if (leaf_occupation.empty()) {
+            leaf_occupation = occupationProbabilitiesCpp(na[leaf_id], init_dist[leaf_id], num_states, 1);
+        }
+        copy(leaf_occupation.begin(), leaf_occupation.end(),
+             occupation_probabilities.begin() + i * occupation_size);
+
+        const vector<double>& leaf_censoring = KM_censoring_full[leaf_id];
+        copy(leaf_censoring.begin(), leaf_censoring.end(), censoring.begin() + i * num_censoring_times);
     }
+
+    vector<vector<double>> result;
+    result.reserve(2);
+    result.push_back(std::move(occupation_probabilities));
+    result.push_back(std::move(censoring));
+    return result;
 }
 
 // error estimation for multi-state trees
@@ -904,7 +888,7 @@ vector<vector<double>> MultistateTree::computePredictions(bool compute_initial, 
 vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                    const List& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
-    uint8_t num_states = state_weights.size();
+    size_t num_states = state_weights.size();
     size_t num_obs = weights.size() / num_unique_event_times;
     vector<double> brier(num_unique_event_times * num_states, 0);
 
@@ -912,16 +896,16 @@ vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const
         const List& occ_probs_obs = as<List>(occupation_probs[i]);
         size_t obs_index = i * num_unique_event_times * num_states;
         for (size_t t = 0; t < num_unique_event_times; ++t) {
-            const vector<double> occ_probs_obs_t = as<vector<double>>(occ_probs_obs[t]);
+            NumericVector occ_probs_obs_t = occ_probs_obs[t];
             size_t time_index = obs_index + t * num_states;
             double ipcw = weights[i * num_unique_event_times + t];
+            if (ipcw == 0) {
+                continue;
+            }
             // difference to survival: need to compute a contribution to the score across all states
-            for (size_t j = 0; j < num_states; ++j) {
-                if (states_ind[time_index + j]) {
-                    brier[t * num_states + j] += ipcw * (1 - occ_probs_obs_t[j]) * (1 - occ_probs_obs_t[j]) * state_weights[j];
-                } else {
-                    brier[t * num_states + j] += ipcw * occ_probs_obs_t[j] * occ_probs_obs_t[j] * state_weights[j];
-                }
+            for (size_t state = 0; state < num_states; ++state) {
+                double residual = occ_probs_obs_t[state] - static_cast<double>(states_ind[time_index + state]);
+                brier[t * num_states + state] += ipcw * residual * residual * state_weights[state];
             }
         }
     }
@@ -933,7 +917,7 @@ vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const
 vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                             const List& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
-    uint8_t num_states = state_weights.size();
+    size_t num_states = state_weights.size();
     size_t num_obs = weights.size() / num_unique_event_times;
     vector<double> kl(num_unique_event_times * num_states, 0);
 
@@ -941,7 +925,7 @@ vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const ve
         const List& occ_probs_obs = as<List>(occupation_probs[i]);
         size_t obs_index = i * num_unique_event_times * num_states;
         for (size_t t = 0; t < num_unique_event_times; ++t) {
-            const vector<double> occ_probs_obs_t = as<vector<double>>(occ_probs_obs[t]);
+            NumericVector occ_probs_obs_t = occ_probs_obs[t];
             size_t time_index = obs_index + t * num_states;
             double ipcw = weights[i * num_unique_event_times + t];
             if (ipcw == 0) {
@@ -962,7 +946,7 @@ vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const ve
 vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                       const vector<double>& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
-    uint8_t num_states = state_weights.size();
+    size_t num_states = state_weights.size();
     size_t num_obs = weights.size() / num_unique_event_times;
     vector<double> brier(num_unique_event_times * num_states, 0);
 
@@ -971,13 +955,14 @@ vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, co
         for (size_t t = 0; t < num_unique_event_times; ++t) {
             size_t time_index = obs_index + t * num_states;
             double ipcw = weights[i * num_unique_event_times + t];
+            if (ipcw == 0) {
+                continue;
+            }
             // difference to survival: need to compute a contribution to the score across all states
-            for (size_t j = 0; j < num_states; ++j) {
-                if (states_ind[time_index + j]) {
-                    brier[t * num_states + j] += ipcw * (1 - occupation_probs[time_index + j]) * (1 - occupation_probs[time_index + j]) * state_weights[j];
-                } else {
-                    brier[t * num_states + j] += ipcw * occupation_probs[time_index + j] * occupation_probs[time_index + j] * state_weights[j];
-                }
+            for (size_t state = 0; state < num_states; ++state) {
+                double residual = occupation_probs[time_index + state] -
+                  static_cast<double>(states_ind[time_index + state]);
+                brier[t * num_states + state] += ipcw * residual * residual * state_weights[state];
             }
         }
     }
@@ -988,7 +973,7 @@ vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, co
 vector<double> computeKLScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                    const vector<double>& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
-    uint8_t num_states = state_weights.size();
+    size_t num_states = state_weights.size();
     size_t num_obs = weights.size() / num_unique_event_times;
     vector<double> kl(num_unique_event_times * num_states, 0);
 
@@ -1031,6 +1016,7 @@ vector<double> uniqueEventTimesMultistate(const vector<double>& times, const vec
     sort(result.begin(), result.end());
     auto last = unique(result.begin(), result.end());
     result.erase(last, result.end());   // save memory
+    result.shrink_to_fit();
     return result;
 }
 
@@ -1044,6 +1030,8 @@ vector<double> uniqueCensoringTimesMultistate(const vector<double>& unique_event
     sort(result.begin(), result.end());
     auto last = unique(result.begin(), result.end());
     result.erase(last, result.end());
+    // this grid is retained by the fitted tree, so release capacity left by duplicate endpoints
+    result.shrink_to_fit();
     return result;
 }
 
@@ -1064,6 +1052,10 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
     const size_t num_event_times = unique_event_times.size();
     const size_t num_obs = times.size() / max_response_length;
     vector<size_t> response_event_time_ids(times.size(), 0);
+    vector<size_t> transition_positions;
+    vector<size_t> mapped_transition_ids;
+    transition_positions.reserve(max_response_length - 1);
+    mapped_transition_ids.reserve(max_response_length - 1);
 
     for (size_t obs = 0; obs < num_obs; ++obs) {
         const size_t offset = obs * max_response_length;
@@ -1075,10 +1067,9 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
             ++response_length;
         }
 
-        vector<size_t> transition_positions;
-        vector<size_t> mapped_transition_ids;
-        transition_positions.reserve(response_length - 1);
-        mapped_transition_ids.reserve(response_length - 1);
+        // reuse these two small buffers instead of allocating them separately for every observation
+        transition_positions.clear();
+        mapped_transition_ids.clear();
 
         for (size_t j = 1; j < response_length; ++j) {
             const size_t index = offset + j;
@@ -1090,7 +1081,7 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
             // find the smallest unique event time larger than or equal to the current observation time
             auto it = lower_bound(unique_event_times.begin(), unique_event_times.end(), times[index]);
             // find the number of steps from the first unique event time until the current observation time
-            size_t event_time_id = static_cast<size_t>(distance(unique_event_times.begin(), it));
+            size_t event_time_id = static_cast<size_t>(it - unique_event_times.begin());
             // ensures that we don't choose an event time which is out of bounds
             if (event_time_id >= num_event_times) {
                 event_time_id = num_event_times - 1;
@@ -1133,7 +1124,7 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
                 // determine the first element in unique_event_times larger than the current time
                 auto it = upper_bound(unique_event_times.begin(), unique_event_times.end(), times[last_index]);
                 // determine number of jumps until the censoring time
-                size_t censoring_time_id = static_cast<size_t>(distance(unique_event_times.begin(), it));
+                size_t censoring_time_id = static_cast<size_t>(it - unique_event_times.begin());
                 // for ensuring that censoring always occurs after the final event has taken place
                 if (num_transitions > 0) {
                     censoring_time_id = max(censoring_time_id, mapped_transition_ids.back() + 1);
@@ -1145,51 +1136,104 @@ vector<size_t> computeResponseEventTimeIDsMultistate(const vector<double>& uniqu
     return response_event_time_ids;
 }
 
+/*
+  computes the observed state directly from each response path. The generic Data implementation reconstructs dense jump,
+  cumulative-jump, at-risk and censoring arrays for every observation; scoring only needs one true state bit at each time.
+*/
+vector<bool> computeStateIndicatorsMultistate(const Data& data, const vector<size_t>& response_event_time_ids, size_t num_unique_event_times) {
+    const vector<uint8_t>& states = data.getStates();
+    const vector<size_t>& last_observed_times = data.getLastObservedTimes();
+    const vector<uint8_t>& censoring_states = data.getCensoringStates();
+    size_t max_response_length = data.getMaxResponseLength();
+    size_t num_states = data.getNumberOfStates();
+    size_t num_obs = data.getNumberOfObs();
+
+    if (response_event_time_ids.size() != states.size()) {
+        throw invalid_argument("Response event-time IDs do not match the multi-state response data");
+    }
+
+    vector<bool> result(num_obs * num_unique_event_times * num_states, false);
+    for (size_t i = 0; i < num_obs; ++i) {
+        // first determine the actual length of the observation
+        size_t response_offset = i * max_response_length;
+        size_t response_length = 1;
+        while (response_length < max_response_length && states[response_offset + response_length] != 0) {
+            ++response_length;
+        }
+
+        // determine the id of the censoring time (= num_unique_event_times for no censoring)
+        size_t current_state = states[response_offset] - 1;
+        size_t next_response_position = 1;
+        size_t censoring_time_id = num_unique_event_times;
+        if (censoring_states[i] != 0) {
+            censoring_time_id = response_event_time_ids[last_observed_times[i]];
+        }
+
+        // for every unique event time, determine the state indicator
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            // transitions at t change the observed state at t, while a repeated final state only marks censoring
+            while (next_response_position < response_length) {
+                size_t response_index = response_offset + next_response_position;
+                if (states[response_index] == states[response_index - 1]) {
+                    ++next_response_position;
+                    continue;
+                }
+                if (response_event_time_ids[response_index] > t) {
+                    break;
+                }
+                current_state = states[response_index] - 1;
+                ++next_response_position;
+            }
+
+            // if no censoring has occured, update the state indicator
+            if (t < censoring_time_id) {
+                result[(i * num_unique_event_times + t) * num_states + current_state] = true;
+            }
+        }
+    }
+    return result;
+}
+
 // computes occupation probabilities from flattened Nelson-Aalen estimators and one initial distribution per estimator
 vector<double> occupationProbabilitiesCpp(const vector<double>& na, const vector<double>& init, size_t num_states, size_t num_estimators) {
+    if (num_estimators == 0 || num_states == 0) {
+        return {};
+    }
     size_t stride_length = na.size() / num_estimators;
     size_t dim = num_states * num_states;
     size_t num_unique_event_times = stride_length / dim;
     vector<double> result(num_estimators * num_unique_event_times * num_states, 0);     // num_estimators corresponds to num_obs
-    vector<double> aj(num_estimators * num_unique_event_times * dim, 0);
+    vector<double> previous(num_states, 0);
+    vector<double> current(num_states, 0);
 
-    // across all observations, the initial value of the product integral (aj) is the identity matrix
-    for (size_t i = 0; i < num_estimators; ++i) {
-        for (size_t j = 0; j < num_states; ++j) {
-            aj[i * num_unique_event_times * dim + j * num_states + j] = 1;
-        }
-    }
+    /*
+      we only need init * product integral, not the full product-integral matrix. Update that probability row directly,
+      reducing both the working memory and one complete matrix dimension in the computation (rolling matrix approach)
+    */
+    for (size_t estimator = 0; estimator < num_estimators; ++estimator) {
+        size_t init_index = estimator * num_states;
+        size_t result_index = estimator * num_unique_event_times * num_states;
+        copy(init.begin() + init_index, init.begin() + init_index + num_states, previous.begin());
+        copy(previous.begin(), previous.end(), result.begin() + result_index);          // p(0) = init
 
-    // now compute the product integral across all event times for every observation
-    for (size_t i = 0; i < num_estimators; ++i) {
-        size_t obs_index = i * num_unique_event_times * dim;
+        size_t na_index = estimator * num_unique_event_times * dim;
         for (size_t t = 1; t < num_unique_event_times; ++t) {
-            for (size_t j = 0; j < num_states; ++j) {           // row of the aj matrix
-                for (size_t k = 0; k < num_states; ++k) {       // col of the aj matrix
-                    double prev = aj[obs_index + (t - 1) * dim + j * num_states + k];
-                    for (size_t l = 0; l < num_states; ++l) {   // column of matrix in increment
-                        double contribution = na[obs_index + t * dim + k * num_states + l] - na[obs_index + (t - 1) * dim + k * num_states + l];
-                        if (k == l) {
-                            ++contribution;
-                        }
-                        aj[obs_index + t * dim + j * num_states + l] += prev * contribution;
+            fill(current.begin(), current.end(), 0);
+            size_t current_matrix = na_index + t * dim;
+            size_t previous_matrix = current_matrix - dim;
+            for (size_t from_state = 0; from_state < num_states; ++from_state) {
+                double previous_probability = previous[from_state];
+                for (size_t to_state = 0; to_state < num_states; ++to_state) {
+                    size_t matrix_index = from_state * num_states + to_state;
+                    double contribution = na[current_matrix + matrix_index] - na[previous_matrix + matrix_index];
+                    if (from_state == to_state) {
+                        ++contribution;
                     }
+                    current[to_state] += previous_probability * contribution;
                 }
             }
-        }
-    }
-
-    // now multiply with the initial distribution
-    for (size_t i = 0; i < num_estimators; ++i) {
-        size_t obs_index = i * num_unique_event_times * num_states;
-        size_t init_index = i * num_states;
-        for (size_t t = 0; t < num_unique_event_times; ++t) {
-            for (size_t j = 0; j < num_states; ++j) {
-                double init_val = init[init_index + j];
-                for (size_t k = 0; k < num_states; ++k) {
-                    result[obs_index + t * num_states + k] += init_val * aj[obs_index * num_states + t * dim + j * num_states + k];
-                }
-            }
+            copy(current.begin(), current.end(), result.begin() + result_index + t * num_states);
+            previous.swap(current);
         }
     }
     return result;
@@ -1198,51 +1242,40 @@ vector<double> occupationProbabilitiesCpp(const vector<double>& na, const vector
 // same function as before, but now accepts List inputs instead for na and init (each is a List of Lists)
 vector<double> occupationProbabilities(const List& na, const List& init, size_t num_states) {
     size_t num_obs = na.size();
-    size_t dim = num_states * num_states;
+    if (num_obs == 0 || num_states == 0) {
+        return {};
+    }
     size_t num_unique_event_times = as<List>(na[0]).size();
     vector<double> result(num_obs * num_unique_event_times * num_states, 0);
-    vector<double> aj(num_obs * num_unique_event_times * dim, 0);
+    vector<double> previous(num_states, 0);
+    vector<double> current(num_states, 0);
 
-    // across all observations, the initial value of the product integral (aj) is the identity matrix
-    for (size_t i = 0; i < num_obs; ++i) {
-        for (size_t j = 0; j < num_states; ++j) {
-            aj[i * num_unique_event_times * dim + j * num_states + j] = 1;
+    for (size_t observation = 0; observation < num_obs; ++observation) {
+        List na_obs = na[observation];
+        NumericVector init_obs = init[observation];
+        if (static_cast<size_t>(init_obs.size()) != num_states) {
+            throw invalid_argument("Initial distributions must have one entry for every state");
         }
-    }
+        size_t result_index = observation * num_unique_event_times * num_states;
+        copy_n(init_obs.begin(), num_states, previous.begin());
+        copy(previous.begin(), previous.end(), result.begin() + result_index);
 
-    // now compute the product integral across all event times for every observation
-    for (size_t i = 0; i < num_obs; ++i) {
-        const List& na_obs = as<List>(na[i]);
-        size_t obs_index = i * num_unique_event_times * dim;
         for (size_t t = 1; t < num_unique_event_times; ++t) {
-            const NumericMatrix& na_obs_cur = na_obs[t];
-            const NumericMatrix& na_obs_prev = na_obs[t - 1];
-            for (size_t j = 0; j < num_states; ++j) {           // row of the aj matrix
-                for (size_t k = 0; k < num_states; ++k) {       // col of the aj matrix
-                    double prev = aj[obs_index + (t - 1) * dim + j * num_states + k];
-                    for (size_t l = 0; l < num_states; ++l) {   // column of matrix in increment
-                        double contribution = na_obs_cur(k, l) - na_obs_prev(k, l);
-                        if (k == l) {
-                            ++contribution;
-                        }
-                        aj[obs_index + t * dim + j * num_states + l] += prev * contribution;
+            NumericMatrix na_obs_cur = na_obs[t];
+            NumericMatrix na_obs_prev = na_obs[t - 1];
+            fill(current.begin(), current.end(), 0);
+            for (size_t from_state = 0; from_state < num_states; ++from_state) {
+                double previous_probability = previous[from_state];
+                for (size_t to_state = 0; to_state < num_states; ++to_state) {
+                    double contribution = na_obs_cur(from_state, to_state) - na_obs_prev(from_state, to_state);
+                    if (from_state == to_state) {
+                        ++contribution;
                     }
+                    current[to_state] += previous_probability * contribution;
                 }
             }
-        }
-    }
-
-    // now multiply with the initial distribution
-    for (size_t i = 0; i < num_obs; ++i) {
-        const vector<double>& init_obs = as<vector<double>>(init[i]);
-        size_t obs_index = i * num_unique_event_times * num_states;
-        for (size_t t = 0; t < num_unique_event_times; ++t) {
-            for (size_t j = 0; j < num_states; ++j) {
-                double init_val = init_obs[j];
-                for (size_t k = 0; k < num_states; ++k) {
-                    result[obs_index + t * num_states + k] += init_val * aj[obs_index * num_states + t * dim + j * num_states + k];
-                }
-            }
+            copy(current.begin(), current.end(), result.begin() + result_index + t * num_states);
+            previous.swap(current);
         }
     }
     return result;

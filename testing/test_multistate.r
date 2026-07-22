@@ -242,13 +242,14 @@ jump_data <- lapply(seq_len(nrow(sim_data)), function(i) {
   }
 })
 
+set.seed(2026)
 tree_survival <- jftree(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = FALSE)
+set.seed(2026)
 tree_mm <- jftree(MM ~ ., data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, honest = FALSE)
 
 # results for n = 1000, seed = 2026
-jftree.error(tree_survival) # IBS: 1.03857, normalised IBS: 0.0560871
-tree_mm$ibs                 # IBS: 1.048747
-tree_mm$ibs.normalised      # normalised IBS: 0.05663672
+jftree.error(tree_survival) # IBS: 1.023504, normalised IBS: 0.05527348, KL: 3.162875, normalised KL: 0.1708084
+jftree.error(tree_mm)       # IBS: 1.023504, normalised IBS: 0.05527348, KL: 3.162875, normalised KL: 0.1708084
 
 tail(tree_survival$unique.event.times)
 tail(tree_mm$unique.event.times)
@@ -257,28 +258,24 @@ unlist(lapply(tree_mm$init, function(z) sum(z)))
 
 tree_mm$censoring[1,]
 tree_survival$censoring[1,]
-tree_mm$censoring[1,][-1] - tree_survival$censoring[1,] # some pretty big differences here for later times
+tree_mm$censoring[1,][-1] - tree_survival$censoring[1,] # the same
 
 tree_mm$censoring[2,]
 tree_survival$censoring[2,]
-tree_mm$censoring[2,][-1] - tree_survival$censoring[2,] # quite small difference
+tree_mm$censoring[2,][-1] - tree_survival$censoring[2,] # the same
 
 
-tree_survival$censoring[3,] # pretty big difference
+tree_survival$censoring[3,] # the same
 tree_mm$censoring[3,][-1]
 tree_mm$censoring[3,][-1] - tree_survival$censoring[3,]
 
 tree_mm$censoring[4,]
 tree_survival$censoring[4,]
-tree_mm$censoring[4,][-1] - tree_survival$censoring[4,] # ok
+tree_mm$censoring[4,][-1] - tree_survival$censoring[4,] # the same
 
 tree_mm$censoring[5,]
 tree_survival$censoring[5,]
-tree_mm$censoring[5,][-1] - tree_survival$censoring[5,] # pretty small difference
-
-# it is not that surprising that the KM estimators are different, since the splits can be quite different for the two trees,
-# and the KM estimator is very sensitive to the number of observations in the leaf
-# choosing e.g. n = 50 results in only one split and here the estimators are completely identical (as they should be)
+tree_mm$censoring[5,][-1] - tree_survival$censoring[5,] # the same
 
 # just a bonus comparison with randomForestSRC
 set.seed(2026)
@@ -287,7 +284,7 @@ forest_survival <- jfforest(Surv(time, status) ~ ., data = sim_data, min_node_si
 forest_survival_src <- rfsrc(Surv(time, status) ~ ., data = sim_data)
 
 print_forest(forest_survival) # C-error: 0.4609178, IBS: 1.187464, normalised IBS: 0.05969983
-print_forest(forest_mm)
+print_forest(forest_mm)       #                     IBS: 1.169299, normalised IBS: 0.06314699
 forest_survival_src           # C-error: 0.46226363, IBS: 1.20540655, normalised IBS: 0.06509696
 
 # VIMP

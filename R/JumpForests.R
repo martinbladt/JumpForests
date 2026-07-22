@@ -257,11 +257,11 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
     }
     if (tree_list$tree.type == "Survival") {
       return(list("C.error" = tree_list$C.error, "IBS.error" = tree_list$ibs, "normalised.IBS.error" = tree_list$ibs.normalised,
-                  "KL.error" = tree_list$ikl, "normalised.KL.error" = tree_list$ikl.normalised))
+                  "IKL.error" = tree_list$ikl, "normalised.IKL.error" = tree_list$ikl.normalised))
     }
     if (tree_list$tree.type == "Multi-state") {
       return(list("IBS.error" = tree_list$ibs, "normalised.IBS.error" = tree_list$ibs.normalised,
-                  "KL.error" = tree_list$ikl, "normalised.KL.error" = tree_list$ikl.normalised))
+                  "IKL.error" = tree_list$ikl, "normalised.IKL.error" = tree_list$ikl.normalised))
     }
   }
 

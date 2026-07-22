@@ -651,6 +651,18 @@ NumericMatrix KaplanMeier(const NumericMatrix& na) {
   NumericMatrix km(num_obs, num_unique_event_times);
   km.fill(1.0);
 
+  if (num_unique_event_times == 0) {
+    return km;
+  }
+
+  /*
+    na contains cumulative hazards at the retained event times, and the first retained time does not generally equal zero.
+    Consequently, the first increment is na(i, 0) - 0 and must be included before continuing with the usual recursion.
+  */
+  for (size_t i = 0; i < num_obs; ++i) {
+    km(i, 0) = 1.0 - na(i, 0);
+  }
+
   for (size_t j = 1; j < num_unique_event_times; ++j) {
     for (size_t i = 0; i < num_obs; ++i) {
       km(i, j) = km(i, j - 1) * (1 - (na(i, j) - na(i, j - 1)));
@@ -1038,7 +1050,18 @@ pair<double, double> computeIntegratedScore(const vector<double>& score, const v
     size_t num_unique_event_times = unique_event_times.size();
     double iscore = 0;
 
+    if (num_unique_event_times == 0) {
+        return {0, 0};
+    }
+
     if (!multi_state) { // survival
+        /*
+          survival grids contain true event times and therefore usually start after zero. The loss at time zero is zero
+          since everybody is alive with predicted survival one, so include the missing first trapezoid explicitly.
+          Multi-state grids already contain zero and consequently need no corresponding correction below.
+        */
+        iscore += score[0] * unique_event_times[0] / 2;
+
         // apply trapezoidal rule
         for (size_t j = 1; j < num_unique_event_times; ++j) {
             iscore += (score[j] + score[j - 1]) * (unique_event_times[j] - unique_event_times[j - 1]) / 2;
@@ -1108,10 +1131,20 @@ vector<size_t> computeTrueEventTimeIDs(const vector<double>& unique_event_times,
 // computes the Kaplan-Meier estimator given a Nelson-Aalen estimator
 // if the Nelson-Aalen estimator is a flattened vector, provide the number of estimators in num_estimators
 vector<double> KaplanMeier(const vector<double>& na, size_t num_estimators) {
+    if (num_estimators == 0) {
+        throw invalid_argument("The number of Kaplan-Meier estimators must be positive");
+    }
     size_t stride_length = na.size() / num_estimators;
     vector<double> KM = vector<double>(na.size(), 1);
 
+    if (stride_length == 0) {
+        return KM;
+    }
+
     for (size_t i = 0; i < num_estimators; ++i) {
+        size_t first_index = i * stride_length;
+        KM[first_index] = 1.0 - na[first_index];
+
         // compute using the recursion given by the product integral
         for (size_t j = 1; j < stride_length; ++j) {
             size_t index = i * stride_length + j;
