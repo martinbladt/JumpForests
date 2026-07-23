@@ -12,33 +12,109 @@ Functions for multi-state trees
 // constructor for MultistateTree
 //--------------------------------------------------------------------------------------
 
-// the second to final argument is only used for honest trees
+// estimation_indices is only used for honest trees; the final two shared lookups are supplied by forests
 MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids, 
-                               const vector<size_t>& subset_indices, uint8_t num_states, bool save_predictions, const vector<size_t>& estimation_indices, shared_ptr<vector<double>> censoring_times) : 
+                               vector<size_t> subset_indices, uint8_t num_states, bool save_predictions,
+                               vector<size_t> estimation_indices, shared_ptr<vector<double>> censoring_times,
+                               shared_ptr<const MultistateResponseData> response_data,
+                               shared_ptr<const vector<size_t>> censoring_endpoint_ids) :
     unique_event_times {unique_event_times}, response_event_time_ids {response_event_time_ids}, num_states {num_states},
-    dim {static_cast<size_t>(num_states) * num_states}, save_predictions {save_predictions} {
-    this->node_obs.push_back(subset_indices);
-    this->holdout_node_obs.push_back(estimation_indices);
+    dim {static_cast<size_t>(num_states) * num_states}, save_predictions {save_predictions},
+    forest_tree {response_data != nullptr}, response_data {std::move(response_data)},
+    censoring_endpoint_ids {std::move(censoring_endpoint_ids)} {
+    this->node_obs.push_back(std::move(subset_indices));
+    this->holdout_node_obs.push_back(std::move(estimation_indices));
     this->num_unique_event_times = unique_event_times->size();
     this->censoring_times = censoring_times == nullptr ? unique_event_times : censoring_times;
     this->num_censoring_times = this->censoring_times->size();
-    this->node_sizes.push_back(subset_indices.size());
+    this->node_sizes.push_back(this->node_obs[0].size());
     this->num_jumps.resize(num_unique_event_times * dim);
     this->num_at_risk.resize(num_unique_event_times * num_states);
     this->num_censored.resize(num_unique_event_times * num_states);
 
-    // the lookup from event times to the censoring grid is fixed for the whole lifetime of the tree
-    this->event_censoring_time_ids.resize(num_unique_event_times, num_censoring_times);
-    size_t censoring_time_id = 0;
-    for (size_t t = 0; t < num_unique_event_times; ++t) {
-        // both grids are sorted, so one forward pass replaces a separate binary search for every event time
-        while (censoring_time_id + 1 < num_censoring_times && (*this->censoring_times)[censoring_time_id + 1] <= (*unique_event_times)[t]) {
-            ++censoring_time_id;
-        }
-        if (censoring_time_id < num_censoring_times && (*this->censoring_times)[censoring_time_id] <= (*unique_event_times)[t]) {
-            this->event_censoring_time_ids[t] = censoring_time_id;
+    /*
+      A forest stores full censoring curves and performs this common lookup once at forest level. Standalone trees retain
+      their own map because their public prediction output also includes censoring on the event-time grid.
+    */
+    if (!forest_tree) {
+        this->event_censoring_time_ids.resize(num_unique_event_times, num_censoring_times);
+        size_t censoring_time_id = 0;
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            // both grids are sorted, so one forward pass replaces a separate binary search for every event time
+            while (censoring_time_id + 1 < num_censoring_times &&
+                   (*this->censoring_times)[censoring_time_id + 1] <= (*unique_event_times)[t]) {
+                ++censoring_time_id;
+            }
+            if (censoring_time_id < num_censoring_times &&
+                (*this->censoring_times)[censoring_time_id] <= (*unique_event_times)[t]) {
+                this->event_censoring_time_ids[t] = censoring_time_id;
+            }
         }
     }
+}
+
+shared_ptr<const MultistateResponseData> prepareMultistateResponseData(const Data& data, const vector<size_t>& response_event_time_ids,
+                                                                       size_t num_unique_event_times, size_t num_states) {
+    auto result = make_shared<MultistateResponseData>();
+    size_t dim = num_states * num_states;
+
+    // save both the state indices and the flattened matrix index for each transition which can occur
+    const vector<pair<uint8_t, uint8_t>> data_valid_jumps = data.getValidJumps();
+    result->valid_jumps.reserve(data_valid_jumps.size());
+    for (const auto& jump : data_valid_jumps) {
+        size_t from_state = static_cast<size_t>(jump.first - 1);
+        size_t to_state = static_cast<size_t>(jump.second - 1);
+        result->valid_jumps.push_back({from_state, to_state, from_state * num_states + to_state});
+    }
+
+    result->feature_indices.resize(data.getNumberOfFeatures());
+    for (size_t feature = 0; feature < result->feature_indices.size(); ++feature) {
+        result->feature_indices[feature] = feature;
+    }
+
+    /*
+      convert every padded response path to a compact range of flattened transition indices. A forest consequently pays
+      this cost once, rather than once for every tree, and parallel trees only retain a small shared pointer to the result.
+    */
+    const vector<uint8_t>& states = data.getStates();
+    const vector<size_t>& last_observed_times = data.getLastObservedTimes();
+    const vector<uint8_t>& censoring_states = data.getCensoringStates();
+    size_t max_response_length = data.getMaxResponseLength();
+    size_t num_obs = data.getNumberOfObs();
+    size_t risk_array_size = num_unique_event_times * num_states;
+
+    result->initial_state_ids.resize(num_obs);
+    result->transition_offsets.resize(num_obs + 1);
+    result->transition_ids.reserve(num_obs);   // roughly one transition per observation is a useful initial estimate
+    result->censoring_risk_ids.assign(num_obs, risk_array_size);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t response_index = i * max_response_length;
+        result->initial_state_ids[i] = states[response_index] - 1;
+        result->transition_offsets[i] = result->transition_ids.size();
+
+        for (size_t j = 1; j < max_response_length && states[response_index + j] != 0; ++j) {
+            size_t current_state = static_cast<size_t>(states[response_index + j] - 1);
+            size_t previous_state = static_cast<size_t>(states[response_index + j - 1] - 1);
+            if (current_state != previous_state) {
+                size_t event_time_id = response_event_time_ids[response_index + j];
+                result->transition_ids.push_back(
+                  event_time_id * dim + previous_state * num_states + current_state);
+            }
+        }
+
+        uint8_t censoring_state = censoring_states[i];
+        // censoring occurs
+        if (censoring_state != 0) {
+            size_t censoring_time_id = response_event_time_ids[last_observed_times[i]];
+            if (censoring_time_id < num_unique_event_times) {
+                result->censoring_risk_ids[i] = censoring_time_id * num_states + censoring_state - 1;
+            }
+        }
+    }
+    result->transition_offsets[num_obs] = result->transition_ids.size();
+    result->transition_ids.shrink_to_fit();
+    return result;
 }
 
 // functions for growing multi-state trees
@@ -62,8 +138,10 @@ void MultistateTree::reserveTreeMemory(size_t num_obs) {
     na.reserve(max_num_nodes);
     init_dist.reserve(max_num_nodes);
     if (save_predictions) {
-        KM_censoring.reserve(max_num_nodes);
         KM_censoring_full.reserve(max_num_nodes);
+        if (!forest_tree) {
+            KM_censoring.reserve(max_num_nodes);
+        }
     }
 }
 
@@ -74,10 +152,24 @@ void MultistateTree::prepareMultistateData() {
 
     reserveTreeMemory(node_obs[0].size());
 
-    // save feature indices once since the same vector is sampled in every non-terminal node
-    feature_indices.resize(data->getNumberOfFeatures());
-    for (size_t feature = 0; feature < feature_indices.size(); ++feature) {
-        feature_indices[feature] = feature;
+    // standalone trees construct this once here; all trees in a forest receive the same immutable representation
+    if (response_data == nullptr) {
+        if (response_event_time_ids == nullptr) {
+            throw runtime_error("Multi-state response-time IDs are missing");
+        }
+        response_data = prepareMultistateResponseData(*data, *response_event_time_ids, num_unique_event_times, num_states);
+    }
+
+    // retain the exact estimation sample, including bootstrap multiplicities, if censoring is computed lazily
+    if (!save_predictions) {
+        const vector<size_t>& estimation_sample = honest ? holdout_node_obs[0] : node_obs[0];
+        if (data->getNumberOfObs() > numeric_limits<uint32_t>::max()) {
+            throw runtime_error("Lazy multi-state censoring supports at most 2^32 - 1 observations");
+        }
+        censoring_indices.reserve(estimation_sample.size());
+        for (size_t observation : estimation_sample) {
+            censoring_indices.push_back(static_cast<uint32_t>(observation));
+        }
     }
 
     // turn the splitting-rule string into a small integer once instead of comparing strings for every split
@@ -92,76 +184,23 @@ void MultistateTree::prepareMultistateData() {
     } else {
         splitrule_id = MultistateSplitRule::LogRank;
     }
-
-    // save both the state indices and the flattened matrix index for each transition which can occur
-    // this is to avoid computing the exact entry every time a jump is considered
-    const vector<pair<uint8_t, uint8_t>> data_valid_jumps = data->getValidJumps();
-    valid_jumps.reserve(data_valid_jumps.size());
-    for (const auto& jump : data_valid_jumps) {
-        size_t from_state = static_cast<size_t>(jump.first - 1);
-        size_t to_state = static_cast<size_t>(jump.second - 1);
-        valid_jumps.push_back({from_state, to_state, from_state * num_states + to_state});
-    }
-
-    /*
-      convert every padded response path to a compact range of flattened transition indices. During splitting an
-      observation can consequently be added with one initial-state update, one censoring update and one short loop.
-    */
-    const vector<uint8_t>& states = data->getStates();
-    const vector<size_t>& last_observed_times = data->getLastObservedTimes();
-    const vector<uint8_t>& censoring_states = data->getCensoringStates();
-    size_t max_response_length = data->getMaxResponseLength();
-    size_t num_obs = data->getNumberOfObs();
-    size_t risk_array_size = num_unique_event_times * num_states;
-
-    initial_state_ids.resize(num_obs);
-    transition_offsets.resize(num_obs + 1);
-    transition_ids.clear();
-    transition_ids.reserve(num_obs);
-    censoring_risk_ids.assign(num_obs, risk_array_size);
-
-    for (size_t i = 0; i < num_obs; ++i) {
-        size_t response_index = i * max_response_length;
-        initial_state_ids[i] = states[response_index] - 1;
-        transition_offsets[i] = transition_ids.size();
-
-        for (size_t j = 1; j < max_response_length && states[response_index + j] != 0; ++j) {
-            size_t current_state = static_cast<size_t>(states[response_index + j] - 1);
-            size_t previous_state = static_cast<size_t>(states[response_index + j - 1] - 1);
-            if (current_state != previous_state) {
-                size_t event_time_id = (*response_event_time_ids)[response_index + j];
-                transition_ids.push_back(event_time_id * dim + previous_state * num_states + current_state);
-            }
-        }
-
-        // compute the index of the censoring time for this observation and save it
-        uint8_t censoring_state = censoring_states[i];
-        if (censoring_state != 0) {
-            size_t censoring_time_id = (*response_event_time_ids)[last_observed_times[i]];
-            if (censoring_time_id < num_unique_event_times) {
-                censoring_risk_ids[i] = censoring_time_id * num_states + censoring_state - 1;
-            }
-        }
-    }
-    transition_offsets[num_obs] = transition_ids.size();
-    transition_ids.shrink_to_fit();
     multistate_data_prepared = true;
 }
 
 void MultistateTree::addObservationToQuantities(size_t observation, vector<size_t>& jumps, vector<size_t>& at_risk,
                                                 vector<size_t>& censored) {
     // the first row of at_risk temporarily holds the initial state counts and remains the time-zero row
-    ++at_risk[initial_state_ids[observation]];
+    ++at_risk[response_data->initial_state_ids[observation]];
 
     // censoring actually occurs
-    size_t censoring_id = censoring_risk_ids[observation];
+    size_t censoring_id = response_data->censoring_risk_ids[observation];
     if (censoring_id < censored.size()) {
         ++censored[censoring_id];
     }
 
     // use the compact representation with offsets and IDs to update number of jumps
-    for (size_t j = transition_offsets[observation]; j < transition_offsets[observation + 1]; ++j) {
-        ++jumps[transition_ids[j]];
+    for (size_t j = response_data->transition_offsets[observation]; j < response_data->transition_offsets[observation + 1]; ++j) {
+        ++jumps[response_data->transition_ids[j]];
     }
 }
 
@@ -172,7 +211,7 @@ void MultistateTree::materialiseAtRisk(const vector<size_t>& jumps, const vector
         size_t previous_jump_index = (t - 1) * dim;
 
         // a jump at the preceding time removes one individual from its old state and adds it to its new state
-        for (const ValidJumpInfo& jump : valid_jumps) {
+        for (const MultistateValidJumpInfo& jump : response_data->valid_jumps) {
             size_t count = jumps[previous_jump_index + jump.matrix_index];
             if (count != 0) {
                 current_num_at_risk[jump.from_state] -= count;
@@ -201,11 +240,11 @@ void MultistateTree::computeMultistateQuantities(const vector<size_t>& indices, 
 }
 
 void MultistateTree::prepareJumpEventTimeIDs() {
-    if (jump_event_time_ids.size() != valid_jumps.size()) {
-        jump_event_time_ids.resize(valid_jumps.size());
+    if (jump_event_time_ids.size() != response_data->valid_jumps.size()) {
+        jump_event_time_ids.resize(response_data->valid_jumps.size());
     }
-    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
-        const ValidJumpInfo& jump = valid_jumps[jump_id];
+    for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
+        const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
         vector<size_t>& event_ids = jump_event_time_ids[jump_id];
         event_ids.clear();   // retain capacity from the preceding node instead of reallocating the same sparse list
         for (size_t t = 0; t < num_unique_event_times; ++t) {
@@ -361,13 +400,18 @@ void MultistateTree::makeLeaf(size_t node_index) {
     feature_IDs.push_back(0);
     thresholds.push_back({});
 
-    // since we are in a terminal node, we save the indices for the observations
-    for (size_t i : node_obs[node_index]) {
-        prediction_node_IDs[i] = node_index;
-    }
-    if (honest) {
-        for (size_t i : holdout_node_obs[node_index]) {
+    /*
+      A standalone tree keeps training leaf IDs for its public prediction methods. Forest predictions already have to
+      route OOB and external observations and therefore route every row, avoiding an N-entry size_t vector in every tree.
+    */
+    if (!forest_tree) {
+        for (size_t i : node_obs[node_index]) {
             prediction_node_IDs[i] = node_index;
+        }
+        if (honest) {
+            for (size_t i : holdout_node_obs[node_index]) {
+                prediction_node_IDs[i] = node_index;
+            }
         }
     }
 
@@ -407,7 +451,7 @@ bool MultistateTree::createSplit(size_t node_index) {
     vector<size_t> holdout_right_indices;
 
     // sample mtry features from the vector prepared once at the root
-    vector<size_t> sampled_features = sampleIndices(feature_indices, mtry, false, random_number_generator);
+    vector<size_t> sampled_features = sampleIndices(response_data->feature_indices, mtry, false, random_number_generator);
     const vector<bool>& categorical = data->getCategorical();
 
     // now consider each of the sampled features
@@ -479,8 +523,10 @@ bool MultistateTree::createSplit(size_t node_index) {
     na.push_back(vector<double>());
     init_dist.push_back(vector<double>());
     if (save_predictions) {
-        KM_censoring.push_back(vector<double>());
         KM_censoring_full.push_back(vector<double>());
+        if (!forest_tree) {
+            KM_censoring.push_back(vector<double>());
+        }
     }
 
     // for honest trees, update the holdout indices
@@ -517,7 +563,7 @@ void MultistateTree::computeNA(size_t node_index) {
         size_t matrix_index = t * dim;
         copy(na.begin() + matrix_index - dim, na.begin() + matrix_index, na.begin() + matrix_index);
 
-        for (const ValidJumpInfo& jump : valid_jumps) {
+        for (const MultistateValidJumpInfo& jump : response_data->valid_jumps) {
             size_t count = num_jumps[matrix_index + jump.matrix_index];
             size_t at_risk = num_at_risk[t * num_states + jump.from_state];
             if (count != 0 && at_risk != 0) {
@@ -547,8 +593,15 @@ void MultistateTree::computeCensoringKMExternal(const vector<size_t>& indices, s
     // every selected observation belongs to one terminal leaf, so looking up endpoints here costs no more searches than
     // precomputing them for the full data and avoids retaining another size_t for every observation while growing
     for (size_t i : indices) {
-        double endpoint = times[last_observed_times[i]];
-        size_t endpoint_id = static_cast<size_t>(lower_bound(censoring_times->begin(), censoring_times->end(), endpoint) - censoring_times->begin());
+        size_t endpoint_id;
+        if (censoring_endpoint_ids != nullptr) {
+            endpoint_id = (*censoring_endpoint_ids)[i];
+        } else {
+            double endpoint = times[last_observed_times[i]];
+            endpoint_id = static_cast<size_t>(
+                lower_bound(censoring_times->begin(), censoring_times->end(), endpoint) -
+                censoring_times->begin());
+        }
         // no censoring or event
         if (endpoint_id >= num_censoring_times) {
             continue;
@@ -575,19 +628,58 @@ void MultistateTree::computeCensoringKMExternal(const vector<size_t>& indices, s
         current_num_at_risk -= num_events[t] + num_censored_endpoints[t];
     }
 
-    vector<double> KM_event(num_unique_event_times, 1);
-    for (size_t t = 0; t < num_unique_event_times; ++t) {
-        if (event_censoring_time_ids[t] < num_censoring_times) {
-            KM_event[t] = KM_full[event_censoring_time_ids[t]];
+    vector<double> KM_event;
+    if (!forest_tree) {
+        KM_event.assign(num_unique_event_times, 1);
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            if (event_censoring_time_ids[t] < num_censoring_times) {
+                KM_event[t] = KM_full[event_censoring_time_ids[t]];
+            }
         }
     }
-    if (node_index < KM_censoring.size()) {
+    if (node_index < KM_censoring_full.size()) {
         KM_censoring_full[node_index] = std::move(KM_full);
-        KM_censoring[node_index] = std::move(KM_event);
     } else {
         KM_censoring_full.push_back(std::move(KM_full));
+    }
+    if (!forest_tree && node_index < KM_censoring.size()) {
+        KM_censoring[node_index] = std::move(KM_event);
+    } else if (!forest_tree) {
         KM_censoring.push_back(std::move(KM_event));
     }
+}
+
+/*
+  Populate censoring estimators after fitting from exactly the same estimation sample which was used in the leaves.
+  Keeping the original indices is important here: repeated bootstrap indices are repeated observations in the KM risk
+  set, while honest trees must use their holdout sample rather than every observation which happens to route to a leaf.
+*/
+void MultistateTree::computeCensoringKMLazy() {
+    if (censoring_km_ready) {
+        return;
+    }
+    if (censoring_indices.empty()) {
+        throw runtime_error("Cannot compute multi-state censoring from an empty estimation sample");
+    }
+
+    resizeKM();
+    vector<vector<size_t>> leaf_groups(num_nodes);
+    for (uint32_t observation : censoring_indices) {
+        // route directly through the fitted tree; forest-owned trees are allowed to discard prediction_node_IDs
+        leaf_groups[predictionLeafID(observation)].push_back(observation);
+    }
+
+    for (size_t node_id = 0; node_id < num_nodes; ++node_id) {
+        if (!leaf_groups[node_id].empty()) {
+            computeCensoringKMExternal(leaf_groups[node_id], node_id);
+        }
+    }
+
+    // once the leaf estimators exist, neither the bootstrap indices nor the event-to-censoring lookup is needed again
+    vector<uint32_t>().swap(censoring_indices);
+    vector<size_t>().swap(event_censoring_time_ids);
+    censoring_endpoint_ids.reset();
+    censoring_km_ready = true;
 }
 
 // splitting rules for multi-state trees
@@ -613,8 +705,8 @@ double MultistateTree::computeSplitValue(const vector<size_t>& num_jumps_daughte
 double MultistateTree::logRank(const vector<size_t>& num_jumps_daughter,
                                const vector<size_t>& num_at_risk_daughter) {
     double LR = 0;
-    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
-        const ValidJumpInfo& jump = valid_jumps[jump_id];
+    for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
+        const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
         double sum_num = 0;
         double sum_den = 0;
 
@@ -644,8 +736,8 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps_daughter,
 double MultistateTree::Gehan(const vector<size_t>& num_jumps_daughter,
                              const vector<size_t>& num_at_risk_daughter) {
     double G = 0;
-    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
-        const ValidJumpInfo& jump = valid_jumps[jump_id];
+    for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
+        const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
         double sum_num = 0;
         double sum_den = 0;
 
@@ -671,8 +763,8 @@ double MultistateTree::Gehan(const vector<size_t>& num_jumps_daughter,
 double MultistateTree::TaroneWare(const vector<size_t>& num_jumps_daughter,
                                   const vector<size_t>& num_at_risk_daughter) {
     double TW = 0;
-    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
-        const ValidJumpInfo& jump = valid_jumps[jump_id];
+    for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
+        const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
         double sum_num = 0;
         double sum_den = 0;
 
@@ -700,16 +792,12 @@ double MultistateTree::TaroneWare(const vector<size_t>& num_jumps_daughter,
 double MultistateTree::conserve(const vector<size_t>& num_jumps_daughter,
                                 const vector<size_t>& num_at_risk_daughter) {
     double cons = 0;
-    for (const ValidJumpInfo& jump : valid_jumps) {
+    for (const MultistateValidJumpInfo& jump : response_data->valid_jumps) {
         double NAsum1 = 0;
         double NAsum2 = 0;
         double sum1_jump = 0;
         double sum2_jump = 0;
 
-        /*
-          Keep the two cumulative Nelson--Aalen sums as scalars. The old implementation stored three full event-time
-          vectors for every candidate even though each value was consumed in order and never needed again.
-        */
         for (size_t t = 0; t + 1 < num_unique_event_times; ++t) {
             size_t matrix_index = t * dim + jump.matrix_index;
             size_t d1 = num_jumps_daughter[matrix_index];
@@ -745,8 +833,8 @@ double MultistateTree::conserve(const vector<size_t>& num_jumps_daughter,
 double MultistateTree::approxLogRank(const vector<size_t>& num_jumps_daughter,
                                      const vector<size_t>& num_at_risk_daughter) {
     double aLR = 0;
-    for (size_t jump_id = 0; jump_id < valid_jumps.size(); ++jump_id) {
-        const ValidJumpInfo& jump = valid_jumps[jump_id];
+    for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
+        const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
         double D1 = 0;
         double D = 0;
         double sum_num = 0;
@@ -816,7 +904,7 @@ vector<vector<double>> MultistateTree::computePredictions(bool compute_initial, 
 
     for (size_t i = 0; i < num_obs; ++i) {
         // route observations here as this method is also available to forest-owned trees, where prediction_node_IDs
-        // only contains IDs for the observations used by the tree
+        // is deliberately released after growing
         size_t leaf_id = new_data_provided ? predictionLeafID(new_data, i) : predictionLeafID(i);
         const vector<double>& pred = na[leaf_id];
         copy(pred.begin(), pred.end(), predictions.begin() + i * prediction_size);

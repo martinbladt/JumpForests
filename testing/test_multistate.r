@@ -169,16 +169,15 @@ veteran_tree <- jftree(Surv(time, status) ~ ., veteran, seed = 2026, min_node_si
 print_tree(veteran_tree_mm)
 print_tree(veteran_tree)
 
-veteran_tree_mm$ibs             # 57.33924
-veteran_tree$ibs                # 57.51201
-veteran_tree_mm$ibs.normalised  # 0.05739663
-veteran_tree$ibs.normalised     # 0.05756958
+veteran_tree_mm$ibs             # 54.68031
+veteran_tree$ibs                # 54.68031
+veteran_tree_mm$ibs.normalised  # 0.05473504
+veteran_tree$ibs.normalised     # 0.05473504
 
 # close enough
 
 # equals 999, the last event time (as it should)
-57.33924/0.05739663
-57.51201/0.05756958
+54.68031/0.05473504
 tail(veteran_tree_mm$unique.event.times)
 tail(veteran_tree$unique.event.times)
 
@@ -283,7 +282,7 @@ forest_mm <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(
 forest_survival <- jfforest(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = FALSE)
 forest_survival_src <- rfsrc(Surv(time, status) ~ ., data = sim_data)
 
-print_forest(forest_survival) # C-error: 0.4609178, IBS: 1.187464, normalised IBS: 0.05969983
+print_forest(forest_survival) # C-error: 0.4614591, IBS: 1.169282, normalised IBS: 0.06314606
 print_forest(forest_mm)       #                     IBS: 1.169299, normalised IBS: 0.06314699
 forest_survival_src           # C-error: 0.46226363, IBS: 1.20540655, normalised IBS: 0.06509696
 
@@ -333,39 +332,21 @@ jump_data <- lapply(seq_len(nrow(sim_data)), function(i) {
   }
 })
 
-tree_survival <- jftree(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = FALSE)                # why did I not implement multi-threading for prediction for survival trees?
-tree_mm <- jftree(MM ~ ., data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, honest = FALSE)   # much faster for large n
+tree_survival <- jftree(Surv(time, status) ~ ., data = sim_data, min_node_size = 15, honest = FALSE, seed = 2026)
+tree_mm <- jftree(MM ~ ., data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, honest = FALSE, seed = 2026)
 }
 print_tree(tree_mm)
-
-# n = 1000 (quite different)
-tree_survival$ibs             # 2.145489
-tree_survival$ibs.normalised  # 0.03764016
-tree_mm$ibs                   # 2.151347
-tree_mm$ibs.normalised        # 0.03774292
-
-# n = 10000 (more similar)
-tree_survival$ibs             # 2.218344
-tree_survival$ibs.normalised  # 0.0369724
-tree_mm$ibs                   # 2.210761
-tree_mm$ibs.normalised        # 0.03684602
-
-# n = 25000
-tree_survival$ibs             # 2.176473
-tree_survival$ibs.normalised  # 0.03688937
-tree_mm$ibs                   # 2.181924
-tree_mm$ibs.normalised        # 0.03698176
 
 # pretty much the same all around
 
 tree_mm$censoring[1,]
-tree_survival$censoring[1,]   # much lower
+tree_survival$censoring[1,]
 tree_mm$censoring[2,]
-tree_survival$censoring[2,]   # much lower
+tree_survival$censoring[2,]
 tree_mm$censoring[3,]
-tree_survival$censoring[3,]   # ditto
+tree_survival$censoring[3,] 
 
-tree_mm$init  # at least this makes sense
+tree_mm$init
 
 # testing predictions
 tree_mm$unique.event.times

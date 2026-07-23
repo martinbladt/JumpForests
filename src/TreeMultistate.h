@@ -3,11 +3,36 @@
 
 #include "Tree.h"
 
+/*
+  the compact response representation below depends only on the data and the common event-time grid. A single tree owns
+  one instance, while every tree in a forest can safely share the same immutable instance during parallel growing.
+*/
+struct MultistateValidJumpInfo {
+  size_t from_state;
+  size_t to_state;
+  size_t matrix_index;
+};
+
+struct MultistateResponseData {
+  vector<uint8_t> initial_state_ids;                    // zero-indexed initial state for every observation
+  vector<size_t> transition_offsets;                    // offsets into transition_ids, with one final end position
+  vector<size_t> transition_ids;                        // flattened event-time and transition-matrix indices
+  vector<size_t> censoring_risk_ids;                    // flattened event-time and state index, or the risk-array size
+  vector<MultistateValidJumpInfo> valid_jumps;          // valid transitions with zero-indexed and flattened indices
+  vector<size_t> feature_indices;                       // the feature IDs sampled repeatedly while growing
+};
+
+shared_ptr<const MultistateResponseData> prepareMultistateResponseData(
+  const Data& data, const vector<size_t>& response_event_time_ids,
+  size_t num_unique_event_times, size_t num_states);
+
 class MultistateTree : public Tree {
 public:
   MultistateTree(shared_ptr<vector<double>> unique_event_times, shared_ptr<vector<size_t>> response_event_time_ids,
-            const vector<size_t>& subset_indices, uint8_t num_states, bool save_predictions,
-            const vector<size_t>& estimation_indices = {}, shared_ptr<vector<double>> censoring_times = nullptr);
+            vector<size_t> subset_indices, uint8_t num_states, bool save_predictions,
+            vector<size_t> estimation_indices = {}, shared_ptr<vector<double>> censoring_times = nullptr,
+            shared_ptr<const MultistateResponseData> response_data = nullptr,
+            shared_ptr<const vector<size_t>> censoring_endpoint_ids = nullptr);
 
   const vector<double>& getEventTimes() const {
     return *unique_event_times;
@@ -50,10 +75,17 @@ public:
 
   // when the censoring Kaplan-Meier estimators have to be populated after fitting
   void resizeKM() {
-    KM_censoring.assign(num_nodes, vector<double>());
     KM_censoring_full.assign(num_nodes, vector<double>());
+    if (!forest_tree) {
+      KM_censoring.assign(num_nodes, vector<double>());
+    }
   }
   void computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index);
+  void computeCensoringKMLazy();
+  void releasePredictionNodeIDs() {
+    // forest predictions route observations directly, so retaining one node ID per observation and tree is unnecessary
+    vector<size_t>().swap(prediction_node_IDs);
+  }
 private:
   shared_ptr<vector<double>> unique_event_times;        // vector of ordered unique event times across (pooled across all jumps)
   size_t num_unique_event_times;                        // number of unique event times
@@ -68,26 +100,18 @@ private:
   vector<vector<double>> KM_censoring;                  // the Kaplan-Meier estimate at the unique_event_times for the censoring distribution 
   vector<vector<double>> KM_censoring_full;             // the Kaplan-Meier estimate at the censoring_times for the censoring distribution
   vector<vector<double>> init_dist;                     // estimated initial distribution in each node
+  vector<uint32_t> censoring_indices;                   // compact estimation sample retained for lazy forest censoring
+  bool forest_tree;                                     // forest predictions route rows and do not retain one leaf ID per row
+  bool censoring_km_ready = false;                      // prevents an empty retained sample from looking like completed work
 
   /*
-    the following information is computed once before growing the tree. A response path is then represented by its
-    initial state, a range in transition_ids and at most one censoring entry. This avoids scanning the padded response
-    arrays again for every node, feature and split point.
+    a response path is represented by its initial state, a range in transition_ids and at most one censoring entry.
+    Forest-owned trees share these immutable values instead of constructing one complete copy for every tree.
   */
-  struct ValidJumpInfo {
-    size_t from_state;
-    size_t to_state;
-    size_t matrix_index;
-  };
-  vector<uint8_t> initial_state_ids;              // zero-indexed initial state for every observation
-  vector<size_t> transition_offsets;              // offsets into transition_ids (one additional entry marks the final end)
-                                                  // example: 0: 2 jumps, 1: 1 jump, 2: 0 jumps, 3: 2 jumps: transition_offsets = {0, 2, 3, 3, 5}
-  vector<size_t> transition_ids;                  // flattened event-time and transition-matrix indices
-  vector<size_t> censoring_risk_ids;              // flattened event-time and state index, or the risk-array size if uncensored
-  vector<size_t> event_censoring_time_ids;        // maps event times to the corresponding position in the censoring grid
-  vector<ValidJumpInfo> valid_jumps;              // valid transitions with zero-indexed and flattened indices
-  vector<vector<size_t>> jump_event_time_ids;     // parent-node times with a nonzero count for each valid transition
-  vector<size_t> feature_indices;                 // feature indices sampled repeatedly while growing the tree
+  shared_ptr<const MultistateResponseData> response_data;
+  vector<size_t> event_censoring_time_ids;                  // maps event times to the corresponding position in the censoring grid
+  shared_ptr<const vector<size_t>> censoring_endpoint_ids;  // forest-shared endpoint positions in the censoring grid
+  vector<vector<size_t>> jump_event_time_ids;               // parent-node times with a nonzero count for each valid transition
   bool multistate_data_prepared = false;
 
   // temporary quantities used in growing multi-state trees
@@ -110,11 +134,10 @@ private:
   // growing multi-state trees
   void reserveTreeMemory(size_t num_obs);                         // reserves the vectors which receive one entry per tree node
   void prepareMultistateData();                                   // constructs the compact response representation above
-  void addObservationToQuantities(size_t observation, vector<size_t>& jumps, vector<size_t>& at_risk,
-                                  vector<size_t>& censored);      // adds one response path to a set of sufficient statistics
+  void addObservationToQuantities(size_t observation, vector<size_t>& jumps, vector<size_t>& at_risk, vector<size_t>& censored);  // adds one response path to a set of sufficient statistics
   void materialiseAtRisk(const vector<size_t>& jumps, const vector<size_t>& censored, vector<size_t>& at_risk);
   void prepareJumpEventTimeIDs();                                 // skips empty event times while scoring candidate splits
-  void computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& jumps, vector<size_t>& at_risk); // computes the number at risk and the number of jumps at the unique_event_times
+  void computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& jumps, vector<size_t>& at_risk);                // computes the number at risk and the number of jumps at the unique_event_times
   void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
   bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
   void computeInitialDist(size_t node_index);                     // computes the initial distribution in a terminal node
@@ -142,14 +165,13 @@ private:
     vector<size_t>().swap(num_jumps_daughter);
     vector<size_t>().swap(num_at_risk_daughter);
     vector<size_t>().swap(current_num_at_risk);
-    vector<uint8_t>().swap(initial_state_ids);
-    vector<size_t>().swap(transition_offsets);
-    vector<size_t>().swap(transition_ids);
-    vector<size_t>().swap(censoring_risk_ids);
-    vector<ValidJumpInfo>().swap(valid_jumps);
+    response_data.reset();
     vector<vector<size_t>>().swap(jump_event_time_ids);
-    vector<size_t>().swap(feature_indices);
     response_event_time_ids.reset();
+    if (save_predictions) {
+      censoring_km_ready = true;
+      censoring_endpoint_ids.reset();
+    }
 
     // the vectors below remain part of the fitted tree, but their spare capacity is no longer needed after growing
     left_daughters.shrink_to_fit();
