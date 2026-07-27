@@ -8,6 +8,33 @@ Functions for multi-state trees
 #include "TreeSurvival.h"
 #include <cmath>
 
+namespace {
+
+/*
+  Fleming--Harrington statistics are unchanged when all weights for one transition are multiplied by a common
+  positive constant. Work on the log scale and normalise the largest usable weight to one. This avoids losing an
+  otherwise valid statistic when large exponents make every raw pow() result underflow to zero.
+*/
+long double flemingHarringtonLogWeight(double occupation_probability, double a, double b) {
+    long double probability = static_cast<long double>(occupation_probability);
+    long double log_weight = 0;
+    if (a > 0) {
+        if (probability <= 0) {
+            return -numeric_limits<long double>::infinity();
+        }
+        log_weight += static_cast<long double>(a) * log(probability);
+    }
+    if (b > 0) {
+        if (probability >= 1) {
+            return -numeric_limits<long double>::infinity();
+        }
+        log_weight += static_cast<long double>(b) * log1p(-probability);
+    }
+    return log_weight;
+}
+
+}
+
 
 // constructor for MultistateTree
 //--------------------------------------------------------------------------------------
@@ -17,10 +44,14 @@ MultistateTree::MultistateTree(shared_ptr<vector<double>> unique_event_times, sh
                                vector<size_t> subset_indices, uint8_t num_states, bool save_predictions,
                                vector<size_t> estimation_indices, shared_ptr<vector<double>> censoring_times,
                                shared_ptr<const MultistateResponseData> response_data,
-                               shared_ptr<const vector<size_t>> censoring_endpoint_ids) :
+                               shared_ptr<const vector<size_t>> censoring_endpoint_ids,
+                               shared_ptr<const vector<double>> fh_weights_a,
+                               shared_ptr<const vector<double>> fh_weights_b) :
     unique_event_times {unique_event_times}, response_event_time_ids {response_event_time_ids}, num_states {num_states},
     dim {static_cast<size_t>(num_states) * num_states}, save_predictions {save_predictions},
-    forest_tree {response_data != nullptr}, response_data {std::move(response_data)},
+    forest_tree {response_data != nullptr},
+    fh_weights_a {std::move(fh_weights_a)}, fh_weights_b {std::move(fh_weights_b)},
+    response_data {std::move(response_data)},
     censoring_endpoint_ids {std::move(censoring_endpoint_ids)} {
     this->node_obs.push_back(std::move(subset_indices));
     this->holdout_node_obs.push_back(std::move(estimation_indices));
@@ -183,8 +214,25 @@ void MultistateTree::prepareMultistateData() {
         splitrule_id = MultistateSplitRule::ApproxLogRank;
     } else if (splitrule == "petoprentice") {
         splitrule_id = MultistateSplitRule::PetoPrentice;
+    } else if (splitrule == "flemingharrington") {
+        splitrule_id = MultistateSplitRule::FlemingHarrington;
     } else {
         splitrule_id = MultistateSplitRule::LogRank;
+    }
+
+    if (splitrule_id == MultistateSplitRule::FlemingHarrington) {
+        if (fh_weights_a == nullptr || fh_weights_b == nullptr ||
+            fh_weights_a->size() != num_states || fh_weights_b->size() != num_states) {
+            throw runtime_error(
+              "Fleming--Harrington exponents must contain one value per state");
+        }
+        for (size_t j = 0; j < num_states; ++j) {
+            if (!isfinite((*fh_weights_a)[j]) || (*fh_weights_a)[j] < 0 ||
+                !isfinite((*fh_weights_b)[j]) || (*fh_weights_b)[j] < 0) {
+                throw runtime_error(
+                  "Fleming--Harrington exponents must contain finite non-negative values");
+            }
+        }
     }
     multistate_data_prepared = true;
 }
@@ -484,7 +532,8 @@ bool MultistateTree::createSplit(size_t node_index) {
 
     computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);   // update parent multi-state info
     prepareJumpEventTimeIDs();                                               // empty event times cannot affect most split rules
-    if (splitrule_id == MultistateSplitRule::PetoPrentice) {
+    // the Peto-Prentice and Fleming-Harrington splitting rules both need occupation probabilities to be computed
+    if (splitrule_id == MultistateSplitRule::PetoPrentice || splitrule_id == MultistateSplitRule::FlemingHarrington) {
         prepareSplitOccupationProbabilities();
     }
 
@@ -747,6 +796,8 @@ double MultistateTree::computeSplitValue(const vector<size_t>& num_jumps_daughte
             return approxLogRank(num_jumps_daughter, num_at_risk_daughter);
         case MultistateSplitRule::PetoPrentice:
             return petoPrentice(num_jumps_daughter, num_at_risk_daughter);
+        case MultistateSplitRule::FlemingHarrington:
+            return flemingHarrington(num_jumps_daughter, num_at_risk_daughter);
     }
     return -1;
 }
@@ -933,6 +984,63 @@ double MultistateTree::petoPrentice(const vector<size_t>& num_jumps_daughter, co
 
     PP = abs(PP);
     return PP > 0 ? PP : -1;
+}
+
+double MultistateTree::flemingHarrington(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter) {
+    long double FH = 0;
+    for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
+        const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
+        long double max_log_weight = -numeric_limits<long double>::infinity();
+
+        // Find a transition-specific scale without computing potentially underflowing raw weights.
+        for (size_t t : jump_event_time_ids[jump_id]) {
+            const double d = static_cast<double>(num_jumps[t * dim + jump.matrix_index]);
+            const double Y = static_cast<double>(num_at_risk[t * num_states + jump.from_state]);
+            const double Y1 = static_cast<double>(num_at_risk_daughter[t * num_states + jump.from_state]);
+            if (Y < 2 || Y1 < 1 || Y1 >= Y || d >= Y) {
+                continue;
+            }
+
+            const double occupation_probability = clamp(parent_occupation_probs[t * num_states + jump.from_state], 0.0, 1.0);
+            const long double log_weight = flemingHarringtonLogWeight(occupation_probability, (*fh_weights_a)[jump.from_state], (*fh_weights_b)[jump.from_state]);
+            max_log_weight = max(max_log_weight, log_weight);
+        }
+        if (!isfinite(max_log_weight)) {
+            continue;
+        }
+
+        long double sum_num = 0;
+        long double sum_den = 0;
+        for (size_t t : jump_event_time_ids[jump_id]) {
+            const double d = static_cast<double>(num_jumps[t * dim + jump.matrix_index]);
+            const double d1 = static_cast<double>(num_jumps_daughter[t * dim + jump.matrix_index]);
+            const double Y = static_cast<double>(num_at_risk[t * num_states + jump.from_state]);
+            const double Y1 = static_cast<double>(num_at_risk_daughter[t * num_states + jump.from_state]);
+            if (Y < 2 || Y1 < 1 || Y1 >= Y || d >= Y) {
+                continue;
+            }
+
+            const double occupation_probability = clamp(parent_occupation_probs[t * num_states + jump.from_state], 0.0, 1.0);
+            const long double log_weight = flemingHarringtonLogWeight(occupation_probability, (*fh_weights_a)[jump.from_state], (*fh_weights_b)[jump.from_state]);
+            if (!isfinite(log_weight)) {
+                continue;
+            }
+            const long double weight = exp(log_weight - max_log_weight);
+            const long double at_risk_frac = static_cast<long double>(Y1 / Y);
+            sum_num += weight * (d1 - d * at_risk_frac);
+            sum_den += weight * weight * d * at_risk_frac * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
+        }
+
+        if (sum_den > 0) {
+            FH += sum_num / sqrt(sum_den);
+        }
+    }
+
+    FH = abs(FH);
+    if (!isfinite(FH) || FH <= 0) {
+        return -1;
+    }
+    return static_cast<double>(FH);
 }
 
 // prediction for multi-state trees

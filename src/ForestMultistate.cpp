@@ -97,10 +97,14 @@ vector<uint8_t> observedStateIDsVIMP(const Data& data, const vector<size_t>& res
 
 // constructor for multi-state forests
 //--------------------------------------------------------------------------------------
-MultistateForest::MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, uint8_t num_states, bool save_predictions) : 
+MultistateForest::MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
+                                   uint8_t num_states, bool save_predictions,
+                                   shared_ptr<const vector<double>> fh_weights_a,
+                                   shared_ptr<const vector<double>> fh_weights_b) :
     save_predictions {save_predictions}, unique_event_times {unique_event_times},
     response_event_time_ids {response_event_time_ids}, num_unique_event_times {unique_event_times.size()},
-    num_states {num_states}, dim {static_cast<size_t>(num_states) * num_states} {}
+    num_states {num_states}, dim {static_cast<size_t>(num_states) * num_states},
+    fh_weights_a {std::move(fh_weights_a)}, fh_weights_b {std::move(fh_weights_b)} {}
 
 // functions for growing multi-state forests
 //--------------------------------------------------------------------------------------
@@ -198,7 +202,7 @@ void MultistateForest::grow() {
             tree = make_unique<MultistateTree>(
                 unique_event_times, nullptr, std::move(bootstrap_indices), num_states,
                 save_predictions, vector<size_t>(), censoring_times, response_data,
-                censoring_endpoint_ids);
+                censoring_endpoint_ids, fh_weights_a, fh_weights_b);
         } 
         // for honest trees, we differ between double and single bootstrap
         else {
@@ -213,7 +217,7 @@ void MultistateForest::grow() {
                 tree = make_unique<MultistateTree>(
                     unique_event_times, nullptr, std::move(grow), num_states,
                     save_predictions, std::move(holdout), censoring_times, response_data,
-                    censoring_endpoint_ids);
+                    censoring_endpoint_ids, fh_weights_a, fh_weights_b);
 
             } else {
                 // if no double bootstrap, bootstrap the whole dataset and then split
@@ -223,7 +227,7 @@ void MultistateForest::grow() {
                 tree = make_unique<MultistateTree>(
                     unique_event_times, nullptr, std::move(partition.first), num_states,
                     save_predictions, std::move(partition.second), censoring_times, response_data,
-                    censoring_endpoint_ids);
+                    censoring_endpoint_ids, fh_weights_a, fh_weights_b);
             }
         }
 

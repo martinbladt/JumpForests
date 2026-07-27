@@ -32,7 +32,9 @@ public:
             vector<size_t> subset_indices, uint8_t num_states, bool save_predictions,
             vector<size_t> estimation_indices = {}, shared_ptr<vector<double>> censoring_times = nullptr,
             shared_ptr<const MultistateResponseData> response_data = nullptr,
-            shared_ptr<const vector<size_t>> censoring_endpoint_ids = nullptr);
+            shared_ptr<const vector<size_t>> censoring_endpoint_ids = nullptr,
+            shared_ptr<const vector<double>> fh_weights_a = nullptr,
+            shared_ptr<const vector<double>> fh_weights_b = nullptr);
 
   const vector<double>& getEventTimes() const {
     return *unique_event_times;
@@ -104,6 +106,10 @@ private:
   bool forest_tree;                                     // forest predictions route rows and do not retain one leaf ID per row
   bool censoring_km_ready = false;                      // prevents an empty retained sample from looking like completed work
 
+  // source-state-specific exponents for the Fleming--Harrington splitting rule
+  shared_ptr<const vector<double>> fh_weights_a;
+  shared_ptr<const vector<double>> fh_weights_b;
+
   /*
     a response path is represented by its initial state, a range in transition_ids and at most one censoring entry.
     Forest-owned trees share these immutable values instead of constructing one complete copy for every tree.
@@ -121,7 +127,7 @@ private:
   vector<size_t> num_jumps_daughter;              // reusable jump counts for one possible daughter node
   vector<size_t> num_at_risk_daughter;            // reusable at-risk counts for one possible daughter node
   vector<size_t> current_num_at_risk;             // rolling state counts used when materialising an at-risk array
-  vector<double> parent_occupation_probs;  // pooled parent-node occupation probabilities used by Peto--Prentice
+  vector<double> parent_occupation_probs;         // pooled parent-node occupation probabilities used by weighted rules
 
   enum class MultistateSplitRule : uint8_t {
     LogRank,
@@ -129,7 +135,8 @@ private:
     TaroneWare,
     Conserve,
     ApproxLogRank,
-    PetoPrentice
+    PetoPrentice,
+    FlemingHarrington
   };
   MultistateSplitRule splitrule_id = MultistateSplitRule::LogRank;
 
@@ -158,6 +165,7 @@ private:
   double conserve(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter);
   double approxLogRank(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter);
   double petoPrentice(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter);
+  double flemingHarrington(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter);
 
   // frees memory from temporary quantities used in growing the tree
   void cleanUpTree() override {

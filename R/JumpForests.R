@@ -15,14 +15,23 @@
 #' @param seed Optional random seed.
 #' @param num_event_times Maximum number of event times to use (only relevant for survival and multi-states)
 #' @param state_weights Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)
+#' @param fh_weights_a Optional finite non-negative Fleming--Harrington
+#'   a-exponents, one for each state `1, ..., num_states`. `NULL` uses one for
+#'   every state. Only valid for multi-state trees with
+#'   `splitrule = "flemingharrington"`.
+#' @param fh_weights_b Optional finite non-negative Fleming--Harrington
+#'   b-exponents, with the same ordering and default as `fh_weights_a`.
 #'
 #' @return A fitted tree object as a list.
 #' @export
 #'
 # the main function for fitting trees (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
 jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
-                   honest = FALSE, seed = NULL, num_event_times = 0, state_weights = NULL) {
+                   honest = FALSE, seed = NULL, num_event_times = 0, state_weights = NULL, fh_weights_a = NULL, fh_weights_b = NULL) {
   lhs <- as.character(formula[[2]])
+  if (lhs[1] != "MM" && (!is.null(fh_weights_a) || !is.null(fh_weights_b))) {
+    stop("fh_weights_a and fh_weights_b are only valid for multi-state models")
+  }
   # if seed is not set, generate a random one
   if (is.null(seed)) {
     seed <- runif(n = 1, min = 1, max = 10^6)
@@ -166,12 +175,14 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
     if (is.null(state_weights)) {
       state_weights <- numeric(0)
     }
+    fh_weights_a <- normalize_fh_weights(fh_weights_a, "fh_weights_a")
+    fh_weights_b <- normalize_fh_weights(fh_weights_b, "fh_weights_b")
 
     # data here is jump data, a list of lists, each containing a vector 'times' and a vector 'states'
     result <- JFCppTreeMultistate(data, max_response_length, num_states, processed_data$data,
                           mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
                           processed_data$categorical, processed_data$unique_values, seed,
-                          state_weights, num_event_times)
+                          state_weights, num_event_times, fh_weights_a, fh_weights_b)
     result$categorical.levels <- processed_data$categorical_levels
     return(result)
 
@@ -337,6 +348,12 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 #' @param nworkers Number of worker threads.
 #' @param save_predictions Logical, whether to compute and store in-sample/OOB predictions at fit time for multi-state forests.
 #' @param num_event_times Maximum number of event times to use (only relevant for survival and multi-states)
+#' @param fh_weights_a Optional finite non-negative Fleming--Harrington
+#'   a-exponents, one for each state `1, ..., num_states`. `NULL` uses one for
+#'   every state. Only valid for multi-state forests with
+#'   `splitrule = "flemingharrington"`.
+#' @param fh_weights_b Optional finite non-negative Fleming--Harrington
+#'   b-exponents, with the same ordering and default as `fh_weights_a`.
 #'
 #' @return A fitted forest object as a list.
 #' @export
@@ -344,8 +361,11 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 # the main function for fitting forests (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
 jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
                      ntrees = NULL, honest = FALSE, swr = FALSE, sample_rate = NULL, double_bootstrap = FALSE, 
-                     seed = NULL, nworkers = 0, save_predictions = TRUE, num_event_times = 0) {
+                     seed = NULL, nworkers = 0, save_predictions = TRUE, num_event_times = 0, fh_weights_a = NULL, fh_weights_b = NULL) {
   lhs <- as.character(formula[[2]])
+  if (lhs[1] != "MM" && (!is.null(fh_weights_a) || !is.null(fh_weights_b))) {
+    stop("fh_weights_a and fh_weights_b are only valid for multi-state models")
+  }
 
   # if seed is not set, generate a random one
   if (is.null(seed)) {
@@ -522,17 +542,29 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     # determine number of states and max_response_length
     max_response_length <- max(sapply(data, function(e) length(e$states)))
     num_states <- length(unique(unlist(lapply(data, '[[', "states"))))
+    fh_weights_a <- normalize_fh_weights(fh_weights_a, "fh_weights_a")
+    fh_weights_b <- normalize_fh_weights(fh_weights_b, "fh_weights_b")
 
     result <- JFCppForestMultistate(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
                             nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, 
                             processed_data$categorical, processed_data$unique_values, seed, nworkers, save_predictions, 
-                            num_event_times)
+                            num_event_times, fh_weights_a, fh_weights_b)
     result$categorical.levels <- processed_data$categorical_levels
     return(result)
 
   } else {
     stop("Type of tree not recognised from the formula.")
   }
+}
+
+normalize_fh_weights <- function(weights, argument_name) {
+  if (is.null(weights)) {
+    return(numeric(0))
+  }
+  if (!is.numeric(weights) || !is.null(dim(weights))) {
+    stop(argument_name, " must be a numeric vector")
+  }
+  as.numeric(weights)
 }
 
 #' Predict from a fitted forest

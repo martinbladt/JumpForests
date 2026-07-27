@@ -15,7 +15,9 @@ jftree(
   honest = FALSE,
   seed = NULL,
   num_event_times = 0,
-  state_weights = NULL
+  state_weights = NULL,
+  fh_weights_a = NULL,
+  fh_weights_b = NULL
 )
 }
 \arguments{
@@ -40,6 +42,14 @@ jftree(
 \item{num_event_times}{Maximum number of event times to use (only relevant for survival and multi-states)}
 
 \item{state_weights}{Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)}
+
+\item{fh_weights_a}{Optional finite non-negative Fleming--Harrington
+a-exponents, one for each state `1, ..., num_states`. `NULL` uses one for
+every state. Only valid for multi-state trees with
+`splitrule = "flemingharrington"`.}
+
+\item{fh_weights_b}{Optional finite non-negative Fleming--Harrington
+b-exponents, with the same ordering and default as `fh_weights_a`.}
 }
 \value{
 A fitted tree object as a list.

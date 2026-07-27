@@ -110,7 +110,7 @@ occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]])
 lapply(fitted_tree$init, function(z) sum(z))
 lapply(occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]]), function(z) sum(z))
 
-# fit the forest (takes a couple of minutes when also saving predictions)
+# fit the forest
 fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 20, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)
 print_forest(fitted_forest)
 
@@ -142,6 +142,16 @@ unlist(jfforest.vimp(fitted_forest, method = "random", loss = "brier")$vimp)
 unlist(jfforest.vimp(fitted_forest, method = "random", loss = "kl")$vimp)
 
 # can't really distinguish, it seems, should compare to the survival implementation below
+
+# testing Fleming-Harrington splitting rule
+print_forest(jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, min_node_size = 20, splitrule = "flemingharrington", fh_weights_a = c(1,100,1), fh_weights_b = c(1,100,1), seed = 2026))
+
+# a = c(1,1,1), b = c(1,1,1): normalised IBS = 0.1254858, normalised IKL = 0.680297
+# a = c(1,1,0), b = c(1,1,0): normalised IBS = 0.1254858, normalised IKL = 0.680297 # same forest as previous one as it should be
+# a = c(10,1,1), b = c(10,1,1): normalised IBS = 0.12496, normalised IKL = 0.6794992
+# a = c(1,10,1), b = c(1,10,1): normalised IBS = 0.1245474, normalised IKL = 0.6756119
+# a = c(100,1,1), b = c(100,1,1): normalised IBS = 0.124395, normalised IKL = 0.6764558
+# a = c(1,100,1), b = c(1,100,1): normalised IBS = 0.1241147, normalised IKL = 0.6729722
 
 # testing the error metrics on a survival data set (veteran)
 #-------------------------------------------------------------------------------------------------
@@ -294,14 +304,27 @@ forest_approxlogrank <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = 
 jfforest.error(forest_approxlogrank)  # normalised IBS: 0.0629639, normalised IKL: 0.2069183
 forest_petoprentice <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, seed = 2026, splitrule = "petoprentice")
 jfforest.error(forest_petoprentice)  # normalised IBS: 0.06360719, normalised IKL: 0.2085639
+forest_flemingharrington <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, seed = 2026, splitrule = "flemingharrington")
+jfforest.error(forest_flemingharrington)  # normalised IBS: 0.06312277, normalised IKL: 0.207217
 
 # approxlogrank seems to be the winner by a very small margin
 
 print_forest(forest_approxlogrank)
 print_forest(forest_petoprentice)
+print_forest(forest_flemingharrington)
 
 rm('forest_logrank', 'forest_gehan', 'forest_taroneware', 'forest_approxlogrank', 'forest_petoprentice')
 gc()
+
+# test a few different options for the Fleming-Harrington splitting rule
+print_forest(jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, seed = 2026, 
+         splitrule = "flemingharrington", fh_weights_a = c(1,0), fh_weights_b = c(1,0)))
+print_forest(jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, seed = 2026, 
+         splitrule = "flemingharrington", fh_weights_a = c(0,0), fh_weights_b = c(0,0)))
+print_forest(forest_logrank)
+# these should be exactly the same and they are
+
+# a = (1,0), b = (1,0): normalised IBS: 0.06312277, normalised IKL: 0.207217
 
 # Study 2: Comparison to survival data for distributions with ties and categorical features
 #-------------------------------------------------------------------------------------------------

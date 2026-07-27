@@ -6,7 +6,10 @@
 
 class MultistateForest : public Forest {
 public:
-  MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids, uint8_t num_states, bool save_predictions);
+  MultistateForest(const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
+                   uint8_t num_states, bool save_predictions,
+                   shared_ptr<const vector<double>> fh_weights_a = nullptr,
+                   shared_ptr<const vector<double>> fh_weights_b = nullptr);
 
   // grows a multi-state forest with multi-threading
   void grow();
@@ -58,6 +61,8 @@ private:
   size_t dim;                                   // number of entries in one num_states x num_states matrix
   shared_ptr<vector<double>> censoring_times;   // common censoring grid shared by all trees
   vector<size_t> event_censoring_time_ids;      // common event-grid positions in the full censoring grid
+  shared_ptr<const vector<double>> fh_weights_a; // source-state-specific Fleming--Harrington a-exponents
+  shared_ptr<const vector<double>> fh_weights_b; // source-state-specific Fleming--Harrington b-exponents
 
   // lazily populated, response- and tree-level quantities shared by every
   // feature-specific VIMP computation

@@ -41,6 +41,61 @@ MultistateScoreWeights multistateScoreWeights(const NumericVector& state_weights
   return {state_weights_cpp, state_weights_cpp};
 }
 
+struct FlemingHarringtonWeights {
+  shared_ptr<const vector<double>> a;
+  shared_ptr<const vector<double>> b;
+};
+
+vector<double> validateFlemingHarringtonExponents(const NumericVector& values, size_t num_states,
+                                                  const string& argument_name) {
+  if (values.size() == 0) {
+    return vector<double>(num_states, 1.0);
+  }
+  if (static_cast<size_t>(values.size()) != num_states) {
+    throw runtime_error(
+      argument_name + " must have length " + to_string(num_states) +
+      " (one exponent per state); got " + to_string(values.size()));
+  }
+
+  vector<double> result = as<vector<double>>(values);
+  for (size_t i = 0; i < result.size(); ++i) {
+    if (!R_finite(result[i]) || result[i] < 0) {
+      throw runtime_error(
+        argument_name + "[" + to_string(i + 1) + "] must be finite and non-negative");
+    }
+  }
+  return result;
+}
+
+FlemingHarringtonWeights flemingHarringtonWeights(
+    const string& splitrule, const NumericVector& weights_a, const NumericVector& weights_b,
+    size_t num_states) {
+  if (splitrule != "flemingharrington") {
+    if (weights_a.size() != 0 || weights_b.size() != 0) {
+      throw runtime_error(
+        "fh_weights_a and fh_weights_b may only be supplied when "
+        "splitrule = \"flemingharrington\"");
+    }
+    return {};
+  }
+
+  return {
+    make_shared<const vector<double>>(
+      validateFlemingHarringtonExponents(weights_a, num_states, "fh_weights_a")),
+    make_shared<const vector<double>>(
+      validateFlemingHarringtonExponents(weights_b, num_states, "fh_weights_b"))
+  };
+}
+
+void saveFlemingHarringtonMetadata(List& result, const FlemingHarringtonWeights& weights) {
+  if (weights.a == nullptr || weights.b == nullptr) {
+    return;
+  }
+
+  result["fh.weights.a"] = wrap(*weights.a);
+  result["fh.weights.b"] = wrap(*weights.b);
+}
+
 }
 
 /*
@@ -259,7 +314,7 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
 // [[Rcpp::export]]
 List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
                  unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
-                 unsigned int seed, NumericVector state_weights, size_t num_event_times) {
+                 unsigned int seed, NumericVector state_weights, size_t num_event_times, NumericVector fh_weights_a, NumericVector fh_weights_b) {
 
   // convert the input to C++ vectors
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -304,18 +359,26 @@ List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t nu
   shared_ptr<vector<double>> censoring_times_ptr = make_shared<vector<double>>(censoring_times);
 
   // check validity of splitrule argument
-  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank", "petoprentice"};
+  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank", "petoprentice", "flemingharrington"};
   if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-    throw runtime_error("Invalid splitrule, please choose between logrank, gehan, taroneware, conserve, approxlogrank or petoprentice");
+    throw runtime_error("Invalid splitrule, please choose between logrank, gehan, taroneware, conserve, approxlogrank, petoprentice or flemingharrington");
   }
+
+  FlemingHarringtonWeights fh_weights = flemingHarringtonWeights(
+    splitrule_cpp, fh_weights_a, fh_weights_b, num_states);
+  saveFlemingHarringtonMetadata(result, fh_weights);
 
   MultistateTree* tree;
   if (!honest) {
-    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp, num_states, true, {}, censoring_times_ptr);
+    tree = new MultistateTree(
+      unique_event_times_ptr, response_event_time_ids_ptr, subset_indices_cpp, num_states,
+      true, {}, censoring_times_ptr, nullptr, nullptr, fh_weights.a, fh_weights.b);
   } else {
     mt19937 rng(seed + 1);
     pair<vector<size_t>, vector<size_t>> partition = partitionHonesty(subset_indices_cpp, rng);
-    tree = new MultistateTree(unique_event_times_ptr, response_event_time_ids_ptr, partition.first, num_states, true, partition.second, censoring_times_ptr);
+    tree = new MultistateTree(
+      unique_event_times_ptr, response_event_time_ids_ptr, partition.first, num_states,
+      true, partition.second, censoring_times_ptr, nullptr, nullptr, fh_weights.a, fh_weights.b);
     tree->setRNG(rng);
   }
 
@@ -1084,7 +1147,8 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 // [[Rcpp::export]]
 List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
   unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, 
-  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times = 0) {
+  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times, NumericVector fh_weights_a,
+  NumericVector fh_weights_b) {
   
   // convert the input to C++ vectors
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -1123,13 +1187,19 @@ List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t 
     unique_event_times, data->getTimes(), data->getStates(), data->getMaxResponseLength());
 
   // check validity of splitrule argument
-  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank", "petoprentice"};
+  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank", "petoprentice", "flemingharrington"};
   if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-    throw runtime_error("Invalid splitrule, please choose between logrank, gehan, taroneware, conserve, approxlogrank or petoprentice");
+    throw runtime_error("Invalid splitrule, please choose between logrank, gehan, taroneware, conserve, approxlogrank, petoprentice or flemingharrington");
   }
 
+  FlemingHarringtonWeights fh_weights = flemingHarringtonWeights(
+    splitrule_cpp, fh_weights_a, fh_weights_b, num_states);
+  saveFlemingHarringtonMetadata(result, fh_weights);
+
   // create and grow the multi-state forest
-  MultistateForest* forest = new MultistateForest(unique_event_times, response_event_time_ids, data->getNumberOfStates(), save_predictions);
+  MultistateForest* forest = new MultistateForest(
+    unique_event_times, response_event_time_ids, data->getNumberOfStates(),
+    save_predictions, fh_weights.a, fh_weights.b);
   forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, double_bootstrap, seed, nworkers);
   forest->grow();
 
