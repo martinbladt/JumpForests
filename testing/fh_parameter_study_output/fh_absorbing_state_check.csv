@@ -1,0 +1,3 @@
+"check","baseline_value","comparison_value","passed"
+"absorbing-state a3 is inert",1,100,TRUE
+"absorbing-state b3 is inert",1,100,TRUE

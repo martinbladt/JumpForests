@@ -1,0 +1,13 @@
+List of 12
+ $ quick              : logi FALSE
+ $ replications       : int 30
+ $ n_train            : int 1000
+ $ n_test             : int 2000
+ $ min_node_size      : int 20
+ $ nsplits            : int 50
+ $ honest             : logi FALSE
+ $ base_seed          : int 2026
+ $ run_forests        : logi FALSE
+ $ forest_replications: int 5
+ $ ntrees             : int 100
+ $ output_directory   : chr "/home/rasmusfl/Documents/GitHub/JumpForests/testing/fh_parameter_study_output"
