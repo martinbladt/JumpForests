@@ -304,9 +304,9 @@ List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t nu
   shared_ptr<vector<double>> censoring_times_ptr = make_shared<vector<double>>(censoring_times);
 
   // check validity of splitrule argument
-  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank"};
+  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank", "petoprentice"};
   if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-    throw runtime_error("Invalid splitrule, please choose between logrank, gehan, taroneware or approxlogrank");
+    throw runtime_error("Invalid splitrule, please choose between logrank, gehan, taroneware, conserve, approxlogrank or petoprentice");
   }
 
   MultistateTree* tree;
@@ -1122,10 +1122,10 @@ List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t 
   vector<size_t> response_event_time_ids = computeResponseEventTimeIDsMultistate(
     unique_event_times, data->getTimes(), data->getStates(), data->getMaxResponseLength());
 
-  // check validity of splitrule argument (just logrank for now)
-  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank"};
+  // check validity of splitrule argument
+  vector<string> valid_splitrules = {"logrank", "gehan", "taroneware", "conserve", "approxlogrank", "petoprentice"};
   if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-    throw runtime_error("Invalid splitrule, please choose between logrank, gehan or taroneware");
+    throw runtime_error("Invalid splitrule, please choose between logrank, gehan, taroneware, conserve, approxlogrank or petoprentice");
   }
 
   // create and grow the multi-state forest

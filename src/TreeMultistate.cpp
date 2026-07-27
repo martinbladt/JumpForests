@@ -181,6 +181,8 @@ void MultistateTree::prepareMultistateData() {
         splitrule_id = MultistateSplitRule::Conserve;
     } else if (splitrule == "approxlogrank") {
         splitrule_id = MultistateSplitRule::ApproxLogRank;
+    } else if (splitrule == "petoprentice") {
+        splitrule_id = MultistateSplitRule::PetoPrentice;
     } else {
         splitrule_id = MultistateSplitRule::LogRank;
     }
@@ -251,6 +253,49 @@ void MultistateTree::prepareJumpEventTimeIDs() {
             if (num_jumps[t * dim + jump.matrix_index] != 0) {
                 event_ids.push_back(t);
             }
+        }
+    }
+}
+
+void MultistateTree::prepareSplitOccupationProbabilities() {
+    parent_occupation_probs.assign(num_unique_event_times * num_states, 0);
+    if (num_unique_event_times == 0) {
+        return;
+    }
+
+    double num_obs = 0;
+    for (size_t j = 0; j < num_states; ++j) {
+        num_obs += static_cast<double>(num_at_risk[j]);
+    }
+    if (num_obs == 0) {
+        return;
+    }
+    // compute parent-node initial probabilities
+    for (size_t j = 0; j < num_states; ++j) {
+        parent_occupation_probs[j] = static_cast<double>(num_at_risk[j]) / num_obs;
+    }
+
+    /*
+      Update the probability row directly with the pooled Nelson--Aalen increments.
+      This is the same Aalen--Johansen recursion used for predictions, but avoids
+      constructing a complete cumulative transition-hazard array for every node.
+    */
+    for (size_t t = 1; t < num_unique_event_times; ++t) {
+        size_t probability_index = t * num_states;
+        size_t previous_probability_index = probability_index - num_states;
+        copy(parent_occupation_probs.begin() + previous_probability_index,
+             parent_occupation_probs.begin() + probability_index,
+             parent_occupation_probs.begin() + probability_index);
+
+        for (const MultistateValidJumpInfo& jump : response_data->valid_jumps) {
+            size_t count = num_jumps[t * dim + jump.matrix_index];
+            size_t at_risk = num_at_risk[t * num_states + jump.from_state];
+            if (count == 0 || at_risk == 0) {
+                continue;
+            }
+            double probability_change = parent_occupation_probs[previous_probability_index + jump.from_state] * static_cast<double>(count) / static_cast<double>(at_risk);
+            parent_occupation_probs[probability_index + jump.from_state] -= probability_change;
+            parent_occupation_probs[probability_index + jump.to_state] += probability_change;
         }
     }
 }
@@ -439,6 +484,9 @@ bool MultistateTree::createSplit(size_t node_index) {
 
     computeMultistateQuantities(current_node_obs, num_jumps, num_at_risk);   // update parent multi-state info
     prepareJumpEventTimeIDs();                                               // empty event times cannot affect most split rules
+    if (splitrule_id == MultistateSplitRule::PetoPrentice) {
+        prepareSplitOccupationProbabilities();
+    }
 
     double best_split_val = -1.0;
     size_t best_feature = 0;
@@ -685,8 +733,7 @@ void MultistateTree::computeCensoringKMLazy() {
 // splitting rules for multi-state trees
 //--------------------------------------------------------------------------------------
 
-double MultistateTree::computeSplitValue(const vector<size_t>& num_jumps_daughter,
-                                         const vector<size_t>& num_at_risk_daughter) {
+double MultistateTree::computeSplitValue(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter) {
     switch (splitrule_id) {
         case MultistateSplitRule::LogRank:
             return logRank(num_jumps_daughter, num_at_risk_daughter);
@@ -698,12 +745,13 @@ double MultistateTree::computeSplitValue(const vector<size_t>& num_jumps_daughte
             return conserve(num_jumps_daughter, num_at_risk_daughter);
         case MultistateSplitRule::ApproxLogRank:
             return approxLogRank(num_jumps_daughter, num_at_risk_daughter);
+        case MultistateSplitRule::PetoPrentice:
+            return petoPrentice(num_jumps_daughter, num_at_risk_daughter);
     }
     return -1;
 }
 
-double MultistateTree::logRank(const vector<size_t>& num_jumps_daughter,
-                               const vector<size_t>& num_at_risk_daughter) {
+double MultistateTree::logRank(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter) {
     double LR = 0;
     for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
         const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
@@ -733,8 +781,7 @@ double MultistateTree::logRank(const vector<size_t>& num_jumps_daughter,
     return LR > 0 ? LR : -1;
 }
 
-double MultistateTree::Gehan(const vector<size_t>& num_jumps_daughter,
-                             const vector<size_t>& num_at_risk_daughter) {
+double MultistateTree::Gehan(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter) {
     double G = 0;
     for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
         const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
@@ -760,8 +807,7 @@ double MultistateTree::Gehan(const vector<size_t>& num_jumps_daughter,
     return G > 0 ? G : -1;
 }
 
-double MultistateTree::TaroneWare(const vector<size_t>& num_jumps_daughter,
-                                  const vector<size_t>& num_at_risk_daughter) {
+double MultistateTree::TaroneWare(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter) {
     double TW = 0;
     for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
         const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
@@ -789,8 +835,7 @@ double MultistateTree::TaroneWare(const vector<size_t>& num_jumps_daughter,
 }
 
 // WARNING: This splitting rule may be completely nonsensical for multi-states (but it seems to work with the absolute value fix)
-double MultistateTree::conserve(const vector<size_t>& num_jumps_daughter,
-                                const vector<size_t>& num_at_risk_daughter) {
+double MultistateTree::conserve(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter) {
     double cons = 0;
     for (const MultistateValidJumpInfo& jump : response_data->valid_jumps) {
         double NAsum1 = 0;
@@ -830,8 +875,7 @@ double MultistateTree::conserve(const vector<size_t>& num_jumps_daughter,
     return 1.0 / (1.0 + cons);
 }
 
-double MultistateTree::approxLogRank(const vector<size_t>& num_jumps_daughter,
-                                     const vector<size_t>& num_at_risk_daughter) {
+double MultistateTree::approxLogRank(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter) {
     double aLR = 0;
     for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
         const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
@@ -858,6 +902,37 @@ double MultistateTree::approxLogRank(const vector<size_t>& num_jumps_daughter,
         }
     }
     return aLR > 0 ? aLR : -1;
+}
+
+double MultistateTree::petoPrentice(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter) {
+    double PP = 0;
+    for (size_t jump_id = 0; jump_id < response_data->valid_jumps.size(); ++jump_id) {
+        const MultistateValidJumpInfo& jump = response_data->valid_jumps[jump_id];
+        double sum_num = 0;
+        double sum_den = 0;
+
+        for (size_t t : jump_event_time_ids[jump_id]) {
+            const double d = static_cast<double>(num_jumps[t * dim + jump.matrix_index]);
+            const double d1 = static_cast<double>(num_jumps_daughter[t * dim + jump.matrix_index]);
+            const double Y = static_cast<double>(num_at_risk[t * num_states + jump.from_state]);
+            const double Y1 = static_cast<double>(num_at_risk_daughter[t * num_states + jump.from_state]);
+            if (Y < 2 || Y1 < 1) {
+                continue;
+            }
+
+            const double at_risk_frac = Y1 / Y;
+            const double weight = parent_occupation_probs[t * num_states + jump.from_state] * Y / (1.0 + Y);
+            sum_num += weight * (d1 - d * at_risk_frac);
+            sum_den += weight * weight * d * at_risk_frac * (1.0 - at_risk_frac) * (Y - d) / (Y - 1.0);
+        }
+
+        if (sum_den > 0) {
+            PP += sum_num / sqrt(sum_den);
+        }
+    }
+
+    PP = abs(PP);
+    return PP > 0 ? PP : -1;
 }
 
 // prediction for multi-state trees

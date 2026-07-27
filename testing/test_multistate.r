@@ -259,23 +259,6 @@ tree_mm$censoring[1,]
 tree_survival$censoring[1,]
 tree_mm$censoring[1,][-1] - tree_survival$censoring[1,] # the same
 
-tree_mm$censoring[2,]
-tree_survival$censoring[2,]
-tree_mm$censoring[2,][-1] - tree_survival$censoring[2,] # the same
-
-
-tree_survival$censoring[3,] # the same
-tree_mm$censoring[3,][-1]
-tree_mm$censoring[3,][-1] - tree_survival$censoring[3,]
-
-tree_mm$censoring[4,]
-tree_survival$censoring[4,]
-tree_mm$censoring[4,][-1] - tree_survival$censoring[4,] # the same
-
-tree_mm$censoring[5,]
-tree_survival$censoring[5,]
-tree_mm$censoring[5,][-1] - tree_survival$censoring[5,] # the same
-
 # just a bonus comparison with randomForestSRC
 set.seed(2026)
 forest_mm <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15)
@@ -296,9 +279,28 @@ unlist(jfforest.vimp(forest_survival, method = "permute", loss = "brier", seed =
 unlist(jfforest.vimp(forest_mm, method = "permute", loss = "brier", seed = 2026)$vimp)
 vimp.rfsrc(forest_survival_src,importance = "permute", block.size = 1, vimp.measure = "brier", seed = 2026)$importance
 
-
 # regain memory
 rm('forest_survival', 'forest_survival_src')
+gc()
+
+# test the different splitting rules (so far: logrank, gehan, taroneware, conserve, approxlogrank or petoprentice)
+forest_logrank <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, seed = 2026)
+jfforest.error(forest_logrank)  # normalised IBS: 0.0629706, normalised IKL: 0.2069315
+forest_gehan <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, seed = 2026, splitrule = "gehan")
+jfforest.error(forest_gehan)  # normalised IBS: 0.06366871, normalised IKL: 0.2087614
+forest_taroneware <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, seed = 2026, splitrule = "taroneware")
+jfforest.error(forest_taroneware)  # normalised IBS: 0.06310249, normalised IKL: 0.2072542
+forest_approxlogrank <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, seed = 2026, splitrule = "approxlogrank")
+jfforest.error(forest_approxlogrank)  # normalised IBS: 0.0629639, normalised IKL: 0.2069183
+forest_petoprentice <- jfforest(MM ~ X1 + X2, data = jump_data, feature_data = sim_data[c(3, 4)], min_node_size = 15, seed = 2026, splitrule = "petoprentice")
+jfforest.error(forest_petoprentice)  # normalised IBS: 0.06360719, normalised IKL: 0.2085639
+
+# approxlogrank seems to be the winner by a very small margin
+
+print_forest(forest_approxlogrank)
+print_forest(forest_petoprentice)
+
+rm('forest_logrank', 'forest_gehan', 'forest_taroneware', 'forest_approxlogrank', 'forest_petoprentice')
 gc()
 
 # Study 2: Comparison to survival data for distributions with ties and categorical features
@@ -447,4 +449,6 @@ lines(times, 2/x3*log(1+x3*times), col = "darkgreen")
 #                      data = test_data, splitrule = "conserve", min_node_size = 2, nsplits = 2, seed = 2025)
 
 #nolint_end
+
+
 

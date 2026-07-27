@@ -121,13 +121,15 @@ private:
   vector<size_t> num_jumps_daughter;              // reusable jump counts for one possible daughter node
   vector<size_t> num_at_risk_daughter;            // reusable at-risk counts for one possible daughter node
   vector<size_t> current_num_at_risk;             // rolling state counts used when materialising an at-risk array
+  vector<double> parent_occupation_probs;  // pooled parent-node occupation probabilities used by Peto--Prentice
 
   enum class MultistateSplitRule : uint8_t {
     LogRank,
     Gehan,
     TaroneWare,
     Conserve,
-    ApproxLogRank
+    ApproxLogRank,
+    PetoPrentice
   };
   MultistateSplitRule splitrule_id = MultistateSplitRule::LogRank;
 
@@ -137,6 +139,7 @@ private:
   void addObservationToQuantities(size_t observation, vector<size_t>& jumps, vector<size_t>& at_risk, vector<size_t>& censored);  // adds one response path to a set of sufficient statistics
   void materialiseAtRisk(const vector<size_t>& jumps, const vector<size_t>& censored, vector<size_t>& at_risk);
   void prepareJumpEventTimeIDs();                                 // skips empty event times while scoring candidate splits
+  void prepareSplitOccupationProbabilities();                     // computes the pooled parent-node occupation probabilities
   void computeMultistateQuantities(const vector<size_t>& indices, vector<size_t>& jumps, vector<size_t>& at_risk);                // computes the number at risk and the number of jumps at the unique_event_times
   void makeLeaf(size_t node_index);                               // helper function for making a node a leaf
   bool createSplit(size_t node_index) override;                   // returns true if leaf, computes best split
@@ -154,6 +157,7 @@ private:
   double TaroneWare(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter);
   double conserve(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter);
   double approxLogRank(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter);
+  double petoPrentice(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter);
 
   // frees memory from temporary quantities used in growing the tree
   void cleanUpTree() override {
@@ -165,6 +169,7 @@ private:
     vector<size_t>().swap(num_jumps_daughter);
     vector<size_t>().swap(num_at_risk_daughter);
     vector<size_t>().swap(current_num_at_risk);
+    vector<double>().swap(parent_occupation_probs);
     response_data.reset();
     vector<vector<size_t>>().swap(jump_event_time_ids);
     response_event_time_ids.reset();
