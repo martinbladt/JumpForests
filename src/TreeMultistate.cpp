@@ -237,8 +237,7 @@ void MultistateTree::prepareMultistateData() {
     multistate_data_prepared = true;
 }
 
-void MultistateTree::addObservationToQuantities(size_t observation, vector<size_t>& jumps, vector<size_t>& at_risk,
-                                                vector<size_t>& censored) {
+void MultistateTree::addObservationToQuantities(size_t observation, vector<size_t>& jumps, vector<size_t>& at_risk, vector<size_t>& censored) {
     // the first row of at_risk temporarily holds the initial state counts and remains the time-zero row
     ++at_risk[response_data->initial_state_ids[observation]];
 
@@ -411,8 +410,7 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
     }
 }
 
-void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, 
-                           vector<double>& best_threshold) {
+void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
     vector<double> feature_values = data->getValues(current_node_obs, feature);
     feature_values.erase(remove_if(feature_values.begin(), feature_values.end(), [](double value) { return std::isnan(value); }), feature_values.end());
@@ -1157,7 +1155,7 @@ vector<vector<double>> MultistateTree::computeErrorPredictions(const Data& new_d
 // computes a vector of the Brier score using given IPCW weights for multi-state predictions 
 // (states_ind is a flattened vector of boolean indicators of whether observation i at event time t is in state j)
 vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
-                                   const List& occupation_probs, const vector<double>& state_weights) {
+                                           const List& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
     size_t num_states = state_weights.size();
     size_t num_obs = weights.size() / num_unique_event_times;
@@ -1186,7 +1184,7 @@ vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const
 // computes a vector of the Kullback-Leibler score using given IPCW weights for multi-state predictions
 // (states_ind is a flattened vector of boolean indicators of whether observation i at event time t is in state j)
 vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
-                            const List& occupation_probs, const vector<double>& state_weights) {
+                                        const List& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
     size_t num_states = state_weights.size();
     size_t num_obs = weights.size() / num_unique_event_times;
@@ -1215,7 +1213,7 @@ vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const ve
 
 // same function as above but where the occupation probabilities are instead given by a flattened vector
 vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
-                                      const vector<double>& occupation_probs, const vector<double>& state_weights) {
+                                              const vector<double>& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
     size_t num_states = state_weights.size();
     size_t num_obs = weights.size() / num_unique_event_times;
@@ -1242,7 +1240,7 @@ vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, co
 
 // same function as above but where the occupation probabilities are instead given by a flattened vector
 vector<double> computeKLScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
-                                   const vector<double>& occupation_probs, const vector<double>& state_weights) {
+                                           const vector<double>& occupation_probs, const vector<double>& state_weights) {
     size_t num_unique_event_times = unique_event_times.size();
     size_t num_states = state_weights.size();
     size_t num_obs = weights.size() / num_unique_event_times;

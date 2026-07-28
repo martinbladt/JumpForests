@@ -153,9 +153,8 @@ private:
   void computeInitialDist(size_t node_index);                     // computes the initial distribution in a terminal node
   void computeNA(size_t node_index);                              // computes the Nelson--Aalen estimator in a terminal node
   void computeCensoringKM(size_t node_index);                     // computes the KM estimator for the censoring distribution in a terminal node
-  void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold);
-  void bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature,
-                           vector<double>& best_threshold); // computes the best split for a chosen categorical feature
+  void bestSplitContinuous(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold);  // computes the best split for a chosen continuous feature
+  void bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold); // computes the best split for a chosen categorical feature
   double computeSplitValue(const vector<size_t>& num_jumps_daughter, const vector<size_t>& num_at_risk_daughter);
   
   // splitting rules (see notes for more ideas)

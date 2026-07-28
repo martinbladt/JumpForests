@@ -21,6 +21,7 @@ jfforest(
   nworkers = 0,
   save_predictions = TRUE,
   num_event_times = 0,
+  state_weights = NULL,
   fh_weights_a = NULL,
   fh_weights_b = NULL
 )
@@ -57,6 +58,8 @@ jfforest(
 \item{save_predictions}{Logical, whether to compute and store in-sample/OOB predictions at fit time for multi-state forests.}
 
 \item{num_event_times}{Maximum number of event times to use (only relevant for survival and multi-states)}
+
+\item{state_weights}{Optional vector of weights for each state to be used in error computations (only relevant for multi-state forests)}
 
 \item{fh_weights_a}{Optional finite non-negative Fleming--Harrington
 a-exponents, one for each state `1, ..., num_states`. `NULL` uses one for

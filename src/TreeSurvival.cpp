@@ -202,8 +202,7 @@ void SurvivalTree::bestSplitContinuous(size_t node_index, size_t feature, double
     }
 }
 
-void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature,
-                                        vector<double>& best_threshold) {
+void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
     vector<double> feature_values = data->getValues(current_node_obs, feature);
     feature_values.erase(remove_if(feature_values.begin(), feature_values.end(),
@@ -525,8 +524,8 @@ void SurvivalTree::computeCensoringKMLazy() {
 
 // split_id = 0 for categorical splits
 
-double SurvivalTree::logRank(const vector<size_t>& num_deaths, const vector<size_t>& num_at_risk, 
-                             const vector<size_t>& num_deaths_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
+double SurvivalTree::logRank(const vector<size_t>& num_deaths, const vector<size_t>& num_at_risk, const vector<size_t>& num_deaths_daughter,
+                             const vector<size_t>& num_at_risk_daughter, size_t split_id) {
     double sum_num = 0;
     double sum_den = 0;
     size_t array_index = split_id * num_unique_event_times;
@@ -556,8 +555,8 @@ double SurvivalTree::logRank(const vector<size_t>& num_deaths, const vector<size
     }
 }
 
-double SurvivalTree::conserve(const vector<size_t>& num_deaths, const vector<size_t>& num_at_risk, 
-                              const vector<size_t>& num_deaths_daughter, const vector<size_t>& num_at_risk_daughter, size_t split_id) {
+double SurvivalTree::conserve(const vector<size_t>& num_deaths, const vector<size_t>& num_at_risk, const vector<size_t>& num_deaths_daughter,
+                              const vector<size_t>& num_at_risk_daughter, size_t split_id) {
     size_t array_index = split_id * num_unique_event_times;
     double NAsum1 = 0;
     double NAsum2 = 0;

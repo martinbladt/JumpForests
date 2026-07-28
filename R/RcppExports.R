@@ -33,8 +33,8 @@ JFCppForest <- function(tree_type, df, mtry, min_node_size, nsplits, splitrule, 
     .Call(`_JumpForests_JFCppForest`, tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times)
 }
 
-JFCppForestMultistate <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times, fh_weights_a, fh_weights_b) {
-    .Call(`_JumpForests_JFCppForestMultistate`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times, fh_weights_a, fh_weights_b)
+JFCppForestMultistate <- function(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, state_weights, num_event_times, fh_weights_a, fh_weights_b) {
+    .Call(`_JumpForests_JFCppForestMultistate`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, state_weights, num_event_times, fh_weights_a, fh_weights_b)
 }
 
 JFCppForestPredictTraining <- function(JFForest) {

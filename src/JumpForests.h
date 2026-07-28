@@ -44,8 +44,8 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
     LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times);
 List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
   unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, 
-  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times = 0, NumericVector fh_weights_a = {},
-  NumericVector fh_weights_b = {});
+  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, NumericVector state_weights = {},
+  size_t num_event_times = 0, NumericVector fh_weights_a = {}, NumericVector fh_weights_b = {});
 
 // predicting with forests
 void JFCppForestPredict(List& JFForest, bool compute_censoring = true);

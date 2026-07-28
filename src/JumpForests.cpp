@@ -1147,8 +1147,8 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 // [[Rcpp::export]]
 List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
   unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, 
-  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times, NumericVector fh_weights_a,
-  NumericVector fh_weights_b) {
+  LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, NumericVector state_weights,
+  size_t num_event_times, NumericVector fh_weights_a, NumericVector fh_weights_b) {
   
   // convert the input to C++ vectors
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -1223,7 +1223,7 @@ List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t 
         censoring_indicators[i] = 1;
       }
     }
-    MultistateScoreWeights score_weights = multistateScoreWeights(NumericVector(0), num_states);
+    MultistateScoreWeights score_weights = multistateScoreWeights(state_weights, num_states);
     JFCppForestErrorMultistate(result, data->getTimes(), data->getLastObservedTimes(), censoring_indicators,
                                unique_event_times, response_event_time_ids, score_weights.brier, score_weights.kl);
   } else {

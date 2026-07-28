@@ -78,9 +78,9 @@ sim[1]
 
 test_data <- data.frame(X1 = X, X2 = Y)
 #test_data_functions_multistate(sim, test_data, c(1, 2))
-fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20, honest = TRUE)
+fitted_tree <- jftree(MM ~ X1 + X2, data = sim, feature_data = test_data, nsplits = 10, splitrule = "logrank", min_node_size = 20, honest = TRUE, seed = 2026)
 }
-print_tree(fitted_tree, full = TRUE)
+print_tree(fitted_tree, full = FALSE)
 # to get exactly one split, just set seed to 2026 and n = 60 with nsplits = 2, 10
 
 # still need more testing on IBS calculations
@@ -111,7 +111,7 @@ lapply(fitted_tree$init, function(z) sum(z))
 lapply(occupation_prob(init = fitted_tree$init[[1]], na = fitted_tree$predictions[[1]]), function(z) sum(z))
 
 # fit the forest
-fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 100, min_node_size = 20, splitrule = "logrank", save_predictions = FALSE, honest = FALSE)
+fitted_forest <- jfforest(MM ~ X1 + X2, data = sim, feature_data = test_data, ntrees = 500, min_node_size = 20, splitrule = "logrank", save_predictions = TRUE, honest = FALSE, state_weights = c(1,1,1))
 print_forest(fitted_forest)
 
 jfforest.predict(fitted_forest)$predictions[[1]]
@@ -124,7 +124,7 @@ jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$pr
 unlist(jfforest.predict(fitted_forest)$predictions) - unlist(jfforest.predict(fitted_forest, new_data = test_data, compute_initial = TRUE)$predictions)
 # okay, the internal predictions are the same as predictions computed manually on the training data
 
-jfforest.error(fitted_forest)
+jfforest.error(fitted_forest, state_weights = c(1,1,1))
 jfforest.error(fitted_forest, new_data = test_data, jump_data = sim, state_weights = c(1,1,1))
 
 #jfforest.predict(fitted_forest)  # warning: only call if the number of observations is not very large (otherwise it never finishes printing)
