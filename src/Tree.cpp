@@ -2,13 +2,16 @@
 
 #include <cmath>
 
-void Tree::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, string splitrule, bool honest, unsigned int seed) {
+void Tree::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size,
+                      unsigned int nsplits, string splitrule, bool honest, unsigned int seed,
+                      double splitrule_par) {
     // initialise with the chosen hyperparameters
     this->data = data;
     this->mtry = mtry;
     this->min_node_size = min_node_size;
     this->nsplits = nsplits;
     this->splitrule = splitrule;
+    this->splitrule_par = splitrule_par;
     this->honest = honest;
 
     // initialise tree info
@@ -176,6 +179,9 @@ size_t Tree::predictionLeafIDVIMP(size_t observation, size_t feature, mt19937& r
 size_t Tree::sampleSplitPoints(vector<double>& split_points, const vector<size_t>& indices, size_t feature) {
   // extract candidate split points
   vector<double> potential_split_points = data->getValues(indices, feature);
+  bool has_missing_values = any_of(
+    potential_split_points.begin(), potential_split_points.end(),
+    [](double value) { return std::isnan(value); });
   potential_split_points.erase(remove_if(potential_split_points.begin(), potential_split_points.end(),
     [](double value) { return std::isnan(value); }), potential_split_points.end());
 
@@ -184,7 +190,8 @@ size_t Tree::sampleSplitPoints(vector<double>& split_points, const vector<size_t
   potential_split_points.erase(unique(potential_split_points.begin(), potential_split_points.end()), potential_split_points.end());
 
   // no possible splits
-  if (potential_split_points.size() < 2) {
+  if (potential_split_points.empty() ||
+      (potential_split_points.size() < 2 && !has_missing_values)) {
       return 0;
   }
 
@@ -202,17 +209,27 @@ size_t Tree::sampleSplitPoints(vector<double>& split_points, const vector<size_t
 }
 
 // samples partitions for categorical splits, returns true if no possible splits
-bool Tree::generateCategoricalPartitions(const vector<double>& feature_values, unordered_set<uint64_t>& partition_masks) {
+bool Tree::generateCategoricalPartitions(
+    const vector<double>& feature_values,
+    unordered_set<uint64_t>& partition_masks,
+    bool has_missing_values) {
     size_t num_feature_values = feature_values.size();
 
-    if (num_feature_values < 2) {   // no possible split if only one unique value
+    if (num_feature_values == 0 ||
+        (num_feature_values < 2 && !has_missing_values)) {
         return true;
     }
     if (num_feature_values > 63) {  // prevent 64 bit-integer overflow
         num_feature_values = 63;
     }
 
-    uint64_t total_partitions = (1ULL << (num_feature_values - 1)) - 1;
+    // Without missing values, complementary subsets describe the same split,
+    // so fix the final category in the right daughter. Missing values are
+    // always routed right, which breaks that symmetry: both orientations (and
+    // all observed categories versus missing) must then remain candidates.
+    uint64_t total_partitions = has_missing_values ?
+        (1ULL << num_feature_values) - 1 :
+        (1ULL << (num_feature_values - 1)) - 1;
     size_t num_splits_to_try = nsplits;
     if (nsplits > total_partitions) {
         num_splits_to_try = total_partitions;

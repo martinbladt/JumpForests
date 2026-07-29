@@ -10,6 +10,7 @@ inline void omp_set_num_threads(int) {}
 inline int omp_get_thread_num() { return 0; }
 #endif
 #include <thread>
+#include <limits>
 
 // Creates a deterministic, tree-specific RNG for parallel VIMP computations.
 mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id);
@@ -17,8 +18,11 @@ mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id);
 class Forest {
 public:
   // function to initialise a general Forest (later add more options such as OOB, honesty etc.)
-  void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, string splitrule,
-                  unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, unsigned int seed, unsigned int nworkers);
+  void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size,
+                  unsigned int nsplits, string splitrule, unsigned int ntrees, bool honest,
+                  bool swr, double sample_rate, bool double_bootstrap, unsigned int seed,
+                  unsigned int nworkers,
+                  double splitrule_par = numeric_limits<double>::quiet_NaN());
 
   virtual ~Forest() = default;
 
@@ -63,6 +67,7 @@ protected:
   unsigned int nsplits;           // number of split values to consider after feature is chosen
   unsigned int ntrees;            // number of trees in the forest
   string splitrule;               // splitting rule
+  double splitrule_par;           // optional scalar parameter used by parameterised splitting rules
   bool swr;                       // sampling with replacement (true) or not (false)
   double sample_rate;             // the subsampling rate (if double_bootstrap == true, applies to both subsets)
   bool double_bootstrap;          // use bootstrap separately (true) or not (false), only relevant when honest == true

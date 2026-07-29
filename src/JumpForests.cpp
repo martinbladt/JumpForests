@@ -96,6 +96,43 @@ void saveFlemingHarringtonMetadata(List& result, const FlemingHarringtonWeights&
   result["fh.weights.b"] = wrap(*weights.b);
 }
 
+double regressionSplitRuleParameter(RegressionSplitRule splitrule,
+                                    const NumericVector& splitrule_par) {
+  if (!regressionSplitRuleUsesParameter(splitrule)) {
+    if (splitrule_par.size() != 0) {
+      throw runtime_error(
+        "splitrule_par may only be supplied for negativebinomial, tweedie or huber");
+    }
+    return numeric_limits<double>::quiet_NaN();
+  }
+  if (splitrule == RegressionSplitRule::NegativeBinomial &&
+      splitrule_par.size() == 0) {
+    return 1.0;
+  }
+  if (splitrule_par.size() != 1) {
+    throw runtime_error(
+      "splitrule_par must contain exactly one value for a parameterised regression splitrule");
+  }
+
+  double value = splitrule_par[0];
+  if (!R_finite(value)) {
+    throw runtime_error("splitrule_par must be finite");
+  }
+  if (splitrule == RegressionSplitRule::NegativeBinomial && value <= 0) {
+    throw runtime_error(
+      "splitrule_par must be strictly positive (negative-binomial size k > 0)");
+  }
+  if (splitrule == RegressionSplitRule::Huber && value <= 0) {
+    throw runtime_error(
+      "splitrule_par must be strictly positive (Huber delta > 0)");
+  }
+  if (splitrule == RegressionSplitRule::Tweedie && value > 0 && value < 1) {
+    throw runtime_error(
+      "splitrule_par must satisfy xi <= 0 or xi >= 1 for the tweedie splitrule");
+  }
+  return value;
+}
+
 }
 
 /*
@@ -117,7 +154,8 @@ tree_type:
 // [[Rcpp::export]]
 List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, 
                bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
-               unsigned int seed, size_t num_event_times = 0) {
+               unsigned int seed, size_t num_event_times = 0,
+               NumericVector splitrule_par = NumericVector()) {
   
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp = as<vector<size_t>>(response_indices);
@@ -125,6 +163,11 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
   vector<bool> categorical_cpp = as<vector<bool>>(categorical);
   vector<size_t> unique_cpp = as<vector<size_t>>(unique);
   string splitrule_cpp = as<string>(splitrule);
+
+  if (tree_type != 1 && splitrule_par.size() != 0) {
+    throw runtime_error(
+      "splitrule_par is only valid for negativebinomial, tweedie or huber regression models");
+  }
 
   // make the data into a C++ format and save it via a shared pointer
   shared_ptr<Data> data = make_shared<Data>(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
@@ -161,10 +204,12 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
       }
     }
 
-    // check validity of splitrule argument
-    vector<string> valid_splitrules = {"mse", "variance", "mae"};
-    if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-      throw runtime_error("Invalid splitrule, please choose between mse, variance or mae");
+    RegressionSplitRule splitrule_id = regressionSplitRuleFromString(splitrule_cpp);
+    double splitrule_par_cpp =
+      regressionSplitRuleParameter(splitrule_id, splitrule_par);
+    validateRegressionResponse(data->get_y(), splitrule_id, splitrule_par_cpp);
+    if (regressionSplitRuleUsesParameter(splitrule_id)) {
+      result["splitrule.par"] = splitrule_par_cpp;
     }
 
     RegressionTree* tree;
@@ -176,7 +221,8 @@ List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min
       tree = new RegressionTree(partition.first, partition.second);
       tree->setRNG(rng);
     }
-    tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest, seed);
+    tree->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, honest,
+                     seed, splitrule_par_cpp);
     tree->grow();
 
     XPtr<RegressionTree> regression_tree(tree, true);   // cast the regression tree as an R pointer
@@ -1000,7 +1046,9 @@ List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, u
 // [[Rcpp::export]]
 List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule,
     unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, 
-    LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times = 0) {
+    LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers,
+    bool save_predictions, size_t num_event_times = 0,
+    NumericVector splitrule_par = NumericVector()) {
 
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp = as<vector<size_t>>(response_indices);
@@ -1008,6 +1056,11 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
   vector<bool> categorical_cpp = as<vector<bool>>(categorical);
   vector<size_t> unique_cpp = as<vector<size_t>>(unique);
   string splitrule_cpp = as<string>(splitrule);
+
+  if (tree_type != 1 && splitrule_par.size() != 0) {
+    throw runtime_error(
+      "splitrule_par is only valid for negativebinomial, tweedie or huber regression models");
+  }
 
   // make the data into a C++ class and save it via a shared pointer
   shared_ptr<Data> data = make_shared<Data>(df, response_indices_cpp, feature_indices_cpp, categorical_cpp, unique_cpp);
@@ -1032,15 +1085,19 @@ List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int m
 
   // the forest is a regression forest
   if (tree_type == 1) {
-    // check validity of splitrule argument
-    vector<string> valid_splitrules = {"mse", "variance", "mae"};
-    if (find(valid_splitrules.begin(), valid_splitrules.end(), splitrule_cpp) == valid_splitrules.end()) {
-      throw runtime_error("Invalid splitrule, please choose between mse, variance or mae");
+    RegressionSplitRule splitrule_id = regressionSplitRuleFromString(splitrule_cpp);
+    double splitrule_par_cpp =
+      regressionSplitRuleParameter(splitrule_id, splitrule_par);
+    validateRegressionResponse(data->get_y(), splitrule_id, splitrule_par_cpp);
+    if (regressionSplitRuleUsesParameter(splitrule_id)) {
+      result["splitrule.par"] = splitrule_par_cpp;
     }
 
     // create and grow the regression forest
     RegressionForest* forest = new RegressionForest();
-    forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees, honest, swr, sample_rate, double_bootstrap, seed, nworkers);
+    forest->initialise(data, mtry, min_node_size, nsplits, splitrule_cpp, ntrees,
+                       honest, swr, sample_rate, double_bootstrap, seed, nworkers,
+                       splitrule_par_cpp);
     forest->grow();
 
     XPtr<RegressionForest> regression_forest(forest, true);

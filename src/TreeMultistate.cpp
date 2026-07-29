@@ -413,6 +413,9 @@ void MultistateTree::bestSplitContinuous(size_t node_index, size_t feature, doub
 void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
     vector<double> feature_values = data->getValues(current_node_obs, feature);
+    bool has_missing_values = any_of(
+      feature_values.begin(), feature_values.end(),
+      [](double value) { return std::isnan(value); });
     feature_values.erase(remove_if(feature_values.begin(), feature_values.end(), [](double value) { return std::isnan(value); }), feature_values.end());
     feature_values = uniqueValues(std::move(feature_values));
     size_t num_feature_values = feature_values.size();
@@ -420,7 +423,8 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
 
     unordered_set<uint64_t> partition_masks;
     // generate partitions (breaks if no possible splits)
-    if (generateCategoricalPartitions(feature_values, partition_masks)) {
+    if (generateCategoricalPartitions(
+          feature_values, partition_masks, has_missing_values)) {
         return;
     }
 
@@ -442,7 +446,7 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
         size_t num_obs_left = 0;
         // partition masks have 63 usable bits; any additional categories always remain in the right daughter
         for (size_t category = 0; category < num_partition_values; ++category) {
-            if ((mask >> category) & 1) {
+            if (category < 63 && ((mask >> category) & 1)) {
                 num_obs_left += category_observations[category].size();
             }
         }
@@ -456,7 +460,7 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
         // reuse the same censoring workspace which was used for the parent and earlier partitions
         num_censored.assign(num_unique_event_times * num_states, 0);
         for (size_t category = 0; category < num_partition_values; ++category) {
-            if ((mask >> category) & 1) {
+            if (category < 63 && ((mask >> category) & 1)) {
                 for (size_t i : category_observations[category]) {
                     addObservationToQuantities(i, num_jumps_daughter, num_at_risk_daughter, num_censored);
                 }
@@ -470,7 +474,7 @@ void MultistateTree::bestSplitCategorical(size_t node_index, size_t feature, dou
             best_feature = feature;
             best_threshold.clear();
             for (size_t category = 0; category < num_partition_values; ++category) {
-                if ((mask >> category) & 1) {
+                if (category < 63 && ((mask >> category) & 1)) {
                     best_threshold.push_back(feature_values[category]);
                 }
             }

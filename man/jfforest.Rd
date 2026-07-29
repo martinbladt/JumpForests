@@ -23,7 +23,8 @@ jfforest(
   num_event_times = 0,
   state_weights = NULL,
   fh_weights_a = NULL,
-  fh_weights_b = NULL
+  fh_weights_b = NULL,
+  splitrule_par = NULL
 )
 }
 \arguments{
@@ -33,7 +34,15 @@ jfforest(
 
 \item{feature_data}{Optional feature data for multi-state models.}
 
-\item{splitrule}{Splitting rule. For regression, choose "mse" (default), "variance" (alias for "mse"), or "mae".}
+\item{splitrule}{Splitting rule. For regression, choose `"mse"` (default),
+`"variance"` (an alias for `"mse"`), `"mae"`, `"binomial"`,
+`"negativebinomial"`, `"poisson"`, `"gamma"`, `"inversegaussian"`,
+`"tweedie"`, or `"huber"`. Binomial responses must lie in `[0, 1]`;
+negative-binomial and Poisson responses must be non-negative integers;
+Gamma and inverse-Gaussian responses must be positive. Tweedie support
+follows its power: real for \eqn{\xi \le 0}, non-negative counts at
+\eqn{\xi = 1}, non-negative for \eqn{1 < \xi < 2}, and positive for
+\eqn{\xi \ge 2}.}
 
 \item{mtry}{Number of candidate features at each split.}
 
@@ -68,6 +77,12 @@ every state. Only valid for multi-state forests with
 
 \item{fh_weights_b}{Optional finite non-negative Fleming--Harrington
 b-exponents, with the same ordering and default as `fh_weights_a`.}
+
+\item{splitrule_par}{Numeric scalar for parameterised regression rules:
+negative-binomial size \eqn{k > 0} (default 1), Tweedie power
+\eqn{\xi \le 0} or \eqn{\xi \ge 1}, or Huber threshold
+\eqn{\delta > 0}. It is required for Tweedie and Huber and must be `NULL`
+for every other rule and model type.}
 }
 \value{
 A fitted forest object as a list.

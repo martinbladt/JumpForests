@@ -7,7 +7,20 @@
 #' @param formula Model formula.
 #' @param data Training data.
 #' @param feature_data Optional feature data for multi-state models.
-#' @param splitrule Splitting rule. For regression, choose "mse" (default), "variance" (alias for "mse"), or "mae".
+#' @param splitrule Splitting rule. For regression, choose `"mse"` (default),
+#'   `"variance"` (an alias for `"mse"`), `"mae"`, `"binomial"`,
+#'   `"negativebinomial"`, `"poisson"`, `"gamma"`, `"inversegaussian"`,
+#'   `"tweedie"`, or `"huber"`. Binomial responses must lie in `[0, 1]`;
+#'   negative-binomial and Poisson responses must be non-negative integers;
+#'   Gamma and inverse-Gaussian responses must be positive. Tweedie support
+#'   follows its power: real for \eqn{\xi \le 0}, non-negative counts at
+#'   \eqn{\xi = 1}, non-negative for \eqn{1 < \xi < 2}, and positive for
+#'   \eqn{\xi \ge 2}.
+#' @param splitrule_par Numeric scalar for parameterised regression rules:
+#'   negative-binomial size \eqn{k > 0} (default 1), Tweedie power
+#'   \eqn{\xi \le 0} or \eqn{\xi \ge 1}, or Huber threshold
+#'   \eqn{\delta > 0}. It is required for Tweedie and Huber and must be `NULL`
+#'   for every other rule and model type.
 #' @param mtry Number of candidate features at each split.
 #' @param min_node_size Minimal node size.
 #' @param nsplits Number of split points per feature.
@@ -27,10 +40,15 @@
 #'
 # the main function for fitting trees (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
 jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
-                   honest = FALSE, seed = NULL, num_event_times = 0, state_weights = NULL, fh_weights_a = NULL, fh_weights_b = NULL) {
+                   honest = FALSE, seed = NULL, num_event_times = 0, state_weights = NULL,
+                   fh_weights_a = NULL, fh_weights_b = NULL, splitrule_par = NULL) {
   lhs <- as.character(formula[[2]])
+  splitrule_par <- normalize_splitrule_par(splitrule_par)
   if (lhs[1] != "MM" && (!is.null(fh_weights_a) || !is.null(fh_weights_b))) {
     stop("fh_weights_a and fh_weights_b are only valid for multi-state models")
+  }
+  if (lhs[1] %in% c("MM", "Surv") && length(splitrule_par) > 0) {
+    stop("splitrule_par is only valid for regression models")
   }
   # if seed is not set, generate a random one
   if (is.null(seed)) {
@@ -57,6 +75,9 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 
     # if the response is categorical, classification, otherwise regression
     if (processed_data$categorical[response_index + 1]) {
+      if (length(splitrule_par) > 0) {
+        stop("splitrule_par is only valid for regression models")
+      }
       # for classification, the default minimal node size is 1
       if (is.null(min_node_size)) {
         min_node_size <- 1
@@ -67,7 +88,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
       }
       result <- JFCppTree(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
                           response_index, feature_indices, processed_data$categorical,
-                          processed_data$unique_values, seed)
+                          processed_data$unique_values, seed, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
       result$class.levels <- processed_data$categorical_levels[[response_index + 1]]
       if (is.null(result$class.levels)) {
@@ -92,7 +113,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 
       result <- JFCppTree(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
                           response_index, feature_indices, processed_data$categorical,
-                          processed_data$unique_values, seed)
+                          processed_data$unique_values, seed, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
       return(result)
     }
@@ -135,7 +156,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 
     result <- JFCppTree(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
                         response_indices, feature_indices, processed_data$categorical,
-                        processed_data$unique_values, seed, num_event_times)
+                        processed_data$unique_values, seed, num_event_times, splitrule_par)
     result$categorical.levels <- processed_data$categorical_levels
     return(result)
   }
@@ -335,7 +356,20 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 #' @param formula Model formula.
 #' @param data Training data.
 #' @param feature_data Optional feature data for multi-state models.
-#' @param splitrule Splitting rule. For regression, choose "mse" (default), "variance" (alias for "mse"), or "mae".
+#' @param splitrule Splitting rule. For regression, choose `"mse"` (default),
+#'   `"variance"` (an alias for `"mse"`), `"mae"`, `"binomial"`,
+#'   `"negativebinomial"`, `"poisson"`, `"gamma"`, `"inversegaussian"`,
+#'   `"tweedie"`, or `"huber"`. Binomial responses must lie in `[0, 1]`;
+#'   negative-binomial and Poisson responses must be non-negative integers;
+#'   Gamma and inverse-Gaussian responses must be positive. Tweedie support
+#'   follows its power: real for \eqn{\xi \le 0}, non-negative counts at
+#'   \eqn{\xi = 1}, non-negative for \eqn{1 < \xi < 2}, and positive for
+#'   \eqn{\xi \ge 2}.
+#' @param splitrule_par Numeric scalar for parameterised regression rules:
+#'   negative-binomial size \eqn{k > 0} (default 1), Tweedie power
+#'   \eqn{\xi \le 0} or \eqn{\xi \ge 1}, or Huber threshold
+#'   \eqn{\delta > 0}. It is required for Tweedie and Huber and must be `NULL`
+#'   for every other rule and model type.
 #' @param mtry Number of candidate features at each split.
 #' @param min_node_size Minimal node size.
 #' @param nsplits Number of split points per feature.
@@ -363,10 +397,14 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
                      ntrees = NULL, honest = FALSE, swr = FALSE, sample_rate = NULL, double_bootstrap = FALSE, 
                      seed = NULL, nworkers = 0, save_predictions = TRUE, num_event_times = 0, state_weights = NULL,
-                     fh_weights_a = NULL, fh_weights_b = NULL) {
+                     fh_weights_a = NULL, fh_weights_b = NULL, splitrule_par = NULL) {
   lhs <- as.character(formula[[2]])
+  splitrule_par <- normalize_splitrule_par(splitrule_par)
   if (lhs[1] != "MM" && (!is.null(fh_weights_a) || !is.null(fh_weights_b))) {
     stop("fh_weights_a and fh_weights_b are only valid for multi-state models")
+  }
+  if (lhs[1] %in% c("MM", "Surv") && length(splitrule_par) > 0) {
+    stop("splitrule_par is only valid for regression models")
   }
 
   # if seed is not set, generate a random one
@@ -415,6 +453,9 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
 
     # if the response is categorical, classification, otherwise regression
     if (processed_data$categorical[response_index + 1]) {
+      if (length(splitrule_par) > 0) {
+        stop("splitrule_par is only valid for regression models")
+      }
       # for classification, the default minimal node size is 1
       if (is.null(min_node_size)) {
         min_node_size <- 1
@@ -429,7 +470,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
       }
       result <- JFCppForest(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
                             sample_rate, double_bootstrap, response_index, feature_indices, processed_data$categorical,
-                            processed_data$unique_values, seed, nworkers, save_predictions)
+                            processed_data$unique_values, seed, nworkers, save_predictions, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
       result$class.levels <- processed_data$categorical_levels[[response_index + 1]]
       if (is.null(result$class.levels)) {
@@ -457,7 +498,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
       }
       result <- JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
                             sample_rate, double_bootstrap, response_index, feature_indices, processed_data$categorical,
-                            processed_data$unique_values, seed, nworkers, save_predictions)
+                            processed_data$unique_values, seed, nworkers, save_predictions, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
       return(result)
     }
@@ -503,7 +544,8 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
 
     result <- JFCppForest(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
                           sample_rate, double_bootstrap, response_indices, feature_indices, processed_data$categorical,
-                          processed_data$unique_values, seed, nworkers, save_predictions, num_event_times)
+                          processed_data$unique_values, seed, nworkers, save_predictions, num_event_times,
+                          splitrule_par)
     result$categorical.levels <- processed_data$categorical_levels
     return(result)
   }
@@ -570,6 +612,17 @@ normalize_fh_weights <- function(weights, argument_name) {
     stop(argument_name, " must be a numeric vector")
   }
   as.numeric(weights)
+}
+
+normalize_splitrule_par <- function(splitrule_par) {
+  if (is.null(splitrule_par)) {
+    return(numeric(0))
+  }
+  if (!is.numeric(splitrule_par) || !is.null(dim(splitrule_par)) ||
+      length(splitrule_par) != 1) {
+    stop("splitrule_par must be a single numeric value")
+  }
+  as.numeric(splitrule_par)
 }
 
 #' Predict from a fitted forest
@@ -833,6 +886,9 @@ print_tree <- function(tree_list, full = FALSE) {
   cat("Number of selected features in each split:", tree_list$mtry, "\n")
   cat("Number of possible splits considered for each feature:", tree_list$nsplits, "\n")
   cat("Splitting rule:", tree_list$splitrule, "\n")
+  if (!is.null(tree_list$splitrule.par)) {
+    cat("Splitting-rule parameter:", tree_list$splitrule.par, "\n")
+  }
   if (tree_list$honest) {
     cat("Honest: Yes \n")
   } else {
@@ -940,6 +996,9 @@ print_forest <- function(forest_list) {
   cat("Number of selected features in each split:", forest_list$mtry, "\n")
   cat("Number of possible splits considered for each feature:", forest_list$nsplits, "\n")
   cat("Splitting rule:", forest_list$splitrule, "\n")
+  if (!is.null(forest_list$splitrule.par)) {
+    cat("Splitting-rule parameter:", forest_list$splitrule.par, "\n")
+  }
   if (forest_list$honest) {
     cat("Honest: Yes \n")
     cat("Resample size used to grow trees:", floor(forest_list$subsample.size/2), "(approx.)", "\n")

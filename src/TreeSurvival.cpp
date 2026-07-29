@@ -205,6 +205,9 @@ void SurvivalTree::bestSplitContinuous(size_t node_index, size_t feature, double
 void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, double& best_split_val, size_t& best_feature, vector<double>& best_threshold) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
     vector<double> feature_values = data->getValues(current_node_obs, feature);
+    bool has_missing_values = any_of(
+      feature_values.begin(), feature_values.end(),
+      [](double value) { return std::isnan(value); });
     feature_values.erase(remove_if(feature_values.begin(), feature_values.end(),
       [](double value) { return std::isnan(value); }), feature_values.end());
     feature_values = uniqueValues(std::move(feature_values));
@@ -212,7 +215,8 @@ void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, doubl
 
     unordered_set<uint64_t> partition_masks;
     // generate partitions (breaks if no possible splits)
-    if (generateCategoricalPartitions(feature_values, partition_masks)) {
+    if (generateCategoricalPartitions(
+          feature_values, partition_masks, has_missing_values)) {
         return;
     }
 
@@ -252,7 +256,7 @@ void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, doubl
         fill(num_deaths_left.begin(), num_deaths_left.end(), 0);
         fill(num_at_risk_left.begin(), num_at_risk_left.end(), 0);
         for (size_t category = 0; category < num_feature_values; ++category) {
-            if ((mask >> category) & 1) {
+            if (category < 63 && ((mask >> category) & 1)) {
                 num_obs_left += category_counts[category];
                 size_t index = category * num_unique_event_times;
                 for (size_t t = 0; t < num_unique_event_times; ++t) {
@@ -274,7 +278,7 @@ void SurvivalTree::bestSplitCategorical(size_t node_index, size_t feature, doubl
             best_feature = feature;
             unordered_set<double> left_values;
             for (size_t i = 0; i < num_feature_values; ++i) {
-                if ((mask >> i) & 1) {
+                if (i < 63 && ((mask >> i) & 1)) {
                     left_values.insert(feature_values[i]);
                 }
             }

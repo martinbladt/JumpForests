@@ -78,7 +78,8 @@ void RegressionForest::grow() {
         }
 
         uniform_int_distribution<size_t> dist(0, numeric_limits<size_t>::max());
-        tree->initialise(data, mtry, min_node_size, nsplits, splitrule, honest, dist(local_rng));
+        tree->initialise(data, mtry, min_node_size, nsplits, splitrule, honest,
+                         dist(local_rng), splitrule_par);
         tree->setRNG(local_rng);
         tree->grow();
         trees[i] = std::move(tree);
@@ -92,12 +93,12 @@ void RegressionForest::grow() {
 //--------------------------------------------------------------------------------------
 
 double RegressionForest::predict(const vector<double>& x) {
-    double result = 0;
+    long double result = 0;
     for (const auto& tree : trees) {
         RegressionTree* regression_tree = static_cast<RegressionTree*>(tree.get());
         result += regression_tree->predictValue(x);
     }
-    return result / ntrees;
+    return static_cast<double>(result / ntrees);
 }
 
 pair<vector<double>, vector<double>> RegressionForest::computePredictions() {
@@ -112,8 +113,8 @@ pair<vector<double>, vector<double>> RegressionForest::computePredictions() {
 
     #pragma omp parallel for schedule(static) num_threads(this->nworkers)
     for (size_t i = 0; i < num_obs; ++i) {
-        double pred = 0;
-        double pred_oob = 0;
+        long double pred = 0;
+        long double pred_oob = 0;
         size_t num_oob_trees = 0;   // for keeping track of the number of trees where observation i is OOB
 
         // compute the sum of all predictions for observation i
@@ -136,8 +137,9 @@ pair<vector<double>, vector<double>> RegressionForest::computePredictions() {
         }
 
         // normalise and save predictions
-        predictions[i] = pred / ntrees;
-        oob_predictions[i] = num_oob_trees > 0 ? pred_oob / num_oob_trees : NA_REAL;
+        predictions[i] = static_cast<double>(pred / ntrees);
+        oob_predictions[i] = num_oob_trees > 0 ?
+          static_cast<double>(pred_oob / num_oob_trees) : NA_REAL;
     }
 
     return {predictions, oob_predictions};
@@ -154,13 +156,13 @@ vector<double> RegressionForest::computePredictions(const Data& new_data) {
 
     #pragma omp parallel for schedule(static) num_threads(this->nworkers)
     for (size_t i = 0; i < num_obs; ++i) {
-        double pred = 0;
+        long double pred = 0;
 
         // compute the sum of all predictions for observation i
         for (size_t j = 0; j < ntrees; ++j) {
             pred += regression_trees[j]->predictValue(new_data, i);
         }
-        predictions[i] = pred / ntrees;
+        predictions[i] = static_cast<double>(pred / ntrees);
     }
     return predictions;
 }

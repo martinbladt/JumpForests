@@ -9,8 +9,10 @@ mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
     return mt19937(tree_seed);
 }
 
-void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, string splitrule,
-                        unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, unsigned int seed, unsigned int nworkers) {
+void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size,
+                        unsigned int nsplits, string splitrule, unsigned int ntrees, bool honest,
+                        bool swr, double sample_rate, bool double_bootstrap, unsigned int seed,
+                        unsigned int nworkers, double splitrule_par) {
     // initialise with the chosen hyperparameters
     this->data = data;
     this->mtry = mtry;
@@ -20,6 +22,7 @@ void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int m
     this->trees.reserve(ntrees);
     this->seed = seed;
     this->splitrule = splitrule;
+    this->splitrule_par = splitrule_par;
     this->honest = honest;
     this->swr = swr;
     this->sample_rate = sample_rate;

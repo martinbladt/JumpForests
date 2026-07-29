@@ -6,6 +6,7 @@
 #include <memory>
 #include <variant>
 #include <optional>
+#include <limits>
 
 using namespace std;
 // so that we may handle predictions for different types of trees (extend continuously)
@@ -14,7 +15,9 @@ using ValueType = variant<double, size_t, vector<double>, vector<vector<double>>
 class Tree {
 public:
   // function to initialise a general Tree (later many more options should be added such as honesty, max_depth etc.)
-  void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, string splitrule, bool honest, unsigned int seed);
+  void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size,
+                  unsigned int nsplits, string splitrule, bool honest, unsigned int seed,
+                  double splitrule_par = numeric_limits<double>::quiet_NaN());
   void setRNG(mt19937 rng);
 
   virtual ~Tree() = default;
@@ -109,6 +112,7 @@ protected:
   unsigned int min_node_size;     // minimal number of observations in each node
   unsigned int nsplits;           // number of split values to consider after feature is chosen
   string splitrule;               // splitting rule
+  double splitrule_par;           // optional scalar parameter used by parameterised splitting rules
   bool honest;                    // true if the trees in the forest are honest, otherwise false
   
   // misc. information
@@ -127,7 +131,9 @@ protected:
 
   // for sampling split points in continuous splits
   size_t sampleSplitPoints(vector<double>& split_points, const vector<size_t>& indices, size_t feature);
-  bool generateCategoricalPartitions(const vector<double>& feature_values, unordered_set<uint64_t>& partition_masks);
+  bool generateCategoricalPartitions(const vector<double>& feature_values,
+                                     unordered_set<uint64_t>& partition_masks,
+                                     bool has_missing_values = false);
 
   // protected functions to grow trees
   virtual bool createSplit(size_t node_index) = 0;

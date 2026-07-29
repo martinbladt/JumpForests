@@ -87,7 +87,7 @@ vimp_random
 data("BostonHousing", package = "mlbench")
 head(BostonHousing)
 set.seed(2026)
-housing_forest <- jfforest(medv ~ ., data = BostonHousing, honest = FALSE, min_node_size = 5, ntrees = 2000)
+housing_forest <- jfforest(medv ~ ., data = BostonHousing, honest = FALSE, min_node_size = 3, ntrees = 2000, splitrule = "inversegaussian", seed = 2026)
 housing_forest_SRC <- rfsrc(medv ~ ., data = BostonHousing, min_node_size = 5, ntrees = 2000)
 housing_forest_ranger <- ranger(medv ~ ., data = BostonHousing, importance = "permutation", num.trees = 2000)
 
