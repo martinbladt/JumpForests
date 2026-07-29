@@ -1176,9 +1176,9 @@ vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const
                 continue;
             }
             // difference to survival: need to compute a contribution to the score across all states
-            for (size_t state = 0; state < num_states; ++state) {
-                double residual = occ_probs_obs_t[state] - static_cast<double>(states_ind[time_index + state]);
-                brier[t * num_states + state] += ipcw * residual * residual * state_weights[state];
+            for (size_t j = 0; j < num_states; ++j) {
+                double residual = occ_probs_obs_t[j] - static_cast<double>(states_ind[time_index + j]);
+                brier[t * num_states + j] += ipcw * residual * residual * state_weights[j];
             }
         }
     }
@@ -1215,6 +1215,43 @@ vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const ve
     return kl;
 }
 
+// computes a vector of the spherical scores using given IPCW weights for multi-state predictions
+// (states_ind is a flattened vector of boolean indicators of whether observation i at event time t is in state j)
+vector<double> computeSphericalScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                                               const List& occupation_probs, const vector<double>& state_weights) {
+    size_t num_unique_event_times = unique_event_times.size();
+    size_t num_states = state_weights.size();
+    size_t num_obs = weights.size() / num_unique_event_times;
+    vector<double> spherical(num_unique_event_times * num_states, 0);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        const List& occ_probs_obs = as<List>(occupation_probs[i]);
+        size_t obs_index = i * num_unique_event_times * num_states;
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            NumericVector occ_probs_obs_t = occ_probs_obs[t];
+            size_t time_index = obs_index + t * num_states;
+            double ipcw = weights[i * num_unique_event_times + t];
+            if (ipcw == 0) {
+                continue;
+            }
+            // compute the sum appearing in the denominator
+            double den = 0;
+            for (size_t j = 0; j < num_states; ++j) {
+                den += state_weights[j] * occ_probs_obs_t[j] * occ_probs_obs_t[j];
+            }
+            den = sqrt(den);
+
+            for (size_t j = 0; j < num_states; ++j) {
+                if (states_ind[time_index + j]) {
+                    double reward = den > 0 ? state_weights[j] * occ_probs_obs_t[j] / den : 0;
+                    spherical[t * num_states + j] += ipcw * (1 - reward);
+                }
+            }
+        }
+    }
+    return spherical;
+}
+
 // same function as above but where the occupation probabilities are instead given by a flattened vector
 vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                               const vector<double>& occupation_probs, const vector<double>& state_weights) {
@@ -1232,10 +1269,9 @@ vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, co
                 continue;
             }
             // difference to survival: need to compute a contribution to the score across all states
-            for (size_t state = 0; state < num_states; ++state) {
-                double residual = occupation_probs[time_index + state] -
-                  static_cast<double>(states_ind[time_index + state]);
-                brier[t * num_states + state] += ipcw * residual * residual * state_weights[state];
+            for (size_t j = 0; j < num_states; ++j) {
+                double residual = occupation_probs[time_index + j] - static_cast<double>(states_ind[time_index + j]);
+                brier[t * num_states + j] += ipcw * residual * residual * state_weights[j];
             }
         }
     }
@@ -1267,6 +1303,39 @@ vector<double> computeKLScoreCppMultistate(const vector<bool>& states_ind, const
         }
     }
     return kl;
+}
+
+vector<double> computeSphericalScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                                                  const vector<double>& occupation_probs, const vector<double>& state_weights) {
+    size_t num_unique_event_times = unique_event_times.size();
+    size_t num_states = state_weights.size();
+    size_t num_obs = weights.size() / num_unique_event_times;
+    vector<double> spherical(num_unique_event_times * num_states, 0);
+
+    for (size_t i = 0; i < num_obs; ++i) {
+        size_t obs_index = i * num_unique_event_times * num_states;
+        for (size_t t = 0; t < num_unique_event_times; ++t) {
+            size_t time_index = obs_index + t * num_states;
+            double ipcw = weights[i * num_unique_event_times + t];
+            if (ipcw == 0) {
+                continue;
+            }
+            // compute the sum appearing in the denominator
+            double den = 0;
+            for (size_t j = 0; j < num_states; ++j) {
+                den += state_weights[j] * occupation_probs[time_index + j] * occupation_probs[time_index + j];
+            }
+            den = sqrt(den);
+
+            for (size_t j = 0; j < num_states; ++j) {
+                if (states_ind[time_index + j]) {
+                    double reward = den > 0 ? state_weights[j] * occupation_probs[time_index + j] / den : 0;
+                    spherical[t * num_states + j] += ipcw * (1 - reward);
+                }
+            }
+        }
+    }
+    return spherical;
 }
 
 // miscellaneous functions related to multi-states

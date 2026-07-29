@@ -45,7 +45,7 @@ void JFCppTreeErrorClassification(List& JFTree, const vector<double>& response);
 void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vector<double>& ind, const vector<double>& unique_event_times, const vector<size_t>& unique_event_time_ids);
 void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& times, const vector<size_t>& last_observed_time_ids, const vector<double>& ind, 
                               const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
-                              const vector<double>& brier_state_weights, const vector<double>& kl_state_weights);
+                              const vector<double>& brier_state_weights, const vector<double>& kl_state_weights, const vector<double>& spherical_state_weights);
 List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique, NumericVector response_indices);
 List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, uint8_t num_states, List jump_data, DataFrame df_features,
@@ -95,7 +95,7 @@ List JFCppForestErrorSurvivalExternal(List& JFForest);
 void JFCppForestErrorMultistate(List& JFForest, const vector<double>& times, const vector<size_t>& last_observed_time_ids,
                                const vector<double>& ind, const vector<double>& unique_event_times,
                                const vector<size_t>& response_event_time_ids, const vector<double>& brier_state_weights,
-                               const vector<double>& kl_state_weights);
+                               const vector<double>& kl_state_weights, const vector<double>& spherical_state_weights);
 List JFCppForestErrorMultistateExternal(List& JFForest, NumericVector state_weights = {});
 List JFCppForestErrorMultistate(const List& JFForest, uint8_t max_response_length, uint8_t num_states,
                                 List jump_data, DataFrame df_features, NumericVector feature_indices,

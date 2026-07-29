@@ -293,7 +293,8 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
     }
     if (tree_list$tree.type == "Multi-state") {
       return(list("IBS.error" = tree_list$ibs, "normalised.IBS.error" = tree_list$ibs.normalised,
-                  "IKL.error" = tree_list$ikl, "normalised.IKL.error" = tree_list$ikl.normalised))
+                  "IKL.error" = tree_list$ikl, "normalised.IKL.error" = tree_list$ikl.normalised,
+                  "IS.error" = tree_list$is, "normalised.IS.error" = tree_list$is.normalised))
     }
   }
 
@@ -724,7 +725,9 @@ jfforest.error <- function(forest_list, new_data = NULL, jump_data = NULL, state
         return(list("IBS.error" = forest_list$ibs,
                     "normalised.IBS.error" = forest_list$ibs.normalised,
                     "IKL.error" = forest_list$ikl,
-                    "normalised.IKL.error" = forest_list$ikl.normalised))
+                    "normalised.IKL.error" = forest_list$ikl.normalised,
+                    "IS.error" = forest_list$is,
+                    "normalised.IS.error" = forest_list$is.normalised))
       } else {
         if (is.null(state_weights)) {
           state_weights <- numeric(0)
@@ -879,6 +882,8 @@ print_tree <- function(tree_list, full = FALSE) {
     cat("Training error (normalised IBS):", tree_list$ibs.normalised, "\n")
     cat("Training error (IKL):", tree_list$ikl, "\n")
     cat("Training error (normalised IKL):", tree_list$ikl.normalised, "\n")
+    cat("Training error (IS):", tree_list$is, "\n")
+    cat("Training error (normalised IS):", tree_list$is.normalised, "\n")
   }
 
   # print hyperparameters
@@ -983,6 +988,8 @@ print_forest <- function(forest_list) {
       cat("OOB error (normalised IBS):", forest_list$ibs.normalised, "\n")
       cat("OOB error (IKL):", forest_list$ikl, "\n")
       cat("OOB error (normalised IKL):", forest_list$ikl.normalised, "\n")
+      cat("OOB error (IS):", forest_list$is, "\n")
+      cat("OOB error (normalised IS):", forest_list$is.normalised, "\n")
     }
   }
 

@@ -211,10 +211,14 @@ vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const
                                    const List& occupation_probs, const vector<double>& state_weights);
 vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                             const List& occupation_probs, const vector<double>& state_weights);
+vector<double> computeSphericalScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                                               const List& occupation_probs, const vector<double>& state_weights);
 vector<double> computeKLScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                    const vector<double>& occupation_probs, const vector<double>& state_weights);
 vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                       const vector<double>& occupation_probs, const vector<double>& state_weights);
+vector<double> computeSphericalScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
+                                                  const vector<double>& occupation_probs, const vector<double>& state_weights);
 
 // miscellaneous functions related to multi-states
 vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states);

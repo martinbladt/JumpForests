@@ -14,6 +14,7 @@ vector<double> eventTimesAtIDs(const vector<double>& event_times, const vector<s
 struct MultistateScoreWeights {
   vector<double> brier;
   vector<double> kl;
+  vector<double> spherical;
 };
 
 MultistateScoreWeights multistateScoreWeights(const NumericVector& state_weights, size_t num_states) {
@@ -21,10 +22,12 @@ MultistateScoreWeights multistateScoreWeights(const NumericVector& state_weights
     /*
       Brier averages its contributions over every state, whereas categorical KL contributes only for the observed state.
       Keeping separate defaults makes a two-state multi-state model agree with the corresponding survival model for both.
+      The weights for Spherical error are the same as for the Brier score
     */
     return {
       vector<double>(num_states, 1 / static_cast<double>(num_states)),
-      vector<double>(num_states, 1.0)
+      vector<double>(num_states, 1.0),
+      vector<double>(num_states, 1 / static_cast<double>(num_states))
     };
   }
   if (static_cast<size_t>(state_weights.size()) != num_states) {
@@ -37,8 +40,8 @@ MultistateScoreWeights multistateScoreWeights(const NumericVector& state_weights
       throw runtime_error("state_weights must contain finite non-negative values");
     }
   }
-  // explicitly supplied state weights retain their previous meaning for both scores
-  return {state_weights_cpp, state_weights_cpp};
+  // explicitly supplied state weights retain their previous meaning for all scores
+  return {state_weights_cpp, state_weights_cpp, state_weights_cpp};
 }
 
 struct FlemingHarringtonWeights {
@@ -450,7 +453,7 @@ List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t nu
     }
   }
   JFCppTreeErrorMultistate(result, data->getTimes(), data->getLastObservedTimes(), censoring_indicators,
-                           unique_event_times, response_event_time_ids, score_weights.brier, score_weights.kl);
+                           unique_event_times, response_event_time_ids, score_weights.brier, score_weights.kl, score_weights.spherical);
 
   // save information about the tree itself
   result["num.nodes"] = tree->getNumberOfNodes();
@@ -854,7 +857,7 @@ void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vec
 
 void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& times, const vector<size_t>& last_observed_time_ids, const vector<double>& ind, 
                               const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
-                              const vector<double>& brier_state_weights, const vector<double>& kl_state_weights) {
+                              const vector<double>& brier_state_weights, const vector<double>& kl_state_weights, const vector<double>& spherical_state_weights) {
   MultistateTree* tree = ((XPtr<MultistateTree>) JFTree["Tree"]).get();
   vector<vector<double>> error_predictions = tree->computeErrorPredictions();
 
@@ -865,20 +868,24 @@ void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& times, const v
   vector<bool> states_ind = computeStateIndicatorsMultistate(*tree->getData(), response_event_time_ids, unique_event_times.size());
 
   // compute the integrated Brier score (IBS) and the normalised IBS
-  vector<double> brier = computeBrierScoreCppMultistate(states_ind, IPCW_weights, unique_event_times,
-                                                         error_predictions[0], brier_state_weights);
+  vector<double> brier = computeBrierScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], brier_state_weights);
   pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times, true);
 
-  // compute the integrated Kullback-Leibler loss and the normalised IKL
-  vector<double> kl = computeKLScoreCppMultistate(states_ind, IPCW_weights, unique_event_times,
-                                                   error_predictions[0], kl_state_weights);
+  // compute the integrated Kullback-Leibler error and the normalised IKL
+  vector<double> kl = computeKLScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], kl_state_weights);
   pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
+
+  // compute the integrated spherical error and the normalised IS
+  vector<double> spherical = computeSphericalScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], spherical_state_weights);
+  pair<double, double> ispherical = computeIntegratedScore(spherical, unique_event_times, true);
 
   // save all the error metrics in the tree list
   JFTree["ibs"] = ibs.first;
   JFTree["ibs.normalised"] = ibs.second;
   JFTree["ikl"] = ikl.first;
   JFTree["ikl.normalised"] = ikl.second;
+  JFTree["is"] = ispherical.first;
+  JFTree["is.normalised"] = ispherical.second;
 }
 
 // computes the error based on a a new dataset, here we don't need to specify the type of tree beforehand
@@ -972,6 +979,7 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
     // compute the Kullback-Leibler loss and integrated Kullback-Leibler loss (IKL) and normalised IKL
     vector<double> kl = computeKLScoreCpp(times, IPCW_weights, unique_event_times, km_pred);
     pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times);
+
     result["IBS.error"] = ibs.first;
     result["normalised.IBS.error"] = ibs.second;
     result["IKL.error"] = ikl.first;
@@ -1030,12 +1038,18 @@ List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, u
   vector<double> kl = computeKLScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], score_weights.kl);
   pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
 
+  // compute IS and normalised IS
+  vector<double> spherical = computeSphericalScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], score_weights.spherical);
+  pair<double, double> ispherical = computeIntegratedScore(spherical, unique_event_times, true);
+
   // save in a list and return
   List result = List::create(
     Named("IBS.error") = ibs.first,
     Named("normalised.IBS.error") = ibs.second,
     Named("IKL.error") = ikl.first,
-    Named("normalised.IKL.error") = ikl.second
+    Named("normalised.IKL.error") = ikl.second,
+    Named("IS.error") = ispherical.first,
+    Named("normalised.IS.error") = ispherical.second
   );
   return result;
 }
@@ -1281,8 +1295,8 @@ List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t 
       }
     }
     MultistateScoreWeights score_weights = multistateScoreWeights(state_weights, num_states);
-    JFCppForestErrorMultistate(result, data->getTimes(), data->getLastObservedTimes(), censoring_indicators,
-                               unique_event_times, response_event_time_ids, score_weights.brier, score_weights.kl);
+    JFCppForestErrorMultistate(result, data->getTimes(), data->getLastObservedTimes(), censoring_indicators, unique_event_times,
+                               response_event_time_ids, score_weights.brier, score_weights.kl, score_weights.spherical);
   } else {
     result["predictions"] = R_NilValue;
     result["oob.predictions"] = R_NilValue;
@@ -1794,7 +1808,7 @@ List JFCppForestErrorSurvivalExternal(List& JFForest) {
 
 void JFCppForestErrorMultistate(List& JFForest, const vector<double>& times, const vector<size_t>& last_observed_time_ids, const vector<double>& ind,
                         const vector<double>& unique_event_times, const vector<size_t>& response_event_time_ids,
-                        const vector<double>& brier_state_weights, const vector<double>& kl_state_weights) {
+                        const vector<double>& brier_state_weights, const vector<double>& kl_state_weights, const vector<double>& spherical_state_weights) {
   MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
   vector<vector<double>> error_predictions = forest->computeErrorPredictions();
 
@@ -1806,17 +1820,19 @@ void JFCppForestErrorMultistate(List& JFForest, const vector<double>& times, con
                                                last_observed_time_ids, forest->getCensoringTimes());
   vector<bool> states_ind = computeStateIndicatorsMultistate(*forest->getData(), response_event_time_ids, unique_event_times.size());
 
-  vector<double> brier = computeBrierScoreCppMultistate(states_ind, IPCW_weights, unique_event_times,
-                                                        error_predictions[0], brier_state_weights);
+  vector<double> brier = computeBrierScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], brier_state_weights);
   pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times, true);
-  vector<double> kl = computeKLScoreCppMultistate(states_ind, IPCW_weights, unique_event_times,
-                                                  error_predictions[0], kl_state_weights);
+  vector<double> kl = computeKLScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], kl_state_weights);
   pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
+  vector<double> spherical = computeSphericalScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], spherical_state_weights);
+  pair<double, double> ispherical = computeIntegratedScore(spherical, unique_event_times, true);
 
   JFForest["ibs"] = ibs.first;
   JFForest["ibs.normalised"] = ibs.second;
   JFForest["ikl"] = ikl.first;
   JFForest["ikl.normalised"] = ikl.second;
+  JFForest["is"] = ispherical.first;
+  JFForest["is.normalised"] = ispherical.second;
 }
 
 // Computes and saves OOB errors when predictions were not requested during fitting.
@@ -1841,14 +1857,16 @@ List JFCppForestErrorMultistateExternal(List& JFForest, NumericVector state_weig
   size_t num_states = data->getNumberOfStates();
   MultistateScoreWeights score_weights = multistateScoreWeights(state_weights, num_states);
   JFCppForestErrorMultistate(JFForest, data->getTimes(), data->getLastObservedTimes(),
-                             censoring_indicators, unique_event_times,
-                             response_event_time_ids, score_weights.brier, score_weights.kl);
+                             censoring_indicators, unique_event_times, response_event_time_ids,
+                             score_weights.brier, score_weights.kl, score_weights.spherical);
 
   return List::create(
     Named("IBS.error") = JFForest["ibs"],
     Named("normalised.IBS.error") = JFForest["ibs.normalised"],
     Named("IKL.error") = JFForest["ikl"],
-    Named("normalised.IKL.error") = JFForest["ikl.normalised"]
+    Named("normalised.IKL.error") = JFForest["ikl.normalised"],
+    Named("IS.error") = JFForest["is"],
+    Named("normalised.IS.error") = JFForest["is.normalised"]
   );
 }
 
@@ -2002,12 +2020,16 @@ List JFCppForestErrorMultistate(const List& JFForest, uint8_t max_response_lengt
   pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times, true);
   vector<double> kl = computeKLScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], score_weights.kl);
   pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times, true);
+  vector<double> spherical = computeSphericalScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], score_weights.spherical);
+  pair<double, double> ispherical = computeIntegratedScore(spherical, unique_event_times, true);
 
   return List::create(
     Named("IBS.error") = ibs.first,
     Named("normalised.IBS.error") = ibs.second,
     Named("IKL.error") = ikl.first,
-    Named("normalised.IKL.error") = ikl.second
+    Named("normalised.IKL.error") = ikl.second,
+    Named("IS.error") = ispherical.first,
+    Named("normalised.IS.error") = ispherical.second
   );
 }
 
