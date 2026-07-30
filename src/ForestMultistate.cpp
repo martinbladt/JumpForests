@@ -40,6 +40,17 @@ vector<double> occupationProbabilitiesVIMP(const vector<double>& na, const vecto
     return result;
 }
 
+double sphericalLossVIMP(const vector<double>& occupation, size_t time_offset, size_t observed_state, const vector<double>& state_weights) {
+    double denominator_squared = 0;
+    for (size_t j = 0; j < state_weights.size(); ++j) {
+        double probability = occupation[time_offset + j];
+        denominator_squared += state_weights[j] * probability * probability;
+    }
+    double reward = denominator_squared > 0 ?
+        state_weights[observed_state] * occupation[time_offset + observed_state] / sqrt(denominator_squared) : 0;
+    return 1 - reward;
+}
+
 /*
   VIMP scoring needs a single observed state ID at each time. Sweep each response path directly instead of first creating
   N*T*S packed indicators and then searching every state entry to recover the one true ID.
@@ -843,7 +854,7 @@ void MultistateForest::prepareVIMPBaseline(const string& error_type, const vecto
                     continue;
                 }
 
-                // here we compute the score (either Brier score or Kullback-Leibler error for now)
+                // compute the selected prediction loss
                 size_t time_offset = t * num_states;
                 size_t observed_state = vimp_observed_states[obs_id * num_vimp_times + t];
                 if (error_type == "brier") {
@@ -855,10 +866,11 @@ void MultistateForest::prepareVIMPBaseline(const string& error_type, const vecto
                         contribution += residual * residual * state_weights[k];
                     }
                     score[t] += ipcw * contribution;
-                } else if (observed_state < num_states && state_weights[observed_state] != 0) {
+                } else if (error_type == "spherical" && observed_state < num_states) {
+                    score[t] += ipcw * sphericalLossVIMP(occupation, time_offset, observed_state, state_weights);
+                } else if (error_type == "kl" && observed_state < num_states && state_weights[observed_state] != 0) {
                     size_t offset = time_offset + observed_state;
-                    score[t] -= ipcw * log(probabilityForLogScore(occupation[offset])) *
-                                state_weights[observed_state];
+                    score[t] -= ipcw * log(probabilityForLogScore(occupation[offset])) * state_weights[observed_state];
                 }
             }
         }
@@ -884,8 +896,8 @@ void MultistateForest::prepareVIMPBaseline(const string& error_type, const vecto
 // simply a wrapper function for the two functions above with some messages
 void MultistateForest::prepareVIMPComputation(size_t feature, const string& error_type,
                                               const vector<double>& state_weights) {
-    if (error_type != "brier" && error_type != "kl") {
-        throw runtime_error("Unknown choice of loss function. Choose either 'brier' or 'kl'");
+    if (error_type != "brier" && error_type != "kl" && error_type != "spherical") {
+        throw runtime_error("Unknown choice of loss function. Choose 'brier', 'kl', or 'spherical'");
     }
     const size_t num_states = data->getNumberOfStates();
     if (state_weights.size() != num_states) {
@@ -976,7 +988,11 @@ double MultistateForest::computeVIMPForLeafAssignments(size_t tree_id, const vec
                     contribution += residual * residual * state_weights[state];
                 }
                 score[t] += ipcw * contribution;
-            } else if (observed_state < num_states && state_weights[observed_state] != 0) {
+            } else if (error_type == "spherical" && observed_state < num_states) {
+                score[t] += ipcw * sphericalLossVIMP(
+                    occupation_cache[prediction_cache_id], time_offset, observed_state, state_weights);
+            } else if (error_type == "kl" && observed_state < num_states &&
+                       state_weights[observed_state] != 0) {
                 const size_t offset = time_offset + observed_state;
                 score[t] -= ipcw * log(probabilityForLogScore(
                     occupation_cache[prediction_cache_id][offset])) * state_weights[observed_state];

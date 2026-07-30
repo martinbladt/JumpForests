@@ -2114,9 +2114,9 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
     if (loss_cpp == "default") {
       loss_cpp = "brier";
     }
-    vector<string> valid_loss_functions = {"brier", "kl"};
+    vector<string> valid_loss_functions = {"brier", "kl", "spherical"};
     if (find(valid_loss_functions.begin(), valid_loss_functions.end(), loss_cpp) == valid_loss_functions.end()) {
-      throw runtime_error("Invalid loss function, please choose between 'brier' or 'kl'");
+      throw runtime_error("Invalid loss function, please choose between 'brier', 'kl', or 'spherical'");
     }
     const size_t num_states = forest->getData()->getNumberOfStates();
     // VIMP uses the same loss-specific defaults as the ordinary multi-state error calculation

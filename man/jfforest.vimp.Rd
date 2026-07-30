@@ -23,8 +23,8 @@ jfforest.vimp(
 
 \item{loss}{Loss function for importance: `"mse"` for regression,
 `"misc"` or `"brier"` for classification, and `"concordance"`, `"brier"`,
-or `"kl"` for survival; and `"brier"` or `"kl"` for multi-state forests.
-`"default"` selects the forest-type default.}
+or `"kl"` for survival; and `"brier"`, `"kl"`, or `"spherical"` for
+multi-state forests. `"default"` selects the forest-type default.}
 }
 \value{
 Variable importance values.
