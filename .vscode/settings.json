@@ -1,7 +1,20 @@
 {
+    "editor.parameterHints.enabled": false,
+    "editor.hover.enabled": "off",
+    "editor.quickSuggestions": false,
+    "editor.suggestOnTriggerCharacters": false,
+    "editor.inlineSuggest.enabled": false,
+    "editor.inlayHints.enabled": "off",
     "files.associations": {
         "functional": "cpp",
         "ratio": "cpp",
         "vector": "cpp"
     }
 }
+
+
+
+
+
+
+
