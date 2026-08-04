@@ -7,6 +7,7 @@ library(eha)
 #remotes::install_github("martinbladt/JumpPoisReg")
 library(JumpPoisReg)
 library(tictoc)
+library(ggplot2)
 
 # Helper functions for computing relevant quantities for numerical studies
 #--------------------------------------------------------------------------------

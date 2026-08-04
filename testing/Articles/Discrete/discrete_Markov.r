@@ -256,6 +256,42 @@ write.table(ibs, file = "testing/Articles/Discrete/Data/tuning_ibs.txt", sep = "
 write.table(kl, file = "testing/Articles/Discrete/Data/tuning_kl.txt", sep = "\t", row.names = FALSE)
 write.table(spherical, file = "testing/Articles/Discrete/Data/tuning_spherical.txt", sep = "\t", row.names = FALSE)
 
+# now make hyperparameter tuning plots
+ibs <- read.table("testing/Articles/Discrete/Data/tuning_ibs.txt", header = TRUE)
+colnames(ibs) <- as.factor(min_node_sizes)
+ikl <- read.table("testing/Articles/Discrete/Data/tuning_kl.txt", header = TRUE)
+colnames(ikl) <- as.factor(min_node_sizes)
+spherical <- read.table("testing/Articles/Discrete/Data/tuning_spherical.txt", header = TRUE)
+colnames(spherical) <- as.factor(min_node_sizes)
+
+# plot function for the normalised errors
+plot_normalised_error <- function(error, ylab, file = NULL, width = 8, height = 5, resolution = 300, legend.pos = "topright") {
+    saving <- !is.null(file)
+    if (saving) {
+        dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+        png(file, width = width, height = height, units = "in", res = resolution)
+        on.exit(dev.off())
+    }
+
+    values <- as.matrix(error)
+    rule_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00")
+
+    matplot(min_node_sizes, t(values), type = "o",
+            col = rule_colours, lty = 1, lwd = 2, pch = seq_along(split_rules),
+            xaxt = "n", xlab = "Minimum node size", ylab = ylab)
+    axis(1, at = min_node_sizes, labels = colnames(error), gap.axis = -1)
+    legend(legend.pos, legend = split_rules, col = rule_colours,
+           lty = 1, lwd = 2, pch = seq_along(split_rules), bty = "n")
+
+    invisible(file)
+}
+
+plot_normalised_error(error = ibs, ylab = "Normalised IBS", width = 5, height = 3)
+
+plot_normalised_error(error = ibs, ylab = "Normalised IBS", file = "testing/Articles/Discrete/Plots/tuning_ibs.png", width = 6, height = 6)
+plot_normalised_error(error = ikl, ylab = "Normalised KL", file = "testing/Articles/Discrete/Plots/tuning_ikl.png", width = 6, height = 6)
+plot_normalised_error(error = spherical, ylab = "Normalised Spherical error", file = "testing/Articles/Discrete/Plots/tuning_is.png", width = 6, height = 6, legend.pos = "bottomright")
+
 # we choose to go with the final choices of logrank with min_node_size = 100 to start
 fitted_forest <- jfforest(MM ~ ., data = sim[1:num_obs], feature_data = test_data[1:num_obs,],
                           splitrule = "logrank", min_node_size = 100, seed = 2026)
