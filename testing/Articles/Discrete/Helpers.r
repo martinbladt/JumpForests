@@ -6,6 +6,7 @@ library(survival)
 library(eha)
 #remotes::install_github("martinbladt/JumpPoisReg")
 library(JumpPoisReg)
+library(tictoc)
 
 # Helper functions for computing relevant quantities for numerical studies
 #--------------------------------------------------------------------------------
@@ -29,13 +30,33 @@ prodint <- function (A, s, t, n){
   return(res)
 }
 
+# computes a list of the product integral from a provided Nelson-Aalen estimator
+# (na: Nelson-Aalen estimator provided as a list)
+prodint_from_data <- function(na) {
+  y0 <- diag(nrow(na[[1]]))  # initialise with identity matrix
+  res <- list(y0)
+  for (i in 2:length(na)) {
+    y0 <- y0 + y0 %*% (na[[i]] - na[[i - 1]])
+    res[[i]] <- y0
+  }
+  return(res)
+}
+
 # computes a list of occupation probabilities from 0 to t
 # (A: intensity matrix, t: end time, init: vector of initial probabilities, n: number of steps (h = t/n))
 occprob <- function(A, t, init, n) {
-    # fist compute the product integral
-    res <- prodint(A, 0, t, n)
-    # now multiply by initial probabilities
-    return(lapply(res, function(z) init %*% z))
+  # fist compute the product integral
+  res <- prodint(A, 0, t, n)
+  # now multiply by initial probabilities
+  return(lapply(res, function(z) init %*% z))
+}
+# computes a list of occupation probabilities from 0 to t based on a Nelson-Aalen estimator (a list)
+# (na: a Nelson-Aalen estimator as a list, init: vector of initial probabilities)
+occprob_from_data <- function(na, init) {
+  # first compute the product integral
+  res <- prodint_from_data(na)
+  # now multiply by initial probabilities
+  return(lapply(res, function(z) init %*% z))
 }
 
 # computes the matrix of transition probabilities in a semi-Markov illness-death model without reactivation

@@ -1,7 +1,11 @@
 {
     "editor.parameterHints.enabled": false,
     "editor.hover.enabled": "off",
-    "editor.quickSuggestions": false,
+    "editor.quickSuggestions": {
+        "comments": "off",
+        "strings": "off",
+        "other": "off"
+    },
     "editor.suggestOnTriggerCharacters": false,
     "editor.inlineSuggest.enabled": false,
     "editor.inlayHints.enabled": "off",
