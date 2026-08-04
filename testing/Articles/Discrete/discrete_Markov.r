@@ -126,8 +126,12 @@ for(i in 1:n){
   }
 }
 test_data <- data.frame(X1 = X1, X2 = X2, X3 = X3, X4 = X4, X5 = X5, X6 = X6)
-toc()   # takes about 234 seconds for n = 50,000
+toc()   # takes about 230 seconds for n = 50,000
 }
+
+# save data
+saveRDS(sim, file = "testing/Articles/Discrete/Data/sim.rds")
+write.table(test_data, file = "testing/Articles/Discrete/Data/test_data.txt")
 
 # empirical censoring rate in the current simulation
 sum(R == unlist(lapply(sim, FUN = function(z){tail(z$times, 1)}))) / n
@@ -309,12 +313,20 @@ unlist(jfforest.vimp(fitted_forest, method = "random", loss = "spherical", seed 
 # 'verify' consistency
 #--------------------------------------------------------------------------------
 
+# import helper functions and packages
+source("testing/Articles/Discrete/Helpers.r")
+
+# read in the data
+sim <- readRDS("testing/Articles/Discrete/Data/sim.rds")
+test_data <- read.table("testing/Articles/Discrete/Data/test_data.txt", header = TRUE)
+
 length(unique(unlist(lapply(sim, function(z) z$times))))
 # 105090 event and censoring times total for 50,000 observations!
 
 # fit forest using num_obs observations with the best hyperparameters found above
 # (the original number of event times was 50,000+, we reduce it to 1000, could probably do with even less)
 num_obs <- 50000
+
 tic()
 final_forest <- jfforest(MM ~ ., data = sim[1:num_obs], feature_data = test_data[1:num_obs,], splitrule = "logrank",
                          min_node_size = 100, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000)
@@ -389,16 +401,16 @@ plot_occupation_probabilities <- function(file = NULL, width = 11, height = 6.5,
         }, numeric(length(plot_times)))
 
         matplot(plot_times, predicted,
-                type = "l", lty = 1, lwd = 2, col = state_colours,
+                type = "l", lty = 2, lwd = 2, col = state_colours,
                 ylim = c(0, 1), xlab = "Time", ylab = "Occupation probability",
                 main = panel_titles[i])
         matlines(plot_times, truth_at_event_times,
-                 lty = 2, lwd = 2, col = state_colours)
+                 lty = 1, lwd = 2, col = state_colours)
 
         if (i == 1) {
             legend("right", legend = c(paste("State", 1:3), "Predicted", "True"),
                    col = c(state_colours, "black", "black"),
-                   lty = c(rep(1, 3), 1, 2), lwd = 2, bty = "n")
+                   lty = c(rep(1, 3), 2, 1), lwd = 2, bty = "n")
         }
     }
 
@@ -409,13 +421,320 @@ plot_occupation_probabilities <- function(file = NULL, width = 11, height = 6.5,
 plot_occupation_probabilities()
 plot_occupation_probabilities("testing/Articles/Discrete/Plots/discrete_consistency_Markov.png")
 
+# Compare the forest and true cumulative transition rates.
+consistency_transition_indices <- matrix(
+    c(1, 2,
+      1, 3,
+      2, 1,
+      2, 3),
+    ncol = 2, byrow = TRUE
+)
+consistency_transition_names <- c("0 -> 1", "0 -> 2", "1 -> 0", "1 -> 2")
+consistency_transition_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")
+
+consistency_forest_transition_rates <- lapply(predictions, function(prediction) {
+    t(vapply(prediction, function(rate_matrix) {
+        rate_matrix[consistency_transition_indices]
+    }, numeric(nrow(consistency_transition_indices))))
+})
+
+# Numerically integrate the four true transition intensities.
+consistency_true_transition_rates <- lapply(seq_len(nrow(new_data)), function(i) {
+    X <- as.numeric(new_data[i, ])
+    instantaneous_rates <- t(vapply(true_times, function(time) {
+        Lambda(time, X)[consistency_transition_indices]
+    }, numeric(nrow(consistency_transition_indices))))
+
+    increments <- sweep(
+        (instantaneous_rates[-1, , drop = FALSE] +
+         instantaneous_rates[-nrow(instantaneous_rates), , drop = FALSE]) / 2,
+        1, diff(true_times), "*"
+    )
+    cumulative_rates <- matrix(
+        0, nrow = nrow(instantaneous_rates), ncol = ncol(instantaneous_rates)
+    )
+    cumulative_rates[-1, ] <- apply(increments, 2, cumsum)
+    cumulative_rates
+})
+
+plot_cumulative_transition_rates <- function(file = NULL, width = 11, height = 6.5,
+                                             resolution = 300) {
+    saving <- !is.null(file)
+    if (saving) {
+        dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+        png(file, width = width, height = height, units = "in", res = resolution)
+    }
+
+    old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+    on.exit({
+        par(old_par)
+        if (saving) {
+            dev.off()
+        }
+    })
+
+    for (i in seq_along(predictions)) {
+        y_limits <- range(
+            0,
+            consistency_true_transition_rates[[i]],
+            consistency_forest_transition_rates[[i]],
+            finite = TRUE
+        )
+
+        matplot(true_times, consistency_true_transition_rates[[i]],
+                type = "l", col = consistency_transition_colours,
+                lty = 1, lwd = 2, xlim = c(0, plot_end), ylim = y_limits,
+                xlab = "Time", ylab = "Cumulative transition rate",
+                main = panel_titles[i])
+        matlines(event_times, consistency_forest_transition_rates[[i]],
+                 type = "s", col = consistency_transition_colours,
+                 lty = 2, lwd = 2)
+
+        if (i == 1) {
+            legend("topleft",
+                   legend = c(consistency_transition_names, "Predicted", "True"),
+                   col = c(consistency_transition_colours, "black", "black"),
+                   lty = c(rep(1, 4), 2, 1), lwd = 2, bty = "n")
+        }
+    }
+
+    invisible(file)
+}
+
+plot_cumulative_transition_rates()
+plot_cumulative_transition_rates("testing/Articles/Discrete/Plots/discrete_consistency_Markov_transition_rates.png")
+
 # how to plot the errors? should the forest be modified to return the whole vector of scores?
 # not relevant to plot errors here, this is just visualisation
 
 # in principle we should test larger node sizes, but internal error prediction is too memory demanding
 
-# fit the conditional Aalen-Johansen estimator
+# fit and compare to the conditional Aalen-Johansen estimator
 #--------------------------------------------------------------------------------
+
+# import helper functions and packages
+source("testing/Articles/Discrete/Helpers.r")
+
+# read in the data
+sim <- readRDS("testing/Articles/Discrete/Data/sim.rds")
+test_data <- read.table("testing/Articles/Discrete/Data/test_data.txt", header = TRUE)
+
+# we choose to work with less data here and we drop the noise variables
+num.obs <- 10000
+length(unique(unlist(lapply(sim[1:num.obs], function(z) z$times)))) # 10432
+
+fitted_forest <- jfforest(MM ~ ., data = sim[1:num.obs], feature_data = test_data[1:num.obs, 1:3], splitrule = "logrank",
+                          min_node_size = 100, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000)
+print_forest(fitted_forest)
+
+new_data <- data.frame(X1 = c(1,1,0,0), X2 = c(1,4,1,4), X3 = c(2,5,2,5))
+forest_predictions <- jfforest.predict(fitted_forest, new_data = new_data)
+
+# The package only supports a scalar conditioning variable directly. Since the
+# signal variables are discrete, fit an ordinary AJ estimator within each exact stratum.
+rows_by_profile <- lapply(seq_len(nrow(new_data)), function(i) {
+    which(seq_len(nrow(test_data)) <= num.obs &
+        test_data$X1 == new_data$X1[i] &
+        test_data$X2 == new_data$X2[i] &
+        test_data$X3 == new_data$X3[i])
+})
+lengths(rows_by_profile)    # note: very few observations in groups 2 and 4
+
+AJfits <- lapply(rows_by_profile, function(rows) {aalen_johansen(sim[rows], p = 2)})
+
+# Convert the forest Nelson--Aalen predictions to occupation probabilities.
+comparison_forest_occprobs <- lapply(forest_predictions, function(prediction) {
+    do.call(rbind, occprob_from_data(prediction, c(1, 0, 0)))
+})
+comparison_forest_times <- fitted_forest$unique.event.times
+
+# Compute the true probabilities over the complete range covered by either estimator.
+comparison_end <- max(comparison_forest_times,unlist(lapply(AJfits, function(fit) fit$t)))
+comparison_steps <- max(1L, ceiling(10^4 * comparison_end / (120 - x)))
+comparison_true_times <- seq(0, comparison_end, length.out = comparison_steps + 1L)
+comparison_true_occprobs <- lapply(seq_len(nrow(new_data)), function(i) {
+    do.call(rbind, occprob(
+        function(t) Lambda(t, as.numeric(new_data[i, ])),
+        comparison_end, c(1, 0, 0), comparison_steps
+    ))
+})
+
+comparison_AJ_occprobs <- lapply(AJfits, function(fit) {
+    do.call(rbind, fit$p)
+})
+
+comparison_titles <- c("Man: X2 = 1, X3 = 2", "Man: X2 = 4, X3 = 5",
+                       "Woman: X2 = 1, X3 = 2", "Woman: X2 = 4, X3 = 5")
+comparison_colours <- c("#0072B2", "#D55E00", "#009E73")
+
+plot_AJ_forest_comparison <- function(file = NULL, width = 11, height = 6.5, resolution = 300) {
+    saving <- !is.null(file)
+    if (saving) {
+        dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+        png(file, width = width, height = height, units = "in", res = resolution)
+    }
+
+    old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+    on.exit({
+        par(old_par)
+        if (saving) {
+            dev.off()
+        }
+    })
+
+    for (i in seq_along(AJfits)) {
+        matplot(comparison_true_times, comparison_true_occprobs[[i]],
+                type = "l", col = comparison_colours, lty = 1, lwd = 2,
+                xlim = c(0, comparison_end), ylim = c(0, 1),
+                xlab = "Time", ylab = "Occupation probability",
+                main = comparison_titles[i])
+        matlines(comparison_forest_times, comparison_forest_occprobs[[i]],
+                 type = "s", col = comparison_colours, lty = 2, lwd = 2)
+        matlines(AJfits[[i]]$t, comparison_AJ_occprobs[[i]],
+                 type = "s", col = comparison_colours, lty = 3, lwd = 2)
+
+        if (i == 1) {
+            legend("right",
+                   legend = c(paste("State", 1:3), "Forest", "Conditional AJ", "True"),
+                   col = c(comparison_colours, rep("black", 3)),
+                   lty = c(rep(1, 3), 2, 3, 1), lwd = 2, bty = "n")
+        }
+    }
+
+    invisible(file)
+}
+
+plot_AJ_forest_comparison()
+plot_AJ_forest_comparison("testing/Articles/Discrete/Plots/discrete_comparison_AJ_forest.png")
+
+# Compare the four nonzero cumulative transition rates.
+comparison_transition_indices <- matrix(
+    c(1, 2,
+      1, 3,
+      2, 1,
+      2, 3),
+    ncol = 2, byrow = TRUE
+)
+comparison_transition_names <- c("0 -> 1", "0 -> 2", "1 -> 0", "1 -> 2")
+comparison_transition_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")
+
+extract_cumulative_transitions <- function(cumulative_rates) {
+    t(vapply(cumulative_rates, function(rate_matrix) {
+        rate_matrix[comparison_transition_indices]
+    }, numeric(nrow(comparison_transition_indices))))
+}
+
+comparison_forest_transition_rates <- lapply(
+    forest_predictions, extract_cumulative_transitions
+)
+comparison_AJ_transition_rates <- lapply(AJfits, function(fit) {
+    extract_cumulative_transitions(fit$Lambda)
+})
+
+# Integrate each true transition intensity over the common plotting grid.
+comparison_true_transition_rates <- lapply(seq_len(nrow(new_data)), function(i) {
+    X <- as.numeric(new_data[i, ])
+    instantaneous_rates <- t(vapply(comparison_true_times, function(time) {
+        Lambda(time, X)[comparison_transition_indices]
+    }, numeric(nrow(comparison_transition_indices))))
+
+    increments <- sweep(
+        (instantaneous_rates[-1, , drop = FALSE] +
+         instantaneous_rates[-nrow(instantaneous_rates), , drop = FALSE]) / 2,
+        1, diff(comparison_true_times), "*"
+    )
+    cumulative_rates <- matrix(
+        0, nrow = nrow(instantaneous_rates), ncol = ncol(instantaneous_rates)
+    )
+    cumulative_rates[-1, ] <- apply(increments, 2, cumsum)
+    cumulative_rates
+})
+
+plot_AJ_forest_transition_rates <- function(file = NULL, width = 11, height = 6.5, resolution = 300) {
+    saving <- !is.null(file)
+    if (saving) {
+        dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
+        png(file, width = width, height = height, units = "in", res = resolution)
+    }
+
+    old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+    on.exit({
+        par(old_par)
+        if (saving) {
+            dev.off()
+        }
+    })
+
+    for (i in seq_along(AJfits)) {
+        y_limits <- range(
+            0,
+            comparison_true_transition_rates[[i]],
+            comparison_forest_transition_rates[[i]],
+            comparison_AJ_transition_rates[[i]],
+            finite = TRUE
+        )
+
+        matplot(comparison_true_times, comparison_true_transition_rates[[i]],
+                type = "l", col = comparison_transition_colours, lty = 1, lwd = 2,
+                xlim = c(0, comparison_end), ylim = y_limits,
+                xlab = "Time", ylab = "Cumulative transition rate",
+                main = comparison_titles[i])
+        matlines(comparison_forest_times, comparison_forest_transition_rates[[i]],
+                 type = "s", col = comparison_transition_colours, lty = 2, lwd = 2)
+        matlines(AJfits[[i]]$t, comparison_AJ_transition_rates[[i]],
+                 type = "s", col = comparison_transition_colours, lty = 3, lwd = 2)
+
+        if (i == 1) {
+            legend("topleft",
+                   legend = c(comparison_transition_names,
+                              "Forest", "Conditional AJ", "True"),
+                   col = c(comparison_transition_colours, rep("black", 3)),
+                   lty = c(rep(1, 4), 2, 3, 1), lwd = 2, bty = "n")
+        }
+    }
+
+    invisible(file)
+}
+
+plot_AJ_forest_transition_rates()
+plot_AJ_forest_transition_rates("testing/Articles/Discrete/Plots/discrete_comparison_AJ_forest_transition_rates.png")
+
+# number of 1 - > 0 transitions
+count_disabled_to_active <- function(path) {
+    states <- path$states
+
+    if (length(states) < 2L) {
+        return(0L)
+    }
+
+    sum(
+        head(states, -1L) == 2L &
+        tail(states, -1L) == 1L
+    )
+}
+
+# Total among the observations used for fitting
+transition_counts <- vapply(
+    sim[seq_len(num.obs)],
+    count_disabled_to_active,
+    integer(1)
+)
+
+sum(transition_counts)            # total number of 1 -> 0 transitions
+sum(transition_counts > 0L)       # individuals with at least one
+mean(transition_counts)           # transitions per individual
+table(transition_counts)          # distribution per individual
+
+disabled_to_active_by_profile <- vapply(rows_by_profile, function(rows) {
+    sum(vapply(sim[rows], count_disabled_to_active, integer(1)))
+}, integer(1))
+
+names(disabled_to_active_by_profile) <- comparison_titles
+disabled_to_active_by_profile
+
+# key takeaway: for the occupation probabilities, it is clear the the random forest performs better in the sense that it subsamples
+# data much more efficiently. There is definitely underestimation of the transition 1 -> 0, but this is to be expected since there
+# are very few transitions in the different groups. The underestimation is much worse for CAJ than for the jump forest
 
 # fit Cox proportional hazard model (how exactly?)
 #--------------------------------------------------------------------------------

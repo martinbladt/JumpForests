@@ -8,6 +8,7 @@ library(eha)
 library(JumpPoisReg)
 library(tictoc)
 library(ggplot2)
+library(dplyr)
 
 # Helper functions for computing relevant quantities for numerical studies
 #--------------------------------------------------------------------------------
