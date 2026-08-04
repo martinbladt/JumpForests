@@ -11,6 +11,23 @@ vector<double> eventTimesAtIDs(const vector<double>& event_times, const vector<s
   return selected_event_times;
 }
 
+List scoresByTime(const vector<double>& scores, size_t num_event_times) {
+  if (num_event_times == 0) {
+    return List(0);
+  }
+  if (scores.size() % num_event_times != 0) {
+    throw runtime_error("The score vector cannot be divided across the event times");
+  }
+
+  size_t scores_per_time = scores.size() / num_event_times;
+  List result(num_event_times);
+  for (size_t t = 0; t < num_event_times; ++t) {
+    auto first = scores.begin() + t * scores_per_time;
+    result[t] = NumericVector(first, first + scores_per_time);
+  }
+  return result;
+}
+
 struct MultistateScoreWeights {
   vector<double> brier;
   vector<double> kl;
@@ -847,6 +864,8 @@ void JFCppTreeErrorSurvival(List& JFTree, const vector<double>& times, const vec
   vector<double> kl = computeKLScore(times, IPCW_weights, unique_event_times, JFTree["predictions.km"]);
   pair<double, double> ibs = computeIntegratedScore(brier, unique_event_times);
   pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times);
+  JFTree["bs"] = scoresByTime(brier, unique_event_times.size());
+  JFTree["kl"] = scoresByTime(kl, unique_event_times.size());
   JFTree["ibs"] = ibs.first;
   JFTree["ibs.normalised"] = ibs.second;
   JFTree["ikl"] = ikl.first;
@@ -880,6 +899,9 @@ void JFCppTreeErrorMultistate(List& JFTree, const vector<double>& times, const v
   pair<double, double> ispherical = computeIntegratedScore(spherical, unique_event_times, true);
 
   // save all the error metrics in the tree list
+  JFTree["bs"] = scoresByTime(brier, unique_event_times.size());
+  JFTree["kl"] = scoresByTime(kl, unique_event_times.size());
+  JFTree["spherical"] = scoresByTime(spherical, unique_event_times.size());
   JFTree["ibs"] = ibs.first;
   JFTree["ibs.normalised"] = ibs.second;
   JFTree["ikl"] = ikl.first;
@@ -1757,6 +1779,8 @@ void JFCppForestErrorSurvival(List& JFForest, const vector<double>& times, const
   vector<double> kl = computeKLScore(times, IPCW_weights, unique_event_times, censoring_km);
   pair<double, double> ikl = computeIntegratedScore(kl, unique_event_times);
 
+  JFForest["bs"] = scoresByTime(brier, unique_event_times.size());
+  JFForest["kl"] = scoresByTime(kl, unique_event_times.size());
   JFForest["ibs"] = ibs.first;
   JFForest["ibs.normalised"] = ibs.second;
   JFForest["ikl"] = ikl.first;
@@ -1827,6 +1851,9 @@ void JFCppForestErrorMultistate(List& JFForest, const vector<double>& times, con
   vector<double> spherical = computeSphericalScoreCppMultistate(states_ind, IPCW_weights, unique_event_times, error_predictions[0], spherical_state_weights);
   pair<double, double> ispherical = computeIntegratedScore(spherical, unique_event_times, true);
 
+  JFForest["bs"] = scoresByTime(brier, unique_event_times.size());
+  JFForest["kl"] = scoresByTime(kl, unique_event_times.size());
+  JFForest["spherical"] = scoresByTime(spherical, unique_event_times.size());
   JFForest["ibs"] = ibs.first;
   JFForest["ibs.normalised"] = ibs.second;
   JFForest["ikl"] = ikl.first;

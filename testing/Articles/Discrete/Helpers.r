@@ -166,6 +166,11 @@ optimal_spherical <- function(c, occ_prob) {
     return(lapply(occ_prob, function(z) 1 - sqrt((z * z) %*% c)))
 }
 
+# Helper functions for plotting
+#--------------------------------------------------------------------------------
+
+
+
 # Testing the helper functions
 #--------------------------------------------------------------------------------
 
