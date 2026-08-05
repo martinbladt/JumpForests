@@ -504,6 +504,822 @@ extract_matrix_entries <- function(matrices, indices, labels = NULL) {
     result
 }
 
+# Poisson regression helpers
+#--------------------------------------------------------------------------------
+
+# Convert continuously observed multi-state paths to the grouped sufficient
+# statistics for a piecewise-exponential Poisson likelihood. On a grid interval
+# (a, b], a path contributes its exact overlap with (a, b] as exposure in the
+# state occupied at the start of the path segment. A jump contributes one event
+# to the interval containing its endpoint; a final same-state segment is
+# censoring and therefore contributes exposure but no event.
+#
+# Aggregating by transition, interval and covariate profile is likelihood-exact:
+# all rows in such a cell have the same Poisson mean per unit exposure. This is
+# much smaller than retaining one row per individual/interval, especially for
+# the discrete covariates used in the simulation study.
+build_markov_poisson_data <- function(paths, features, time_grid, transitions) {
+    features <- as.data.frame(features)
+    if (!is.list(paths) || !length(paths) || nrow(features) != length(paths)) {
+        stop("paths and features must describe the same positive number of individuals")
+    }
+    if (is.null(names(features)) || any(!nzchar(names(features))) ||
+        anyDuplicated(names(features))) {
+        stop("features must have unique, non-empty column names")
+    }
+    reserved_names <- c(
+        "id", "tstart", "tstop", "from", "to", "interval",
+        "interval_factor", "transition", "exposure", "count"
+    )
+    if (any(names(features) %in% reserved_names)) {
+        stop("feature names conflict with columns used by the Poisson data builder")
+    }
+    if (anyNA(features)) {
+        stop("features cannot contain missing values")
+    }
+
+    time_grid <- as.numeric(time_grid)
+    if (length(time_grid) < 2L || any(!is.finite(time_grid)) ||
+        is.unsorted(time_grid, strictly = TRUE)) {
+        stop("time_grid must contain at least two finite, strictly increasing values")
+    }
+
+    transitions <- as.data.frame(transitions)
+    if (ncol(transitions) != 2L || !nrow(transitions)) {
+        stop("transitions must be a non-empty two-column object")
+    }
+    transition_values <- as.matrix(transitions)
+    if (!is.numeric(transition_values) ||
+        any(!is.finite(transition_values)) ||
+        any(transition_values %% 1 != 0)) {
+        stop("transition states must be finite integers")
+    }
+    transitions <- data.frame(
+        from = as.integer(transition_values[, 1L]),
+        to = as.integer(transition_values[, 2L])
+    )
+    if (any(transitions$from < 1L) || any(transitions$to < 1L) ||
+        any(transitions$from == transitions$to) ||
+        anyDuplicated(transitions)) {
+        stop("transitions must contain unique, positive, off-diagonal state pairs")
+    }
+    transitions$transition <- paste(transitions$from, transitions$to, sep = "->")
+
+    # First put each path into the familiar counting-process representation.
+    # Keeping this construction here makes the helper independent of the Cox
+    # comparison's local data-conversion function.
+    interval_rows <- Map(function(path, id) {
+        times <- path$times
+        states <- path$states
+        if (length(times) != length(states) || length(times) < 2L ||
+            !is.numeric(times) || !is.numeric(states) ||
+            any(!is.finite(times)) || any(!is.finite(states)) ||
+            any(states %% 1 != 0) ||
+            is.unsorted(times, strictly = TRUE) || any(states < 1L)) {
+            stop("each path must contain valid, strictly increasing times and states")
+        }
+        times <- as.numeric(times)
+        states <- as.integer(states)
+        number_of_segments <- length(times) - 1L
+        data.frame(
+            id = rep.int(id, number_of_segments),
+            tstart = head(times, -1L),
+            tstop = tail(times, -1L),
+            from = head(states, -1L),
+            to = tail(states, -1L)
+        )
+    }, paths, seq_along(paths))
+    intervals <- do.call(rbind, interval_rows)
+    rownames(intervals) <- NULL
+
+    # Restrict follow-up administratively to the fitted grid. A segment crossing
+    # the final grid point contributes exposure up to that point, but its later
+    # endpoint is not counted as an event.
+    support_start <- time_grid[1L]
+    support_end <- tail(time_grid, 1L)
+    intervals$split_start <- pmax(intervals$tstart, support_start)
+    intervals$split_stop <- pmin(intervals$tstop, support_end)
+    intervals <- intervals[
+        intervals$split_stop > intervals$split_start,
+        , drop = FALSE
+    ]
+    if (!nrow(intervals)) {
+        stop("no path exposure overlaps time_grid")
+    }
+
+    number_of_intervals <- length(time_grid) - 1L
+    first_interval <- findInterval(intervals$split_start, time_grid)
+    last_interval <- pmin.int(
+        findInterval(intervals$split_stop, time_grid),
+        number_of_intervals
+    )
+    pieces_per_segment <- last_interval - first_interval + 1L
+    if (any(pieces_per_segment < 1L)) {
+        stop("could not map at least one path segment to time_grid")
+    }
+
+    source_row <- rep.int(seq_len(nrow(intervals)), pieces_per_segment)
+    interval <- sequence(pieces_per_segment) +
+        rep.int(first_interval - 1L, pieces_per_segment)
+    lower <- time_grid[interval]
+    upper <- time_grid[interval + 1L]
+    exposure <- pmin(intervals$split_stop[source_row], upper) -
+        pmax(intervals$split_start[source_row], lower)
+
+    # A stop exactly at a grid boundary belongs to the interval on its left,
+    # matching the conventional (a, b] event-counting convention. Any zero-
+    # overlap piece created at that boundary is removed below.
+    event <- intervals$from[source_row] != intervals$to[source_row] &
+        intervals$tstop[source_row] > support_start &
+        intervals$tstop[source_row] <= support_end &
+        intervals$tstop[source_row] > lower &
+        intervals$tstop[source_row] <= upper
+
+    positive_exposure <- exposure > 0
+    pieces <- data.frame(
+        from = intervals$from[source_row[positive_exposure]],
+        to = intervals$to[source_row[positive_exposure]],
+        interval = interval[positive_exposure],
+        exposure = exposure[positive_exposure],
+        event = event[positive_exposure]
+    )
+    pieces <- cbind(
+        pieces,
+        features[
+            intervals$id[source_row[positive_exposure]],
+            , drop = FALSE
+        ]
+    )
+    rownames(pieces) <- NULL
+
+    covariate_names <- names(features)
+    exposure_groups <- c("from", "interval", covariate_names)
+    exposure_table <- stats::aggregate(
+        pieces["exposure"], by = pieces[exposure_groups], FUN = sum
+    )
+
+    # Every requested origin state needs positive risk time in every interval.
+    # With no exposure a rate is unidentified; silently replacing it by zero
+    # would be a statistical error, so ask the caller to merge bins or shorten
+    # the fitted horizon instead.
+    origin_exposure <- stats::aggregate(
+        exposure_table["exposure"],
+        by = exposure_table[c("from", "interval")],
+        FUN = sum
+    )
+    required_origin_intervals <- expand.grid(
+        from = unique(transitions$from),
+        interval = seq_len(number_of_intervals)
+    )
+    exposure_check <- merge(
+        required_origin_intervals, origin_exposure,
+        by = c("from", "interval"), all.x = TRUE, sort = FALSE
+    )
+    if (anyNA(exposure_check$exposure) || any(exposure_check$exposure <= 0)) {
+        missing_rows <- exposure_check[
+            is.na(exposure_check$exposure) | exposure_check$exposure <= 0,
+            c("from", "interval"), drop = FALSE
+        ]
+        stop(
+            "zero origin-state exposure in: ",
+            paste(
+                paste0("state ", missing_rows$from, ", interval ",
+                       missing_rows$interval),
+                collapse = "; "
+            ),
+            ". Merge those bins or shorten time_grid."
+        )
+    }
+
+    # Duplicate each origin-state exposure cell for all requested destinations.
+    # Both cause-specific transition models use the same at-risk time.
+    poisson_data <- do.call(rbind, lapply(seq_len(nrow(transitions)), function(i) {
+        rows <- exposure_table[
+            exposure_table$from == transitions$from[i],
+            , drop = FALSE
+        ]
+        rows$to <- transitions$to[i]
+        rows$transition <- transitions$transition[i]
+        rows
+    }))
+
+    allowed_event <- pieces$event &
+        paste(pieces$from, pieces$to, sep = "->") %in% transitions$transition
+    if (any(allowed_event)) {
+        event_pieces <- pieces[allowed_event, , drop = FALSE]
+        event_groups <- c("from", "to", "interval", covariate_names)
+        event_table <- stats::aggregate(
+            list(count = rep.int(1L, nrow(event_pieces))),
+            by = event_pieces[event_groups], FUN = sum
+        )
+        poisson_data <- merge(
+            poisson_data, event_table,
+            by = event_groups, all.x = TRUE, sort = FALSE
+        )
+        poisson_data$count[is.na(poisson_data$count)] <- 0
+    } else {
+        poisson_data$count <- 0
+    }
+
+    poisson_data$interval_factor <- factor(
+        poisson_data$interval,
+        levels = seq_len(number_of_intervals)
+    )
+    transition_order <- match(poisson_data$transition, transitions$transition)
+    poisson_data <- poisson_data[
+        order(transition_order, poisson_data$interval),
+        c(
+            "transition", "from", "to", "interval", "interval_factor",
+            covariate_names, "count", "exposure"
+        ),
+        drop = FALSE
+    ]
+    rownames(poisson_data) <- NULL
+
+    diagnostics <- stats::aggregate(
+        poisson_data[c("count", "exposure")],
+        by = poisson_data[c("transition", "from", "to", "interval")],
+        FUN = sum
+    )
+    diagnostics$interval_start <- time_grid[diagnostics$interval]
+    diagnostics$interval_end <- time_grid[diagnostics$interval + 1L]
+    diagnostics$crude_rate <- diagnostics$count / diagnostics$exposure
+    diagnostics <- diagnostics[
+        order(match(diagnostics$transition, transitions$transition),
+              diagnostics$interval),
+        , drop = FALSE
+    ]
+    rownames(diagnostics) <- NULL
+
+    structure(
+        list(
+            data = poisson_data,
+            diagnostics = diagnostics,
+            time_grid = time_grid,
+            transitions = transitions,
+            covariates = covariate_names
+        ),
+        class = "markov_poisson_data"
+    )
+}
+
+# Fit one piecewise-exponential Poisson GLM per directed transition. The formula
+# must contain interval_factor and offset(log(exposure)); all coefficients,
+# including covariate effects, are therefore transition-specific.
+#
+# If an interval has positive exposure but no events for a transition, its
+# saturated-baseline MLE is exactly zero (the log baseline tends to -Inf). Such
+# an interval contains no information about the covariate coefficients after
+# profiling its baseline, so it is left out of glm() and stored for prediction
+# as an exact zero rate. This is distinct from a zero-exposure interval, which
+# build_markov_poisson_data() rejects as unidentified.
+fit_markov_poisson_regression <- function(poisson_data, formula) {
+    if (!inherits(poisson_data, "markov_poisson_data")) {
+        stop("poisson_data must come from build_markov_poisson_data()")
+    }
+    if (!inherits(formula, "formula") ||
+        !identical(as.character(formula[[2L]]), "count")) {
+        stop("formula must be a formula with count as its response")
+    }
+    formula_variables <- all.vars(formula)
+    formula_terms <- stats::terms(formula, specials = "offset")
+    if (!all(c("interval_factor", "exposure") %in% formula_variables) || !length(attr(formula_terms, "specials")$offset)) {
+        stop("formula must contain interval_factor and an exposure offset")
+    }
+
+    models <- vector("list", nrow(poisson_data$transitions))
+    zero_event_intervals <- vector("list", length(models))
+    names(models) <- names(zero_event_intervals) <- poisson_data$transitions$transition
+    fit_diagnostics <- vector("list", length(models))
+
+    for (i in seq_along(models)) {
+        transition_name <- names(models)[i]
+        transition_data <- poisson_data$data[poisson_data$data$transition == transition_name, , drop = FALSE]
+        interval_totals <- stats::aggregate(
+            transition_data[c("count", "exposure")],
+            by = transition_data["interval"], FUN = sum
+        )
+        interval_totals <- interval_totals[
+            order(interval_totals$interval), , drop = FALSE
+        ]
+        if (!identical(interval_totals$interval, seq_len(length(poisson_data$time_grid) - 1L)) || any(interval_totals$exposure <= 0)) {
+            stop("transition ", transition_name," does not have positive exposure in every interval")
+        }
+
+        zero_intervals <- interval_totals$interval[interval_totals$count == 0]
+        positive_event_data <- transition_data[!transition_data$interval %in% zero_intervals, , drop = FALSE]
+        if (!nrow(positive_event_data)) {
+            stop("transition ", transition_name, " has no observed events")
+        }
+        positive_event_data$interval_factor <- droplevels(positive_event_data$interval_factor)
+
+        model <- stats::glm(
+            formula = formula,
+            family = stats::poisson(link = "log"),
+            data = positive_event_data,
+            model = TRUE, x = TRUE, y = TRUE,
+            singular.ok = FALSE,
+            control = stats::glm.control(maxit = 100L)
+        )
+        if (!isTRUE(model$converged) || any(!is.finite(stats::coef(model)))) {
+            stop("Poisson GLM for transition ", transition_name, " did not converge to finite coefficients")
+        }
+
+        models[[i]] <- model
+        zero_event_intervals[[i]] <- zero_intervals
+        fit_diagnostics[[i]] <- data.frame(
+            transition = transition_name,
+            events = sum(transition_data$count),
+            exposure = sum(transition_data$exposure),
+            zero_event_intervals = if (length(zero_intervals)) {
+                paste(zero_intervals, collapse = ",")
+            } else {
+                "none"
+            },
+            coefficients = length(stats::coef(model)),
+            converged = model$converged
+        )
+    }
+
+    structure(
+        list(
+            models = models,
+            zero_event_intervals = zero_event_intervals,
+            formula = formula,
+            time_grid = poisson_data$time_grid,
+            transitions = poisson_data$transitions,
+            diagnostics = do.call(rbind, fit_diagnostics)
+        ),
+        class = "markov_poisson_regression"
+    )
+}
+
+# Assemble one row-generator matrix per time interval from a matrix whose rows
+# are intervals and whose columns follow transition_indices. Diagonal entries
+# are set to minus the sum of the off-diagonal rates, so row vectors evolve as
+# p'(t) = p(t) Q(t).
+generator_matrices_from_rates <- function(rates, transition_indices, number_of_states = NULL) {
+    rates <- as.matrix(rates)
+    storage.mode(rates) <- "double"
+    transition_indices <- as.matrix(transition_indices)
+    if (!nrow(rates) || !ncol(rates) || any(!is.finite(rates)) || any(rates < 0)) {
+        stop("rates must be a non-empty matrix of finite non-negative values")
+    }
+    if (!is.numeric(transition_indices) || ncol(transition_indices) != 2L || nrow(transition_indices) != ncol(rates) ||
+        any(!is.finite(transition_indices)) || any(transition_indices %% 1 != 0) || any(transition_indices < 1L) ||
+        any(transition_indices[, 1L] == transition_indices[, 2L]) || anyDuplicated(as.data.frame(transition_indices))) {
+        stop("transition_indices must give one unique off-diagonal pair per rate column")
+    }
+    storage.mode(transition_indices) <- "integer"
+    minimum_number_of_states <- max(transition_indices)
+    if (is.null(number_of_states)) {
+        number_of_states <- minimum_number_of_states
+    }
+    if (!is.numeric(number_of_states) || length(number_of_states) != 1L || !is.finite(number_of_states) || number_of_states %% 1 != 0 ||
+        number_of_states < minimum_number_of_states) {
+        stop("number_of_states must contain every state in transition_indices")
+    }
+    number_of_states <- as.integer(number_of_states)
+
+    lapply(seq_len(nrow(rates)), function(i) {
+        generator <- matrix(0, nrow = number_of_states, ncol = number_of_states)
+        generator[transition_indices] <- rates[i, ]
+        diag(generator) <- -rowSums(generator)
+        generator
+    })
+}
+
+.validate_piecewise_generators <- function(rate_matrices, time_grid) {
+    time_grid <- as.numeric(time_grid)
+    if (length(time_grid) < 2L || any(!is.finite(time_grid)) ||
+        is.unsorted(time_grid, strictly = TRUE)) {
+        stop("time_grid must contain at least two finite, strictly increasing values")
+    }
+    if (!is.list(rate_matrices) ||
+        length(rate_matrices) != length(time_grid) - 1L) {
+        stop("rate_matrices must contain one generator per grid interval")
+    }
+
+    matrices <- lapply(rate_matrices, function(generator) {
+        generator <- as.matrix(generator)
+        storage.mode(generator) <- "double"
+        if (!nrow(generator) || nrow(generator) != ncol(generator) ||
+            any(!is.finite(generator))) {
+            stop("every generator must be a finite, non-empty square matrix")
+        }
+        generator
+    })
+    dimensions <- vapply(matrices, nrow, integer(1))
+    if (length(unique(dimensions)) != 1L) {
+        stop("all generator matrices must have the same dimensions")
+    }
+
+    matrices <- lapply(matrices, function(generator) {
+        scale <- max(1, max(abs(generator)))
+        tolerance <- 1e-10 * scale
+        off_diagonal <- generator
+        diag(off_diagonal) <- 0
+        if (any(off_diagonal < -tolerance) || any(diag(generator) > tolerance) || any(abs(rowSums(generator)) > tolerance)) {
+            stop("each rate matrix must be a valid row-generator")
+        }
+        # Remove only roundoff-sized violations, then restore the diagonal so
+        # the generator has exactly zero row sums before exponentiation.
+        off_diagonal[off_diagonal < 0] <- 0
+        diag(off_diagonal) <- -rowSums(off_diagonal)
+        off_diagonal
+    })
+
+    list(matrices = matrices, time_grid = time_grid,
+         number_of_states = dimensions[1L])
+}
+
+.markov_matrix_exponential <- function(generator, duration) {
+    number_of_states <- nrow(generator)
+    if (!is.numeric(duration) || length(duration) != 1L || !is.finite(duration) || duration < 0) {
+        stop("duration must be one finite non-negative number")
+    }
+    if (duration == 0) {
+        return(diag(number_of_states))
+    }
+    if (!requireNamespace("Matrix", quietly = TRUE)) {
+        stop("the recommended Matrix package is required for matrix exponentials")
+    }
+
+    transition_matrix <- as.matrix(Matrix::expm(
+        Matrix::Matrix(generator * duration, sparse = FALSE)
+    ))
+    if (any(!is.finite(transition_matrix))) {
+        stop("matrix exponentiation produced non-finite transition probabilities")
+    }
+    tolerance <- 1e-9
+    if (any(transition_matrix < -tolerance) ||
+        any(abs(rowSums(transition_matrix) - 1) > tolerance)) {
+        stop("matrix exponentiation produced a non-stochastic transition matrix")
+    }
+    transition_matrix[transition_matrix < 0] <- 0
+    sweep(transition_matrix, 1L, rowSums(transition_matrix), "/")
+}
+
+.validate_piecewise_prediction_times <- function(times, time_grid) {
+    times <- as.numeric(times)
+    tolerance <- 100 * .Machine$double.eps *
+        max(1, max(abs(time_grid)))
+    if (!length(times) || any(!is.finite(times)) || is.unsorted(times) ||
+        min(times) < time_grid[1L] - tolerance ||
+        max(times) > tail(time_grid, 1L) + tolerance) {
+        stop("times must be finite, sorted and inside the fitted time grid")
+    }
+    times[times < time_grid[1L]] <- time_grid[1L]
+    times[times > tail(time_grid, 1L)] <- tail(time_grid, 1L)
+    times
+}
+
+# Exact occupation probabilities under piecewise-constant generator matrices.
+# The matrix exponential is the exact transition matrix within a grid interval;
+# products are ordered chronologically for the row-vector convention. Prefix
+# products avoid repeating completed intervals when many prediction times are
+# requested on a dense grid.
+piecewise_markov_occupation <- function(rate_matrices, time_grid, times, initial) {
+    validated <- .validate_piecewise_generators(rate_matrices, time_grid)
+    rate_matrices <- validated$matrices
+    time_grid <- validated$time_grid
+    times <- .validate_piecewise_prediction_times(times, time_grid)
+    number_of_states <- validated$number_of_states
+
+    initial <- as.numeric(initial)
+    tolerance <- 1e-10
+    if (length(initial) != number_of_states || any(!is.finite(initial)) || any(initial < -tolerance) || abs(sum(initial) - 1) > tolerance) {
+        stop("initial must be a probability vector matching the generators")
+    }
+    initial[initial < 0] <- 0
+    initial <- initial / sum(initial)
+
+    number_of_intervals <- length(rate_matrices)
+    prefix_products <- vector("list", number_of_intervals)
+    prefix_products[[1L]] <- diag(number_of_states)
+    if (number_of_intervals > 1L) {
+        for (i in 2:number_of_intervals) {
+            previous_transition <- .markov_matrix_exponential(
+                rate_matrices[[i - 1L]], time_grid[i] - time_grid[i - 1L]
+            )
+            prefix_products[[i]] <-
+                prefix_products[[i - 1L]] %*% previous_transition
+        }
+    }
+
+    occupation <- t(vapply(times, function(time) {
+        interval <- min(findInterval(time, time_grid), number_of_intervals)
+        within_interval <- .markov_matrix_exponential(rate_matrices[[interval]], time - time_grid[interval])
+        as.numeric(initial %*% prefix_products[[interval]] %*% within_interval)
+    }, numeric(number_of_states)))
+
+    if (any(occupation < -tolerance) ||
+        any(abs(rowSums(occupation) - 1) > tolerance)) {
+        stop("piecewise propagation produced invalid occupation probabilities")
+    }
+    occupation[occupation < 0] <- 0
+    sweep(occupation, 1L, rowSums(occupation), "/")
+}
+
+# Integrate piecewise-constant generators exactly. The returned list has the
+# same shape as one Jump Forest Nelson--Aalen prediction: one full cumulative
+# generator matrix at every requested time. Its off-diagonals are the cumulative
+# transition rates; diagonals are minus their row sums.
+cumulative_piecewise_rates <- function(rate_matrices, time_grid, times) {
+    validated <- .validate_piecewise_generators(rate_matrices, time_grid)
+    rate_matrices <- validated$matrices
+    time_grid <- validated$time_grid
+    times <- .validate_piecewise_prediction_times(times, time_grid)
+    number_of_states <- validated$number_of_states
+    number_of_intervals <- length(rate_matrices)
+
+    cumulative_at_start <- vector("list", number_of_intervals)
+    cumulative_at_start[[1L]] <- matrix(
+        0, nrow = number_of_states, ncol = number_of_states
+    )
+    if (number_of_intervals > 1L) {
+        for (i in 2:number_of_intervals) {
+            cumulative_at_start[[i]] <- cumulative_at_start[[i - 1L]] + rate_matrices[[i - 1L]] * (time_grid[i] - time_grid[i - 1L])
+        }
+    }
+
+    lapply(times, function(time) {
+        interval <- min(findInterval(time, time_grid), number_of_intervals)
+        cumulative_at_start[[interval]] + rate_matrices[[interval]] * (time - time_grid[interval])
+    })
+}
+
+# Predict transition-specific rates for new covariate profiles, assemble a
+# coherent piecewise-constant generator, then compute exact occupation
+# probabilities and cumulative rates on the requested grid.
+predict_markov_poisson_regression <- function(object, new_data, times, initial = NULL) {
+    if (!inherits(object, "markov_poisson_regression")) {
+        stop("object must come from fit_markov_poisson_regression()")
+    }
+    new_data <- as.data.frame(new_data)
+    if (!nrow(new_data) || anyNA(new_data)) {
+        stop("new_data must contain at least one complete covariate profile")
+    }
+    times <- .validate_piecewise_prediction_times(times, object$time_grid)
+
+    transition_indices <- as.matrix(
+        object$transitions[c("from", "to")]
+    )
+    number_of_states <- max(transition_indices)
+    if (is.null(initial)) {
+        initial <- c(1, rep(0, number_of_states - 1L))
+    }
+    number_of_intervals <- length(object$time_grid) - 1L
+    number_of_transitions <- nrow(object$transitions)
+
+    interval_rates <- lapply(seq_len(nrow(new_data)), function(profile) {
+        rates <- matrix(
+            0, nrow = number_of_intervals, ncol = number_of_transitions,
+            dimnames = list(NULL, object$transitions$transition)
+        )
+        for (j in seq_len(number_of_transitions)) {
+            model <- object$models[[j]]
+            zero_intervals <- object$zero_event_intervals[[j]]
+            fitted_intervals <- base::setdiff(
+                seq_len(number_of_intervals), zero_intervals
+            )
+            prediction_data <- new_data[
+                rep.int(profile, length(fitted_intervals)),
+                , drop = FALSE
+            ]
+            prediction_data$interval_factor <- factor(
+                fitted_intervals,
+                levels = levels(model$model$interval_factor)
+            )
+            prediction_data$exposure <- 1
+            predicted_rates <- stats::predict(
+                model, newdata = prediction_data, type = "response"
+            )
+            if (any(!is.finite(predicted_rates)) || any(predicted_rates < 0)) {
+                stop("Poisson prediction produced invalid transition rates")
+            }
+            rates[fitted_intervals, j] <- predicted_rates
+        }
+        rates
+    })
+
+    generator_matrices <- lapply(interval_rates, function(rates) {
+        generator_matrices_from_rates(
+            rates, transition_indices, number_of_states
+        )
+    })
+    occupation_probabilities <- lapply(generator_matrices, function(generators) {
+        piecewise_markov_occupation(
+            generators, object$time_grid, times, initial
+        )
+    })
+    cumulative_transition_rates <- lapply(generator_matrices, function(generators) {
+        extract_matrix_entries(
+            cumulative_piecewise_rates(generators, object$time_grid, times),
+            transition_indices, object$transitions$transition
+        )
+    })
+
+    list(
+        times = times,
+        occupation_probabilities = occupation_probabilities,
+        cumulative_transition_rates = cumulative_transition_rates,
+        interval_rates = interval_rates,
+        generator_matrices = generator_matrices
+    )
+}
+
+# Miscellaneous helper functions
+#--------------------------------------------------------------------------------
+
+# counts the number of transitions in a path from state 'from' to state 'to' in time_interval
+count_transition_jumps <- function(path, from, to, time_interval = c(-Inf, Inf)) {
+    if (!is.numeric(time_interval) ||
+        length(time_interval) != 2L ||
+        anyNA(time_interval) ||
+        time_interval[1L] >= time_interval[2L]) {
+        stop("time_interval must be an increasing numeric pair")
+    }
+
+    states <- path$states
+    times <- path$times
+
+    if (length(states) < 2L || length(states) != length(times)) {
+        return(0L)
+    }
+
+    from_states <- head(states, -1L)
+    to_states <- tail(states, -1L)
+    jump_times <- tail(times, -1L)
+
+    sum(
+        from_states == from &
+        to_states == to &
+        jump_times > time_interval[1L] &
+        jump_times <= time_interval[2L]
+    )
+}
+
+# computes the cumulative transition rate for a piecewise constant estimator function
+# result is a vector of the cumulative transition rate at times (of size length(times))
+# (times: vector of times, oe: a vector of the oe rates at times)
+cumulative_transititon_rate_PR <- function(times, oe) {
+  n <- length(times)
+  if (n != length(oe)) {
+    stop("Number of times must be the same as the number of OE rates in oe")
+  }
+
+  cum_trans_rate <- rep(times[1] * oe[1], n)
+  for (i in 2:n) {
+    cum_trans_rate[i] <- cum_trans_rate[i - 1] + (times[i] - times[i - 1]) * oe[i]
+  }
+  cum_trans_rate
+}
+
+# computes the cumulative transition rate for a piecewise constant estimator function
+# result is a list of the cumulative transition rate matrices at times (of size length(times))
+# (object: a fit object from JumpPoisReg, times: a vector of event times for the returned estimator)
+cumulative_markov_poisson <- function(object, times) {
+    if (!inherits(object, "jump_pois_markov_fit")) {
+        stop("object must come from fit_markov_poisson()")
+    }
+
+    times <- as.numeric(times)
+    time_grid <- object$t_grid
+
+    if (!length(times) || any(!is.finite(times)) || is.unsorted(times)) {
+        stop("times must be a non-empty, sorted, finite vector")
+    }
+    if (!isTRUE(all.equal(times[1L], time_grid[1L]))) {
+        stop("times must start at the first fitted grid point")
+    }
+    if (min(times) < time_grid[1L] ||
+        max(times) > tail(time_grid, 1L)) {
+        stop("times must remain inside the fitted Poisson grid")
+    }
+
+    transitions <- object$transitions[
+        order(object$transitions$from, object$transitions$to),
+        ,
+        drop = FALSE
+    ]
+
+    lower <- head(time_grid, -1L)
+    upper <- tail(time_grid, -1L)
+    number_of_intervals <- length(lower)
+
+    cumulative_rates <- vapply(
+        seq_len(nrow(transitions)),
+        function(j) {
+            transition <- transitions$transition[j]
+
+            rate_table <- object$rates[
+                object$rates$transition == transition,
+                ,
+                drop = FALSE
+            ]
+            rate_table <- rate_table[order(rate_table$interval), ]
+
+            if (!identical(
+                as.integer(rate_table$interval),
+                seq_len(number_of_intervals)
+            )) {
+                stop("The fitted rate table does not match the time grid")
+            }
+
+            rates <- rate_table$rate
+            if (any(!is.finite(rates)) || any(rates < 0)) {
+                stop(
+                    "Transition ", transition,
+                    " has missing or invalid fitted rates"
+                )
+            }
+
+            vapply(times, function(time) {
+                interval_exposure <- pmax(0, pmin(time, upper) - lower)
+                sum(rates * interval_exposure)
+            }, numeric(1))
+        },
+        numeric(length(times))
+    )
+
+    colnames(cumulative_rates) <- transitions$transition
+
+    number_of_states <- max(transitions$from, transitions$to)
+
+    # Same format as one Jump Forest prediction:
+    # one cumulative-rate matrix for each requested time.
+    lapply(seq_along(times), function(i) {
+        cumulative_matrix <- matrix(0, nrow = number_of_states, ncol = number_of_states)
+
+        cumulative_matrix[
+            cbind(transitions$from, transitions$to)
+        ] <- cumulative_rates[i, ]
+
+        diag(cumulative_matrix) <- -rowSums(cumulative_matrix)
+        cumulative_matrix
+    })
+}
+
+# Time-averaged oracle curve errors provide one metric shared by all three
+# methods. With equal state weights, occupation MISE is proportional to the
+# integrated Brier-score regret relative to the true probabilities.
+step_matrix_at <- function(times, values, evaluation_times) {
+    values <- as.matrix(values)
+    if (!is.numeric(times) || length(times) != nrow(values) || is.unsorted(times)) {
+        stop("times must be sorted and match the rows of values")
+    }
+    index <- findInterval(evaluation_times, times)
+    if (any(index == 0L)) {
+        stop("the prediction grid must begin no later than the evaluation grid")
+    }
+    values[index, , drop = FALSE]
+}
+
+curve_error_table <- function(truth_times, truth_values, prediction_times, prediction_values, model, component_names, profile_names) {
+    if (length(truth_values) != length(prediction_values) ||
+        length(profile_names) != length(truth_values)) {
+        stop("truth, predictions and profile_names must have matching panels")
+    }
+    horizon <- max(truth_times) - min(truth_times)
+    if (!is.finite(horizon) || horizon <= 0) {
+        stop("truth_times must cover a positive finite interval")
+    }
+
+    do.call(rbind, lapply(seq_along(truth_values), function(i) {
+        panel_times <- if (is.list(prediction_times)) {
+            prediction_times[[i]]
+        } else {
+            prediction_times
+        }
+        truth <- as.matrix(truth_values[[i]])
+        prediction <- step_matrix_at(
+            panel_times, prediction_values[[i]], truth_times
+        )
+        if (!identical(dim(prediction), dim(truth)) ||
+            length(component_names) != ncol(truth)) {
+            stop("truth and prediction matrices must have matching dimensions")
+        }
+
+        squared_error <- (prediction - truth)^2
+        increments <- sweep(
+            (squared_error[-1L, , drop = FALSE] +
+             squared_error[-nrow(squared_error), , drop = FALSE]) / 2,
+            1L, diff(truth_times), "*"
+        )
+        mise <- colSums(increments) / horizon
+        data.frame(
+            model = model, profile = profile_names[i], component = component_names,
+            MISE = mise, RMSE = sqrt(mise), row.names = NULL
+        )
+    }))
+}
+
+summarise_curve_errors <- function(errors) {
+    summary <- stats::aggregate(MISE ~ model, data = errors, FUN = mean)
+    summary$RMSE <- sqrt(summary$MISE)
+    summary[order(summary$MISE), ]
+}
 
 # Testing the helper functions
 #--------------------------------------------------------------------------------

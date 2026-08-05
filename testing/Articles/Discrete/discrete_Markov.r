@@ -416,9 +416,7 @@ consistency_transition_names <- c("0 -> 1", "0 -> 2", "1 -> 0", "1 -> 2")
 consistency_transition_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")
 
 consistency_forest_transition_rates <- lapply(predictions, function(prediction) {
-    extract_matrix_entries(
-        prediction, consistency_transition_indices, consistency_transition_names
-    )
+    extract_matrix_entries(prediction, consistency_transition_indices, consistency_transition_names)
 })
 
 # Numerically integrate the four true transition intensities.
@@ -472,7 +470,7 @@ plot_panel_curves(
 
 # in principle we should test larger node sizes, but internal error prediction is too memory demanding
 
-# fit and compare to the conditional Aalen-Johansen estimator
+# load in data and fit benchmark jump forest to compare all the following models to
 #--------------------------------------------------------------------------------
 
 # import helper functions and packages
@@ -483,8 +481,8 @@ sim <- readRDS("testing/Articles/Discrete/Data/sim.rds")
 test_data <- read.table("testing/Articles/Discrete/Data/test_data.txt", header = TRUE)
 
 # we choose to work with less data here and we drop the noise variables
-num.obs <- 10000
-length(unique(unlist(lapply(sim[1:num.obs], function(z) z$times)))) # 10432
+num.obs <- 2000
+length(unique(unlist(lapply(sim[1:num.obs], function(z) z$times)))) # 21065
 
 fitted_forest <- jfforest(MM ~ ., data = sim[1:num.obs], feature_data = test_data[1:num.obs, 1:3], splitrule = "logrank",
                           min_node_size = 100, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000)
@@ -492,6 +490,15 @@ print_forest(fitted_forest)
 
 new_data <- data.frame(X1 = c(1,1,0,0), X2 = c(1,4,1,4), X3 = c(2,5,2,5))
 forest_predictions <- jfforest.predict(fitted_forest, new_data = new_data)
+
+# Convert the forest Nelson--Aalen predictions to occupation probabilities.
+comparison_forest_occprobs <- lapply(forest_predictions, function(prediction) {
+    do.call(rbind, occprob_from_data(prediction, c(1, 0, 0)))
+})
+comparison_forest_times <- fitted_forest$unique.event.times
+
+# fit and compare to the conditional Aalen-Johansen estimator
+#--------------------------------------------------------------------------------
 
 # The package only supports a scalar conditioning variable directly. Since the
 # signal variables are discrete, fit an ordinary AJ estimator within each exact stratum.
@@ -504,12 +511,6 @@ rows_by_profile <- lapply(seq_len(nrow(new_data)), function(i) {
 lengths(rows_by_profile)    # note: very few observations in groups 2 and 4
 
 AJfits <- lapply(rows_by_profile, function(rows) {aalen_johansen(sim[rows], p = 2)})
-
-# Convert the forest Nelson--Aalen predictions to occupation probabilities.
-comparison_forest_occprobs <- lapply(forest_predictions, function(prediction) {
-    do.call(rbind, occprob_from_data(prediction, c(1, 0, 0)))
-})
-comparison_forest_times <- fitted_forest$unique.event.times
 
 # Compute the true probabilities over the complete range covered by either estimator.
 comparison_end <- max(comparison_forest_times,unlist(lapply(AJfits, function(fit) fit$t)))
@@ -632,6 +633,48 @@ plot_panel_curves(
     legend_order = c("Forest", "Conditional AJ", "True"),
     file = "testing/Articles/Discrete/Plots/discrete_comparison_AJ_forest_transition_rates.png"
 )
+
+# Time-averaged integrated squared errors against the known DGP curves. The
+# detailed tables retain every profile/state or profile/transition result; the
+# summaries give each profile and component equal weight. These are oracle
+# curve errors for this simulated data set (formal MISE would additionally
+# average them over repeated simulated data sets). AJ estimates are carried
+# forward from a profile's last observed time to the common plotting horizon,
+# consistently with the step curves above.
+caj_occupation_curve_errors <- rbind(
+    curve_error_table(
+        comparison_true_times, comparison_true_occprobs,
+        comparison_forest_times, comparison_forest_occprobs,
+        "Jump Forest", paste("State", 0:2), comparison_titles
+    ),
+    curve_error_table(
+        comparison_true_times, comparison_true_occprobs,
+        lapply(AJfits, `[[`, "t"), comparison_AJ_occprobs,
+        "Conditional AJ", paste("State", 0:2), comparison_titles
+    )
+)
+
+caj_transition_curve_errors <- rbind(
+    curve_error_table(
+        comparison_true_times, comparison_true_transition_rates,
+        comparison_forest_times, comparison_forest_transition_rates,
+        "Jump Forest", comparison_transition_names, comparison_titles
+    ),
+    curve_error_table(
+        comparison_true_times, comparison_true_transition_rates,
+        lapply(AJfits, `[[`, "t"), comparison_AJ_transition_rates,
+        "Conditional AJ", comparison_transition_names, comparison_titles
+    )
+)
+
+occupation_error_summary_caj <-
+    summarise_curve_errors(caj_occupation_curve_errors)
+transition_error_summary_caj <-
+    summarise_curve_errors(caj_transition_curve_errors)
+caj_occupation_curve_errors
+caj_transition_curve_errors
+occupation_error_summary_caj
+transition_error_summary_caj
 
 # number of 1 - > 0 transitions
 count_disabled_to_active <- function(path) {
@@ -909,61 +952,7 @@ plot_panel_curves(
     file = "testing/Articles/Discrete/Plots/discrete_comparison_cox_forest_transition_rates.png"
 )
 
-# Time-averaged oracle curve errors provide one metric shared by all three
-# methods. With equal state weights, occupation MISE is proportional to the
-# integrated Brier-score regret relative to the true probabilities.
-step_matrix_at <- function(times, values, evaluation_times) {
-    values <- as.matrix(values)
-    if (!is.numeric(times) || length(times) != nrow(values) || is.unsorted(times)) {
-        stop("times must be sorted and match the rows of values")
-    }
-    index <- findInterval(evaluation_times, times)
-    if (any(index == 0L)) {
-        stop("the prediction grid must begin no later than the evaluation grid")
-    }
-    values[index, , drop = FALSE]
-}
-
-curve_error_table <- function(truth_times, truth_values, prediction_times, prediction_values, model, component_names, profile_names) {
-    if (length(truth_values) != length(prediction_values) ||
-        length(profile_names) != length(truth_values)) {
-        stop("truth, predictions and profile_names must have matching panels")
-    }
-    horizon <- max(truth_times) - min(truth_times)
-    if (!is.finite(horizon) || horizon <= 0) {
-        stop("truth_times must cover a positive finite interval")
-    }
-
-    do.call(rbind, lapply(seq_along(truth_values), function(i) {
-        panel_times <- if (is.list(prediction_times)) {
-            prediction_times[[i]]
-        } else {
-            prediction_times
-        }
-        truth <- as.matrix(truth_values[[i]])
-        prediction <- step_matrix_at(
-            panel_times, prediction_values[[i]], truth_times
-        )
-        if (!identical(dim(prediction), dim(truth)) ||
-            length(component_names) != ncol(truth)) {
-            stop("truth and prediction matrices must have matching dimensions")
-        }
-
-        squared_error <- (prediction - truth)^2
-        increments <- sweep(
-            (squared_error[-1L, , drop = FALSE] +
-             squared_error[-nrow(squared_error), , drop = FALSE]) / 2,
-            1L, diff(truth_times), "*"
-        )
-        mise <- colSums(increments) / horizon
-        data.frame(
-            model = model, profile = profile_names[i], component = component_names,
-            MISE = mise, RMSE = sqrt(mise), row.names = NULL
-        )
-    }))
-}
-
-occupation_curve_errors <- rbind(
+cox_occupation_curve_errors <- rbind(
     curve_error_table(
         comparison_true_times, comparison_true_occprobs,
         comparison_forest_times, comparison_forest_occprobs,
@@ -983,7 +972,7 @@ occupation_curve_errors <- rbind(
     )
 )
 
-transition_curve_errors <- rbind(
+cox_transition_curve_errors <- rbind(
     curve_error_table(
         comparison_true_times, comparison_true_transition_rates,
         comparison_forest_times, comparison_forest_transition_rates,
@@ -1003,28 +992,575 @@ transition_curve_errors <- rbind(
     )
 )
 
-summarise_curve_errors <- function(errors) {
-    summary <- stats::aggregate(MISE ~ model, data = errors, FUN = mean)
-    summary$RMSE <- sqrt(summary$MISE)
-    summary[order(summary$MISE), ]
-}
-
-occupation_error_summary <- summarise_curve_errors(occupation_curve_errors)
-transition_error_summary <- summarise_curve_errors(transition_curve_errors)
-occupation_error_summary
-transition_error_summary
+occupation_error_summary_cox <- summarise_curve_errors(
+    cox_occupation_curve_errors
+)
+transition_error_summary_cox <- summarise_curve_errors(
+    cox_transition_curve_errors
+)
+occupation_error_summary_cox
+transition_error_summary_cox
 
 # The DGP contains time-varying effects of X2 and X3 (and additive hazard
 # constants for three transitions), so neither Cox specification is correctly
 # proportional. Cubic splines relax covariate shape, but not that PH assumption.
 
 
-# fit a Poisson regression model (how exactly is this done with covariates?)
+# fit a Poisson regression model naively using stratified sampling as for the CAJ
 #--------------------------------------------------------------------------------
 
+# This comparison is deliberately disabled. With num.obs = 2000 the exact
+# covariate strata are extremely small, and the full-sample Poisson regressions
+# below are the relevant model-based comparison.
+if (FALSE) {
 
+# we fit the Poisson regressions using JumpPoisReg on each group of data like for the CAJ?
 
-# fit the true model?
+rows_by_profile <- lapply(seq_len(nrow(new_data)), function(i) {
+    which(seq_len(nrow(test_data)) <= num.obs &
+        test_data$X1 == new_data$X1[i] &
+        test_data$X2 == new_data$X2[i] &
+        test_data$X3 == new_data$X3[i])
+})
+lengths(rows_by_profile)
+# note: very few observations in groups 2 and 4, probably only makes sense to compare groups 1 and 3
+
+# some heuristics to choose the grids
+
+lapply(sim[rows_by_profile[[1]]], function(z) z$times)
+
+# some heuristic (total number of jumps from j to k in the data)
+sum(unlist(lapply(sim[rows_by_profile[[1]]], function(z) count_transition_jumps(z, 1, 3, c(0, 10)))))
+sum(unlist(lapply(sim[rows_by_profile[[2]]], function(z) count_transition_jumps(z, 1, 2, c(0, 90)))))
+sum(unlist(lapply(sim[rows_by_profile[[3]]], function(z) count_transition_jumps(z, 1, 2, c(60, 90)))))
+
+sqrt(300)   # about 17, so 90/15 is probably a suitable binwidth to aim for
+pois_fit1 <- fit_markov_poisson(sim[rows_by_profile[[1]]], c(0, 10, 20, 30, 40, 50, 60, 90))
+pois_fit3 <- fit_markov_poisson(sim[rows_by_profile[[3]]], c(0, 10, 20, 30, 40, 50, 60, 90))  # to avoid NAs, I had to reduce the number of bins
+pois_fit1
+pois_fit3
+
+# fit the others anyway
+pois_fit2 <- fit_markov_poisson(sim[rows_by_profile[[2]]], c(0, 30, 60, 90))
+pois_fit4 <- fit_markov_poisson(sim[rows_by_profile[[4]]], c(0, 30, 60, 90))
+pois_fit2
+pois_fit4
+
+# also make a benchmark fit without subsampling
+pois_fit_all <- fit_markov_poisson(sim, c(seq(0, 60, 60/100), 65, 70, 80, 90))
+pois_fit_all
+
+rows_by_profile[[5]] <- 1:num.obs # if one wants to include the benchmark also (I decided to drop this)
+pois_fits <- list(pois_fit1, pois_fit2, pois_fit3, pois_fit4, pois_fit_all)
+
+# Evaluate every benchmark on the common horizon and DGP truth constructed in
+# the CAJ section. The Poisson fits may have grids extending to 90, but extending
+# the error horizon to 90 would change the Jump Forest error and make the model
+# summaries incomparable.
+if (comparison_end > min(vapply(pois_fits[seq_len(nrow(new_data))], function(fit) {
+    tail(fit$t_grid, 1L)
+}, numeric(1)))) {
+    stop("the common comparison horizon exceeds a fitted Poisson grid")
+}
+
+# compute the cumulative transition rates for the fitted OE rates
+#predict_markov_poisson(pois_fit1, comparison_true_times, "1->2")
+
+cumulative_markov_poisson(pois_fit1, comparison_true_times)
+
+# we only include the four prediction points (subsamples) for now
+comparison_poisson_occprobs <- lapply(seq_len(nrow(new_data)), function(i) {
+    do.call(rbind, occprob_from_data(cumulative_markov_poisson(pois_fits[[i]], comparison_true_times), c(1,0,0)))
+})
+
+comparison_titles <- c("Man: X2 = 1, X3 = 2", "Man: X2 = 4, X3 = 5", "Woman: X2 = 1, X3 = 2", "Woman: X2 = 4, X3 = 5")
+comparison_colours <- c("#0072B2", "#D55E00", "#009E73")
+
+comparison_occupation_curves <- list(
+    True = list(
+        times = comparison_true_times, values = comparison_true_occprobs,
+        type = "l", lty = 1
+    ),
+    Forest = list(
+        times = comparison_forest_times, values = comparison_forest_occprobs,
+        type = "s", lty = 2
+    ),
+    'Poisson regression' = list(
+        # the Poisson regression times are chosen to be the same as the true times
+        times = comparison_true_times, values = comparison_poisson_occprobs,
+        type = "l", lty = 3
+    )
+)
+
+plot_panel_curves(
+    comparison_occupation_curves, component_labels = paste("State", 0:2),
+    panel_titles = comparison_titles, component_colours = comparison_colours,
+    ylab = "Occupation probability", xlim = c(0, comparison_end),
+    ylim = c(0, 1), panel_layout = c(2, 2), legend_position = "right",
+    legend_order = c("Forest", "Poisson regression", "True")
+)
+plot_panel_curves(
+    comparison_occupation_curves, component_labels = paste("State", 0:2),
+    panel_titles = comparison_titles, component_colours = comparison_colours,
+    ylab = "Occupation probability", xlim = c(0, comparison_end),
+    ylim = c(0, 1), panel_layout = c(2, 2), legend_position = "right",
+    legend_order = c("Forest", "Poisson regression", "True"),
+    file = "testing/Articles/Discrete/Plots/discrete_comparison_poisson_forest.png"
+)
+
+# Compare the four nonzero cumulative transition rates.
+comparison_transition_indices <- matrix(
+    c(1, 2,
+      1, 3,
+      2, 1,
+      2, 3),
+    ncol = 2, byrow = TRUE
+)
+comparison_transition_names <- c("0 -> 1", "0 -> 2", "1 -> 0", "1 -> 2")
+comparison_transition_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")
+
+comparison_forest_transition_rates <- lapply(forest_predictions, function(prediction) {
+    extract_matrix_entries(
+        prediction, comparison_transition_indices, comparison_transition_names
+    )
+})
+comparison_poisson_transition_rates <- lapply(seq_len(nrow(new_data)), function(i) {
+    extract_matrix_entries(
+        cumulative_markov_poisson(pois_fits[[i]], comparison_true_times), comparison_transition_indices, comparison_transition_names
+    )
+})
+
+comparison_transition_curves <- list(
+    True = list(
+        times = comparison_true_times, values = comparison_true_transition_rates,
+        type = "l", lty = 1
+    ),
+    Forest = list(
+        times = comparison_forest_times, values = comparison_forest_transition_rates,
+        type = "s", lty = 2
+    ),
+    `Poisson regression` = list(
+        times = comparison_true_times, values = comparison_poisson_transition_rates,
+        type = "l", lty = 3
+    )
+)
+
+plot_panel_curves(
+    comparison_transition_curves, component_labels = comparison_transition_names,
+    panel_titles = comparison_titles, component_colours = comparison_transition_colours,
+    ylab = "Cumulative transition rate", xlim = c(0, comparison_end),
+    include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c("Forest", "Poisson regression", "True")
+)
+plot_panel_curves(
+    comparison_transition_curves, component_labels = comparison_transition_names,
+    panel_titles = comparison_titles, component_colours = comparison_transition_colours,
+    ylab = "Cumulative transition rate", xlim = c(0, comparison_end),
+    include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c("Forest", "Poisson regression", "True"),
+    file = "testing/Articles/Discrete/Plots/discrete_comparison_poisson_forest_transition_rates.png"
+)
+
+stratified_poisson_occupation_curve_errors <- rbind(
+    curve_error_table(
+        comparison_true_times, comparison_true_occprobs,
+        comparison_forest_times, comparison_forest_occprobs,
+        "Jump Forest", paste("State", 0:2), comparison_titles
+    ),
+    curve_error_table(
+        comparison_true_times, comparison_true_occprobs,
+        comparison_true_times, comparison_poisson_occprobs,
+        "Stratified Poisson", paste("State", 0:2), comparison_titles
+    )
+)
+
+stratified_poisson_transition_curve_errors <- rbind(
+    curve_error_table(
+        comparison_true_times, comparison_true_transition_rates,
+        comparison_forest_times, comparison_forest_transition_rates,
+        "Jump Forest", comparison_transition_names, comparison_titles
+    ),
+    curve_error_table(
+        comparison_true_times, comparison_true_transition_rates,
+        comparison_true_times, comparison_poisson_transition_rates,
+        "Stratified Poisson", comparison_transition_names, comparison_titles
+    )
+)
+
+occupation_error_summary_poisson <- summarise_curve_errors(
+    stratified_poisson_occupation_curve_errors
+)
+transition_error_summary_poisson <- summarise_curve_errors(
+    stratified_poisson_transition_curve_errors
+)
+occupation_error_summary_poisson
+transition_error_summary_poisson
+}
+
+# fit Poisson regressions to all subjects and all covariates
 #--------------------------------------------------------------------------------
+
+# Unlike the exact-stratum analysis above, these models use every one of the
+# same num.obs subjects used to train the Jump Forest. Each directed transition
+# has its own piecewise-constant baseline and covariate coefficients, and exact
+# time at risk enters the Poisson likelihood through offset(log(exposure)).
+# This is the piecewise-exponential analogue of the transition-specific Cox
+# models: the two specifications differ only in whether X2 and X3 enter linearly
+# or through natural cubic splines.
+
+# Use exactly the same horizon and truth grid as the CAJ and Cox comparisons.
+# Keeping aliases with Poisson-specific names makes the code below readable
+# while guaranteeing that the Jump Forest error is numerically identical.
+poisson_regression_end <- comparison_end
+
+# The second living state is reached only after a first jump, so its outgoing
+# events are sparse near time zero. Pool years 0--10, use five-year bins through
+# year 60, and pool the observed tail. The diagnostics printed below make the
+# event counts and exposure behind this choice explicit and make alternative
+# grids straightforward to assess.
+poisson_regression_time_grid <- sort(unique(c(
+    0,
+    seq(10, 60, by = 5),
+    poisson_regression_end
+)))
+poisson_regression_time_grid <- poisson_regression_time_grid[
+    poisson_regression_time_grid >= 0 &
+    poisson_regression_time_grid <= poisson_regression_end
+]
+if (tail(poisson_regression_time_grid, 1L) < poisson_regression_end) {
+    poisson_regression_time_grid <- c(
+        poisson_regression_time_grid, poisson_regression_end
+    )
+}
+
+tic()
+poisson_regression_data <- build_markov_poisson_data(
+    paths = sim[seq_len(num.obs)],
+    features = test_data[
+        seq_len(num.obs), c("X1", "X2", "X3"), drop = FALSE
+    ],
+    time_grid = poisson_regression_time_grid,
+    transitions = comparison_transition_indices
+)
+toc()   # about 2 seconds
+
+poisson_regression_bin_diagnostics <- poisson_regression_data$diagnostics
+poisson_regression_bin_diagnostics
+
+poisson_regression_formulas <- list(
+    linear = count ~ interval_factor + X1 + X2 + X3 +
+        offset(log(exposure)),
+    cubic_spline = count ~ interval_factor + X1 +
+        splines::ns(X2, df = 3) + splines::ns(X3, df = 3) +
+        offset(log(exposure))
+)
+
+tic()
+poisson_regression_fits <- lapply(
+    poisson_regression_formulas,
+    function(model_formula) {
+        fit_markov_poisson_regression(
+            poisson_regression_data, model_formula
+        )
+    }
+)
+toc()   # well below one second for the grouped sufficient statistics (about 0.2-0.3 seconds)
+
+poisson_regression_fit_diagnostics <- lapply(poisson_regression_fits, `[[`, "diagnostics")
+poisson_regression_fit_diagnostics
+
+poisson_regression_true_times <- comparison_true_times
+poisson_regression_true_occprobs <- comparison_true_occprobs
+poisson_regression_true_transition_rates <- comparison_true_transition_rates
+
+# Matrix exponentials give the exact occupation probabilities implied by each
+# piecewise-constant fitted generator. Predictions are returned on the dense
+# truth grid so curve_error_table() compares values directly rather than adding
+# a coarse step-function approximation.
+tic()
+poisson_regression_predictions <- lapply(
+    poisson_regression_fits,
+    predict_markov_poisson_regression,
+    new_data = new_data,
+    times = poisson_regression_true_times,
+    initial = c(1, 0, 0)
+)
+toc()
+
+poisson_regression_occupation_curves <- list(
+    True = list(
+        times = poisson_regression_true_times,
+        values = poisson_regression_true_occprobs,
+        type = "l", lty = 1
+    ),
+    `Jump Forest` = list(
+        times = comparison_forest_times,
+        values = comparison_forest_occprobs,
+        type = "s", lty = 2
+    ),
+    `Poisson linear` = list(
+        times = poisson_regression_predictions$linear$times,
+        values = poisson_regression_predictions$linear$occupation_probabilities,
+        type = "l", lty = 3
+    ),
+    `Poisson cubic spline` = list(
+        times = poisson_regression_predictions$cubic_spline$times,
+        values = poisson_regression_predictions$cubic_spline$occupation_probabilities,
+        type = "l", lty = 4
+    )
+)
+
+plot_panel_curves(
+    poisson_regression_occupation_curves,
+    component_labels = paste("State", 0:2),
+    panel_titles = comparison_titles,
+    component_colours = comparison_colours,
+    ylab = "Occupation probability",
+    xlim = c(0, poisson_regression_end), ylim = c(0, 1),
+    panel_layout = c(2, 2), legend_position = "right",
+    legend_order = c(
+        "Jump Forest", "Poisson linear", "Poisson cubic spline", "True"
+    ),
+    legend_cex = 0.8
+)
+plot_panel_curves(
+    poisson_regression_occupation_curves,
+    component_labels = paste("State", 0:2),
+    panel_titles = comparison_titles,
+    component_colours = comparison_colours,
+    ylab = "Occupation probability",
+    xlim = c(0, poisson_regression_end), ylim = c(0, 1),
+    panel_layout = c(2, 2), legend_position = "right",
+    legend_order = c(
+        "Jump Forest", "Poisson linear", "Poisson cubic spline", "True"
+    ),
+    legend_cex = 0.8,
+    file = paste0(
+        "testing/Articles/Discrete/Plots/",
+        "discrete_comparison_poisson_regression_forest.png"
+    )
+)
+
+poisson_regression_transition_curves <- list(
+    True = list(
+        times = poisson_regression_true_times,
+        values = poisson_regression_true_transition_rates,
+        type = "l", lty = 1
+    ),
+    `Jump Forest` = list(
+        times = comparison_forest_times,
+        values = comparison_forest_transition_rates,
+        type = "s", lty = 2
+    ),
+    `Poisson linear` = list(
+        times = poisson_regression_predictions$linear$times,
+        values = poisson_regression_predictions$linear$cumulative_transition_rates,
+        type = "l", lty = 3
+    ),
+    `Poisson cubic spline` = list(
+        times = poisson_regression_predictions$cubic_spline$times,
+        values = poisson_regression_predictions$cubic_spline$cumulative_transition_rates,
+        type = "l", lty = 4
+    )
+)
+
+plot_panel_curves(
+    poisson_regression_transition_curves,
+    component_labels = comparison_transition_names,
+    panel_titles = comparison_titles,
+    component_colours = comparison_transition_colours,
+    ylab = "Cumulative transition rate",
+    xlim = c(0, poisson_regression_end), include_zero = TRUE,
+    panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c(
+        "Jump Forest", "Poisson linear", "Poisson cubic spline", "True"
+    ),
+    legend_cex = 0.8
+)
+plot_panel_curves(
+    poisson_regression_transition_curves,
+    component_labels = comparison_transition_names,
+    panel_titles = comparison_titles,
+    component_colours = comparison_transition_colours,
+    ylab = "Cumulative transition rate",
+    xlim = c(0, poisson_regression_end), include_zero = TRUE,
+    panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c(
+        "Jump Forest", "Poisson linear", "Poisson cubic spline", "True"
+    ),
+    legend_cex = 0.8,
+    file = paste0(
+        "testing/Articles/Discrete/Plots/",
+        "discrete_comparison_poisson_regression_forest_transition_rates.png"
+    )
+)
+
+poisson_regression_occupation_curve_errors <- rbind(
+    curve_error_table(
+        poisson_regression_true_times, poisson_regression_true_occprobs,
+        comparison_forest_times, comparison_forest_occprobs,
+        "Jump Forest", paste("State", 0:2), comparison_titles
+    ),
+    curve_error_table(
+        poisson_regression_true_times, poisson_regression_true_occprobs,
+        poisson_regression_predictions$linear$times,
+        poisson_regression_predictions$linear$occupation_probabilities,
+        "Poisson linear", paste("State", 0:2), comparison_titles
+    ),
+    curve_error_table(
+        poisson_regression_true_times, poisson_regression_true_occprobs,
+        poisson_regression_predictions$cubic_spline$times,
+        poisson_regression_predictions$cubic_spline$occupation_probabilities,
+        "Poisson cubic spline", paste("State", 0:2), comparison_titles
+    )
+)
+
+poisson_regression_transition_curve_errors <- rbind(
+    curve_error_table(
+        poisson_regression_true_times,
+        poisson_regression_true_transition_rates,
+        comparison_forest_times, comparison_forest_transition_rates,
+        "Jump Forest", comparison_transition_names, comparison_titles
+    ),
+    curve_error_table(
+        poisson_regression_true_times,
+        poisson_regression_true_transition_rates,
+        poisson_regression_predictions$linear$times,
+        poisson_regression_predictions$linear$cumulative_transition_rates,
+        "Poisson linear", comparison_transition_names, comparison_titles
+    ),
+    curve_error_table(
+        poisson_regression_true_times,
+        poisson_regression_true_transition_rates,
+        poisson_regression_predictions$cubic_spline$times,
+        poisson_regression_predictions$cubic_spline$cumulative_transition_rates,
+        "Poisson cubic spline", comparison_transition_names, comparison_titles
+    )
+)
+
+occupation_error_summary_poisson_regression <- summarise_curve_errors(
+    poisson_regression_occupation_curve_errors
+)
+transition_error_summary_poisson_regression <- summarise_curve_errors(
+    poisson_regression_transition_curve_errors
+)
+poisson_regression_occupation_curve_errors
+poisson_regression_transition_curve_errors
+occupation_error_summary_poisson_regression
+transition_error_summary_poisson_regression
+
+# final summaries with the MISE and RMSE
+#--------------------------------------------------------------------------------
+
+# Collect every benchmark in common detailed and summary tables. The explicit
+# checks make a future horizon/grid mismatch fail immediately instead of
+# silently reporting several different errors for the same Jump Forest.
+forest_occupation_error_tables <- list(
+    CAJ = subset(caj_occupation_curve_errors, model == "Jump Forest"),
+    Cox = subset(cox_occupation_curve_errors, model == "Jump Forest"),
+    poisson_regression = subset(
+        poisson_regression_occupation_curve_errors,
+        model == "Jump Forest"
+    )
+)
+forest_transition_error_tables <- list(
+    CAJ = subset(caj_transition_curve_errors, model == "Jump Forest"),
+    Cox = subset(cox_transition_curve_errors, model == "Jump Forest"),
+    poisson_regression = subset(
+        poisson_regression_transition_curve_errors,
+        model == "Jump Forest"
+    )
+)
+
+same_curve_errors <- function(error_tables) {
+    reference <- error_tables[[1L]][
+        c("profile", "component", "MISE", "RMSE")
+    ]
+    all(vapply(error_tables[-1L], function(candidate) {
+        isTRUE(all.equal(
+            reference,
+            candidate[c("profile", "component", "MISE", "RMSE")],
+            check.attributes = FALSE
+        ))
+    }, logical(1)))
+}
+if (!same_curve_errors(forest_occupation_error_tables) ||
+    !same_curve_errors(forest_transition_error_tables)) {
+    stop("Jump Forest errors differ across benchmark comparisons")
+}
+
+occupation_curve_errors_all <- rbind(
+    forest_occupation_error_tables$CAJ,
+    subset(caj_occupation_curve_errors, model != "Jump Forest"),
+    subset(cox_occupation_curve_errors, model != "Jump Forest"),
+    subset(
+        poisson_regression_occupation_curve_errors,
+        model != "Jump Forest"
+    )
+)
+transition_curve_errors_all <- rbind(
+    forest_transition_error_tables$CAJ,
+    subset(caj_transition_curve_errors, model != "Jump Forest"),
+    subset(cox_transition_curve_errors, model != "Jump Forest"),
+    subset(
+        poisson_regression_transition_curve_errors,
+        model != "Jump Forest"
+    )
+)
+rownames(occupation_curve_errors_all) <- NULL
+rownames(transition_curve_errors_all) <- NULL
+
+occupation_error_summary_all <- summarise_curve_errors(
+    occupation_curve_errors_all
+)
+transition_error_summary_all <- summarise_curve_errors(
+    transition_curve_errors_all
+)
+
+all_curve_errors <- rbind(
+    transform(
+        occupation_curve_errors_all,
+        curve_type = "Occupation probability"
+    ),
+    transform(
+        transition_curve_errors_all,
+        curve_type = "Cumulative transition rate"
+    )
+)
+all_curve_errors <- all_curve_errors[
+    c("curve_type", "model", "profile", "component", "MISE", "RMSE")
+]
+rownames(all_curve_errors) <- NULL
+
+all_error_summaries <- rbind(
+    transform(
+        occupation_error_summary_all,
+        curve_type = "Occupation probability"
+    ),
+    transform(
+        transition_error_summary_all,
+        curve_type = "Cumulative transition rate"
+    )
+)
+all_error_summaries <- all_error_summaries[
+    c("curve_type", "model", "MISE", "RMSE")
+]
+rownames(all_error_summaries) <- NULL
+
+all_curve_errors
+all_error_summaries
+
+write.table(all_curve_errors, file = "testing/Articles/Discrete/Data/all_curve_errors.txt")
+write.table(all_error_summaries, file = "testing/Articles/Discrete/Data/all_error_summaries.txt")
+
+# The DGP has time-varying covariate effects. Consequently both Poisson models,
+# like the Cox models, remain misspecified: splines relax the covariate shape but
+# do not make the covariate effects vary over time.
+
+# Final conclusion: For num.obs observations from the DGP above, it seems that
+# the linear and cubic cox Poisson and Cox models are best. It is not completely fair
+# to use a Cox model here since the true intensities behave somewhat close to a
+# proportional hazards model. And apparently it is just very difficult to beat the
+# Poisson model.
 
 #nolint end

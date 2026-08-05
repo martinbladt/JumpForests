@@ -1,0 +1,15 @@
+"curve_type" "model" "MISE" "RMSE"
+"1" "Occupation probability" "Cox linear" 1.7609029822619e-05 0.00419631145443459
+"2" "Occupation probability" "Poisson linear" 3.56030860441722e-05 0.00596683216155542
+"3" "Occupation probability" "Poisson cubic spline" 6.06354409698796e-05 0.00778687620101152
+"4" "Occupation probability" "Cox cubic spline" 6.67267362616876e-05 0.00816864347745007
+"5" "Occupation probability" "Jump Forest" 0.000152717442335607 0.0123578898819988
+"6" "Occupation probability" "Stratified Poisson" 0.00109872718799366 0.0331470539866465
+"7" "Occupation probability" "Conditional AJ" 0.00137302313822667 0.037054326848921
+"8" "Cumulative transition rate" "Poisson cubic spline" 0.259210229948448 0.509126929113407
+"9" "Cumulative transition rate" "Poisson linear" 0.282567569403387 0.531570850784151
+"10" "Cumulative transition rate" "Cox linear" 0.693476003051338 0.832752065774285
+"11" "Cumulative transition rate" "Cox cubic spline" 1.12903127480798 1.06255883357487
+"12" "Cumulative transition rate" "Jump Forest" 3.7371252897531 1.9331645790654
+"13" "Cumulative transition rate" "Conditional AJ" 15.5296214813405 3.94076407329093
+"14" "Cumulative transition rate" "Stratified Poisson" 173750.25549339 416.833606482718
