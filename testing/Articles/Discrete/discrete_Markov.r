@@ -219,6 +219,10 @@ weighted_residual_lifetime                              # approximately 54.2 and
 # fit a jump forest (hyperparameter tuning)
 #--------------------------------------------------------------------------------
 
+# read in the data
+sim <- readRDS("testing/Articles/Discrete/Data/sim.rds")
+test_data <- read.table("testing/Articles/Discrete/Data/test_data.txt", header = TRUE)
+
 num_obs <- 1000
 #fitted_forest <- jfforest(MM ~ ., data = sim[1:100], feature_data = test_data[1:100,])
 #print_forest(fitted_forest)
@@ -268,33 +272,32 @@ colnames(ikl) <- as.factor(min_node_sizes)
 spherical <- read.table("testing/Articles/Discrete/Data/tuning_spherical.txt", header = TRUE)
 colnames(spherical) <- as.factor(min_node_sizes)
 
-# plot function for the normalised errors
-plot_normalised_error <- function(error, ylab, file = NULL, width = 8, height = 5, resolution = 300, legend.pos = "topright") {
-    saving <- !is.null(file)
-    if (saving) {
-        dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
-        png(file, width = width, height = height, units = "in", res = resolution)
-        on.exit(dev.off())
-    }
+tuning_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00")
 
-    values <- as.matrix(error)
-    rule_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00")
-
-    matplot(min_node_sizes, t(values), type = "o",
-            col = rule_colours, lty = 1, lwd = 2, pch = seq_along(split_rules),
-            xaxt = "n", xlab = "Minimum node size", ylab = ylab)
-    axis(1, at = min_node_sizes, labels = colnames(error), gap.axis = -1)
-    legend(legend.pos, legend = split_rules, col = rule_colours,
-           lty = 1, lwd = 2, pch = seq_along(split_rules), bty = "n")
-
-    invisible(file)
-}
-
-plot_normalised_error(error = ibs, ylab = "Normalised IBS", width = 5, height = 3)
-
-plot_normalised_error(error = ibs, ylab = "Normalised IBS", file = "testing/Articles/Discrete/Plots/tuning_ibs.png", width = 6, height = 6)
-plot_normalised_error(error = ikl, ylab = "Normalised KL", file = "testing/Articles/Discrete/Plots/tuning_ikl.png", width = 6, height = 6)
-plot_normalised_error(error = spherical, ylab = "Normalised Spherical error", file = "testing/Articles/Discrete/Plots/tuning_is.png", width = 6, height = 6, legend.pos = "bottomright")
+plot_score_curves(
+    scores = ibs, x = min_node_sizes, series_labels = split_rules,
+    x_tick_labels = colnames(ibs), colours = tuning_colours,
+    pch = seq_along(split_rules), ylab = "Normalised IBS", width = 5, height = 3
+)
+plot_score_curves(
+    scores = ibs, x = min_node_sizes, series_labels = split_rules,
+    x_tick_labels = colnames(ibs), colours = tuning_colours,
+    pch = seq_along(split_rules), ylab = "Normalised IBS",
+    file = "testing/Articles/Discrete/Plots/tuning_ibs.png", width = 6, height = 6
+)
+plot_score_curves(
+    scores = ikl, x = min_node_sizes, series_labels = split_rules,
+    x_tick_labels = colnames(ikl), colours = tuning_colours,
+    pch = seq_along(split_rules), ylab = "Normalised KL",
+    file = "testing/Articles/Discrete/Plots/tuning_ikl.png", width = 6, height = 6
+)
+plot_score_curves(
+    scores = spherical, x = min_node_sizes, series_labels = split_rules,
+    x_tick_labels = colnames(spherical), colours = tuning_colours,
+    pch = seq_along(split_rules), ylab = "Normalised Spherical error",
+    legend_position = "bottomright",
+    file = "testing/Articles/Discrete/Plots/tuning_is.png", width = 6, height = 6
+)
 
 # we choose to go with the final choices of logrank with min_node_size = 100 to start
 fitted_forest <- jfforest(MM ~ ., data = sim[1:num_obs], feature_data = test_data[1:num_obs,],
@@ -366,60 +369,40 @@ occprobs2 <- occprob(function(t) {Lambda(t, as.numeric(new_data[2,]))}, plot_end
 occprobs3 <- occprob(function(t) {Lambda(t, as.numeric(new_data[3,]))}, plot_end, c(1,0,0), true_steps)
 occprobs4 <- occprob(function(t) {Lambda(t, as.numeric(new_data[4,]))}, plot_end, c(1,0,0), true_steps)
 
-# Prepare predicted and true occupation probabilities on the same time grid.
-plot_times <- event_times
+# Prepare predicted and true occupation probabilities.
 true_times <- seq(0, plot_end, length.out = length(occprobs1))
 
-predicted_occprobs <- list(occprobs1_predict, occprobs2_predict,
-                           occprobs3_predict, occprobs4_predict)
-true_occprobs <- list(occprobs1, occprobs2, occprobs3, occprobs4)
+predicted_occprobs <- lapply(
+    list(occprobs1_predict, occprobs2_predict, occprobs3_predict, occprobs4_predict),
+    function(probabilities) do.call(rbind, probabilities)
+)
+true_occprobs <- lapply(
+    list(occprobs1, occprobs2, occprobs3, occprobs4),
+    function(probabilities) do.call(rbind, probabilities)
+)
 panel_titles <- c("Man: X2 = 1, X3 = 2", "Man: X2 = 4, X3 = 5",
                   "Woman: X2 = 1, X3 = 2", "Woman: X2 = 4, X3 = 5")
 state_colours <- c("#0072B2", "#D55E00", "#009E73")
 
-# Draw to the active graphics device when file is NULL; otherwise save a PNG.
-plot_occupation_probabilities <- function(file = NULL, width = 11, height = 6.5, resolution = 300) {
-    saving <- !is.null(file)
-    if (saving) {
-        dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
-        png(file, width = width, height = height, units = "in", res = resolution)
-    }
-
-    old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
-    on.exit({
-        par(old_par)
-        if (saving) {
-            dev.off()
-        }
-    })
-
-    for (i in seq_along(predicted_occprobs)) {
-        predicted <- do.call(rbind, predicted_occprobs[[i]])
-        truth <- do.call(rbind, true_occprobs[[i]])
-        truth_at_event_times <- vapply(seq_len(ncol(truth)), function(state) {
-            approx(true_times, truth[, state], xout = plot_times)$y
-        }, numeric(length(plot_times)))
-
-        matplot(plot_times, predicted,
-                type = "l", lty = 2, lwd = 2, col = state_colours,
-                ylim = c(0, 1), xlab = "Time", ylab = "Occupation probability",
-                main = panel_titles[i])
-        matlines(plot_times, truth_at_event_times,
-                 lty = 1, lwd = 2, col = state_colours)
-
-        if (i == 1) {
-            legend("right", legend = c(paste("State", 1:3), "Predicted", "True"),
-                   col = c(state_colours, "black", "black"),
-                   lty = c(rep(1, 3), 2, 1), lwd = 2, bty = "n")
-        }
-    }
-
-    invisible(file)
-}
+consistency_occupation_curves <- list(
+    True = list(times = true_times, values = true_occprobs, type = "l", lty = 1),
+    Predicted = list(times = event_times, values = predicted_occprobs, type = "s", lty = 2)
+)
 
 # Display the plot in RStudio, then save the same plot at 300 DPI.
-plot_occupation_probabilities()
-plot_occupation_probabilities("testing/Articles/Discrete/Plots/discrete_consistency_Markov.png")
+plot_panel_curves(
+    consistency_occupation_curves, component_labels = paste("State", 0:2),
+    panel_titles = panel_titles, component_colours = state_colours,
+    ylab = "Occupation probability", ylim = c(0, 1), panel_layout = c(2, 2),
+    legend_position = "right", legend_order = c("Predicted", "True")
+)
+plot_panel_curves(
+    consistency_occupation_curves, component_labels = paste("State", 0:2),
+    panel_titles = panel_titles, component_colours = state_colours,
+    ylab = "Occupation probability", ylim = c(0, 1), panel_layout = c(2, 2),
+    legend_position = "right", legend_order = c("Predicted", "True"),
+    file = "testing/Articles/Discrete/Plots/discrete_consistency_Markov.png"
+)
 
 # Compare the forest and true cumulative transition rates.
 consistency_transition_indices <- matrix(
@@ -433,9 +416,9 @@ consistency_transition_names <- c("0 -> 1", "0 -> 2", "1 -> 0", "1 -> 2")
 consistency_transition_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")
 
 consistency_forest_transition_rates <- lapply(predictions, function(prediction) {
-    t(vapply(prediction, function(rate_matrix) {
-        rate_matrix[consistency_transition_indices]
-    }, numeric(nrow(consistency_transition_indices))))
+    extract_matrix_entries(
+        prediction, consistency_transition_indices, consistency_transition_names
+    )
 })
 
 # Numerically integrate the four true transition intensities.
@@ -457,52 +440,32 @@ consistency_true_transition_rates <- lapply(seq_len(nrow(new_data)), function(i)
     cumulative_rates
 })
 
-plot_cumulative_transition_rates <- function(file = NULL, width = 11, height = 6.5,
-                                             resolution = 300) {
-    saving <- !is.null(file)
-    if (saving) {
-        dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
-        png(file, width = width, height = height, units = "in", res = resolution)
-    }
+consistency_transition_curves <- list(
+    True = list(
+        times = true_times, values = consistency_true_transition_rates,
+        type = "l", lty = 1
+    ),
+    Predicted = list(
+        times = event_times, values = consistency_forest_transition_rates,
+        type = "s", lty = 2
+    )
+)
 
-    old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
-    on.exit({
-        par(old_par)
-        if (saving) {
-            dev.off()
-        }
-    })
-
-    for (i in seq_along(predictions)) {
-        y_limits <- range(
-            0,
-            consistency_true_transition_rates[[i]],
-            consistency_forest_transition_rates[[i]],
-            finite = TRUE
-        )
-
-        matplot(true_times, consistency_true_transition_rates[[i]],
-                type = "l", col = consistency_transition_colours,
-                lty = 1, lwd = 2, xlim = c(0, plot_end), ylim = y_limits,
-                xlab = "Time", ylab = "Cumulative transition rate",
-                main = panel_titles[i])
-        matlines(event_times, consistency_forest_transition_rates[[i]],
-                 type = "s", col = consistency_transition_colours,
-                 lty = 2, lwd = 2)
-
-        if (i == 1) {
-            legend("topleft",
-                   legend = c(consistency_transition_names, "Predicted", "True"),
-                   col = c(consistency_transition_colours, "black", "black"),
-                   lty = c(rep(1, 4), 2, 1), lwd = 2, bty = "n")
-        }
-    }
-
-    invisible(file)
-}
-
-plot_cumulative_transition_rates()
-plot_cumulative_transition_rates("testing/Articles/Discrete/Plots/discrete_consistency_Markov_transition_rates.png")
+plot_panel_curves(
+    consistency_transition_curves, component_labels = consistency_transition_names,
+    panel_titles = panel_titles, component_colours = consistency_transition_colours,
+    ylab = "Cumulative transition rate", xlim = c(0, plot_end),
+    include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c("Predicted", "True")
+)
+plot_panel_curves(
+    consistency_transition_curves, component_labels = consistency_transition_names,
+    panel_titles = panel_titles, component_colours = consistency_transition_colours,
+    ylab = "Cumulative transition rate", xlim = c(0, plot_end),
+    include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c("Predicted", "True"),
+    file = "testing/Articles/Discrete/Plots/discrete_consistency_Markov_transition_rates.png"
+)
 
 # how to plot the errors? should the forest be modified to return the whole vector of scores?
 # not relevant to plot errors here, this is just visualisation
@@ -567,45 +530,36 @@ comparison_titles <- c("Man: X2 = 1, X3 = 2", "Man: X2 = 4, X3 = 5",
                        "Woman: X2 = 1, X3 = 2", "Woman: X2 = 4, X3 = 5")
 comparison_colours <- c("#0072B2", "#D55E00", "#009E73")
 
-plot_AJ_forest_comparison <- function(file = NULL, width = 11, height = 6.5, resolution = 300) {
-    saving <- !is.null(file)
-    if (saving) {
-        dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
-        png(file, width = width, height = height, units = "in", res = resolution)
-    }
+comparison_occupation_curves <- list(
+    True = list(
+        times = comparison_true_times, values = comparison_true_occprobs,
+        type = "l", lty = 1
+    ),
+    Forest = list(
+        times = comparison_forest_times, values = comparison_forest_occprobs,
+        type = "s", lty = 2
+    ),
+    `Conditional AJ` = list(
+        times = lapply(AJfits, `[[`, "t"), values = comparison_AJ_occprobs,
+        type = "s", lty = 3
+    )
+)
 
-    old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
-    on.exit({
-        par(old_par)
-        if (saving) {
-            dev.off()
-        }
-    })
-
-    for (i in seq_along(AJfits)) {
-        matplot(comparison_true_times, comparison_true_occprobs[[i]],
-                type = "l", col = comparison_colours, lty = 1, lwd = 2,
-                xlim = c(0, comparison_end), ylim = c(0, 1),
-                xlab = "Time", ylab = "Occupation probability",
-                main = comparison_titles[i])
-        matlines(comparison_forest_times, comparison_forest_occprobs[[i]],
-                 type = "s", col = comparison_colours, lty = 2, lwd = 2)
-        matlines(AJfits[[i]]$t, comparison_AJ_occprobs[[i]],
-                 type = "s", col = comparison_colours, lty = 3, lwd = 2)
-
-        if (i == 1) {
-            legend("right",
-                   legend = c(paste("State", 1:3), "Forest", "Conditional AJ", "True"),
-                   col = c(comparison_colours, rep("black", 3)),
-                   lty = c(rep(1, 3), 2, 3, 1), lwd = 2, bty = "n")
-        }
-    }
-
-    invisible(file)
-}
-
-plot_AJ_forest_comparison()
-plot_AJ_forest_comparison("testing/Articles/Discrete/Plots/discrete_comparison_AJ_forest.png")
+plot_panel_curves(
+    comparison_occupation_curves, component_labels = paste("State", 0:2),
+    panel_titles = comparison_titles, component_colours = comparison_colours,
+    ylab = "Occupation probability", xlim = c(0, comparison_end),
+    ylim = c(0, 1), panel_layout = c(2, 2), legend_position = "right",
+    legend_order = c("Forest", "Conditional AJ", "True")
+)
+plot_panel_curves(
+    comparison_occupation_curves, component_labels = paste("State", 0:2),
+    panel_titles = comparison_titles, component_colours = comparison_colours,
+    ylab = "Occupation probability", xlim = c(0, comparison_end),
+    ylim = c(0, 1), panel_layout = c(2, 2), legend_position = "right",
+    legend_order = c("Forest", "Conditional AJ", "True"),
+    file = "testing/Articles/Discrete/Plots/discrete_comparison_AJ_forest.png"
+)
 
 # Compare the four nonzero cumulative transition rates.
 comparison_transition_indices <- matrix(
@@ -618,17 +572,15 @@ comparison_transition_indices <- matrix(
 comparison_transition_names <- c("0 -> 1", "0 -> 2", "1 -> 0", "1 -> 2")
 comparison_transition_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7")
 
-extract_cumulative_transitions <- function(cumulative_rates) {
-    t(vapply(cumulative_rates, function(rate_matrix) {
-        rate_matrix[comparison_transition_indices]
-    }, numeric(nrow(comparison_transition_indices))))
-}
-
-comparison_forest_transition_rates <- lapply(
-    forest_predictions, extract_cumulative_transitions
-)
+comparison_forest_transition_rates <- lapply(forest_predictions, function(prediction) {
+    extract_matrix_entries(
+        prediction, comparison_transition_indices, comparison_transition_names
+    )
+})
 comparison_AJ_transition_rates <- lapply(AJfits, function(fit) {
-    extract_cumulative_transitions(fit$Lambda)
+    extract_matrix_entries(
+        fit$Lambda, comparison_transition_indices, comparison_transition_names
+    )
 })
 
 # Integrate each true transition intensity over the common plotting grid.
@@ -650,54 +602,36 @@ comparison_true_transition_rates <- lapply(seq_len(nrow(new_data)), function(i) 
     cumulative_rates
 })
 
-plot_AJ_forest_transition_rates <- function(file = NULL, width = 11, height = 6.5, resolution = 300) {
-    saving <- !is.null(file)
-    if (saving) {
-        dir.create(dirname(file), recursive = TRUE, showWarnings = FALSE)
-        png(file, width = width, height = height, units = "in", res = resolution)
-    }
+comparison_transition_curves <- list(
+    True = list(
+        times = comparison_true_times, values = comparison_true_transition_rates,
+        type = "l", lty = 1
+    ),
+    Forest = list(
+        times = comparison_forest_times, values = comparison_forest_transition_rates,
+        type = "s", lty = 2
+    ),
+    `Conditional AJ` = list(
+        times = lapply(AJfits, `[[`, "t"), values = comparison_AJ_transition_rates,
+        type = "s", lty = 3
+    )
+)
 
-    old_par <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
-    on.exit({
-        par(old_par)
-        if (saving) {
-            dev.off()
-        }
-    })
-
-    for (i in seq_along(AJfits)) {
-        y_limits <- range(
-            0,
-            comparison_true_transition_rates[[i]],
-            comparison_forest_transition_rates[[i]],
-            comparison_AJ_transition_rates[[i]],
-            finite = TRUE
-        )
-
-        matplot(comparison_true_times, comparison_true_transition_rates[[i]],
-                type = "l", col = comparison_transition_colours, lty = 1, lwd = 2,
-                xlim = c(0, comparison_end), ylim = y_limits,
-                xlab = "Time", ylab = "Cumulative transition rate",
-                main = comparison_titles[i])
-        matlines(comparison_forest_times, comparison_forest_transition_rates[[i]],
-                 type = "s", col = comparison_transition_colours, lty = 2, lwd = 2)
-        matlines(AJfits[[i]]$t, comparison_AJ_transition_rates[[i]],
-                 type = "s", col = comparison_transition_colours, lty = 3, lwd = 2)
-
-        if (i == 1) {
-            legend("topleft",
-                   legend = c(comparison_transition_names,
-                              "Forest", "Conditional AJ", "True"),
-                   col = c(comparison_transition_colours, rep("black", 3)),
-                   lty = c(rep(1, 4), 2, 3, 1), lwd = 2, bty = "n")
-        }
-    }
-
-    invisible(file)
-}
-
-plot_AJ_forest_transition_rates()
-plot_AJ_forest_transition_rates("testing/Articles/Discrete/Plots/discrete_comparison_AJ_forest_transition_rates.png")
+plot_panel_curves(
+    comparison_transition_curves, component_labels = comparison_transition_names,
+    panel_titles = comparison_titles, component_colours = comparison_transition_colours,
+    ylab = "Cumulative transition rate", xlim = c(0, comparison_end),
+    include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c("Forest", "Conditional AJ", "True")
+)
+plot_panel_curves(
+    comparison_transition_curves, component_labels = comparison_transition_names,
+    panel_titles = comparison_titles, component_colours = comparison_transition_colours,
+    ylab = "Cumulative transition rate", xlim = c(0, comparison_end),
+    include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c("Forest", "Conditional AJ", "True"),
+    file = "testing/Articles/Discrete/Plots/discrete_comparison_AJ_forest_transition_rates.png"
+)
 
 # number of 1 - > 0 transitions
 count_disabled_to_active <- function(path) {
@@ -736,8 +670,361 @@ disabled_to_active_by_profile
 # data much more efficiently. There is definitely underestimation of the transition 1 -> 0, but this is to be expected since there
 # are very few transitions in the different groups. The underestimation is much worse for CAJ than for the jump forest
 
-# fit Cox proportional hazard model (how exactly?)
+# fit Cox proportional hazard model
 #--------------------------------------------------------------------------------
+
+# Convert the same paths used by the CAJ study to a counting-process data set.
+# A same-state final interval is censoring; every other interval ends in the
+# destination state recorded by the path. Absolute time is used because the DGP
+# is a clock-forward Markov model.
+paths_to_cox_data <- function(paths, features, number_of_states = 3L) {
+    if (length(paths) != nrow(features)) {
+        stop("paths and features must describe the same number of individuals")
+    }
+
+    rows <- Map(function(path, id) {
+        if (length(path$times) != length(path$states) || length(path$times) < 2L ||
+            any(!is.finite(path$times)) || is.unsorted(path$times, strictly = TRUE) ||
+            any(path$states < 1L | path$states > number_of_states)) {
+            stop("each path must contain valid, strictly increasing times and states")
+        }
+
+        number_of_intervals <- length(path$times) - 1L
+        cbind(
+            data.frame(
+                id = rep.int(id, number_of_intervals),
+                tstart = head(path$times, -1L), # -1 removes last element
+                tstop = tail(path$times, -1L),  # -1 removes first element
+                from = head(path$states, -1L),
+                to = tail(path$states, -1L)
+            ),
+            features[rep.int(id, number_of_intervals), , drop = FALSE]
+        )
+    }, paths, seq_along(paths))
+
+    result <- do.call(rbind, rows)
+    rownames(result) <- NULL
+    state_levels <- paste0("state", seq_len(number_of_states))
+    event_label <- ifelse(
+        result$from == result$to, "censor", paste0("state", result$to)
+    )
+    # The first event-factor level denotes censoring to survival::Surv.
+    result$event <- factor(event_label, levels = c("censor", state_levels))
+    result$istate <- factor(paste0("state", result$from), levels = state_levels)
+    result
+}
+
+cox_data <- paths_to_cox_data(
+    sim[seq_len(num.obs)],
+    test_data[seq_len(num.obs), c("X1", "X2", "X3"), drop = FALSE]
+)
+
+# survival::coxph expands the coefficients and baseline hazards by transition in
+# a native multi-state fit. Thus both specifications are fitted to all four DGP
+# transitions (0 -> 1, 0 -> 2, 1 -> 0 and 1 -> 2) in one call. X1 remains
+# linear because it is binary; ns() supplies natural cubic splines for the two
+# ordinal predictors.
+cox_formulas <- list(
+    linear = survival::Surv(tstart, tstop, event) ~ X1 + X2 + X3,
+    cubic_spline = survival::Surv(tstart, tstop, event) ~
+        X1 + splines::ns(X2, df = 3) + splines::ns(X3, df = 3)
+)
+
+tic()
+cox_fits <- lapply(cox_formulas, function(cox_formula) {
+    fit <- survival::coxph(
+        cox_formula, data = cox_data, id = id, istate = istate,
+        ties = "breslow", model = TRUE, x = TRUE, singular.ok = FALSE
+    )
+    if (any(!is.finite(stats::coef(fit)))) {
+        stop("a transition-specific Cox model contains non-finite coefficients")
+    }
+    fit
+})
+toc()   # about one second
+
+# The four fitted transition models and their event counts.
+cox_transition_counts <- with(cox_data, table(istate, event))
+cox_transition_counts
+lapply(cox_fits, print)
+
+# Use survival's Aalen--Johansen product integral (stype = 1) to turn the fitted
+# transition hazards into occupation probabilities. The transition order in a
+# coxphms object is model-dependent, so it is matched explicitly.
+extract_cox_curves <- function(fit, new_data, horizon = NULL, initial = c(1, 0, 0), state_order = paste0("state", 1:3), transition_order = c("1:2", "1:3", "2:1", "2:3")) {
+    predicted <- survival::survfit(
+        fit, newdata = new_data, p0 = initial, stype = 1, se.fit = FALSE
+    )
+    pstate <- predicted$pstate
+    cumulative_hazards <- predicted$cumhaz
+
+    # Retain the profile dimension if a survival version drops it for one row.
+    if (length(dim(pstate)) == 2L) {
+        pstate <- array(pstate, dim = c(nrow(pstate), 1L, ncol(pstate)))
+    }
+    if (length(dim(cumulative_hazards)) == 2L) {
+        cumulative_hazards <- array(
+            cumulative_hazards,
+            dim = c(nrow(cumulative_hazards), 1L, ncol(cumulative_hazards))
+        )
+    }
+
+    state_index <- match(state_order, fit$states)
+    transition_index <- match(transition_order, colnames(fit$cmap))
+    if (anyNA(state_index) || anyNA(transition_index)) {
+        stop("could not match the requested Cox state or transition order")
+    }
+    pstate <- pstate[, , state_index, drop = FALSE]
+    cumulative_hazards <- cumulative_hazards[, , transition_index, drop = FALSE]
+
+    number_of_profiles <- nrow(new_data)
+    number_of_times <- length(predicted$time)
+    occupation_probabilities <- lapply(seq_len(number_of_profiles), function(i) {
+        values <- matrix(
+            pstate[, i, , drop = FALSE], nrow = number_of_times,
+            ncol = length(state_order), dimnames = list(NULL, state_order)
+        )
+        row_totals <- rowSums(values)
+        if (any(!is.finite(row_totals)) || any(row_totals <= 0)) {
+            stop("Cox occupation predictions have invalid row totals")
+        }
+        # Remove the small numerical row-sum drift from the direct product integral.
+        sweep(values, 1L, row_totals, "/")
+    })
+    cumulative_transition_rates <- lapply(seq_len(number_of_profiles), function(i) {
+        matrix(
+            cumulative_hazards[, i, , drop = FALSE], nrow = number_of_times,
+            ncol = length(transition_order), dimnames = list(NULL, transition_order)
+        )
+    })
+
+    prediction_times <- predicted$time
+    if (!length(prediction_times) || prediction_times[1L] > 0) {
+        prediction_times <- c(0, prediction_times)
+        occupation_probabilities <- lapply(occupation_probabilities, function(values) {
+            rbind(stats::setNames(initial, state_order), values)
+        })
+        cumulative_transition_rates <- lapply(cumulative_transition_rates, function(values) {
+            rbind(stats::setNames(rep(0, length(transition_order)), transition_order), values)
+        })
+    }
+    if (!is.null(horizon) && tail(prediction_times, 1L) < horizon) {
+        prediction_times <- c(prediction_times, horizon)
+        occupation_probabilities <- lapply(occupation_probabilities, function(values) {
+            rbind(values, tail(values, 1L))
+        })
+        cumulative_transition_rates <- lapply(cumulative_transition_rates, function(values) {
+            rbind(values, tail(values, 1L))
+        })
+    }
+
+    list(
+        times = prediction_times,
+        occupation_probabilities = occupation_probabilities,
+        cumulative_transition_rates = cumulative_transition_rates,
+        survfit = predicted
+    )
+}
+
+tic()
+cox_predictions <- lapply(cox_fits, extract_cox_curves, new_data = new_data, horizon = comparison_end)
+toc()   # about 2.6 seconds to compute predictions
+
+# Compare the Jump Forest and both Cox specifications against the DGP truth.
+cox_occupation_curves <- list(
+    True = list(
+        times = comparison_true_times, values = comparison_true_occprobs,
+        type = "l", lty = 1
+    ),
+    `Jump Forest` = list(
+        times = comparison_forest_times, values = comparison_forest_occprobs,
+        type = "s", lty = 2
+    ),
+    `Cox linear` = list(
+        times = cox_predictions$linear$times,
+        values = cox_predictions$linear$occupation_probabilities,
+        type = "s", lty = 3
+    ),
+    `Cox cubic spline` = list(
+        times = cox_predictions$cubic_spline$times,
+        values = cox_predictions$cubic_spline$occupation_probabilities,
+        type = "s", lty = 4
+    )
+)
+
+plot_panel_curves(
+    cox_occupation_curves, component_labels = paste("State", 0:2),
+    panel_titles = comparison_titles, component_colours = comparison_colours,
+    ylab = "Occupation probability", xlim = c(0, comparison_end),
+    ylim = c(0, 1), panel_layout = c(2, 2), legend_position = "right",
+    legend_order = c("Jump Forest", "Cox linear", "Cox cubic spline", "True"),
+    legend_cex = 0.8
+)
+plot_panel_curves(
+    cox_occupation_curves, component_labels = paste("State", 0:2),
+    panel_titles = comparison_titles, component_colours = comparison_colours,
+    ylab = "Occupation probability", xlim = c(0, comparison_end),
+    ylim = c(0, 1), panel_layout = c(2, 2), legend_position = "right",
+    legend_order = c("Jump Forest", "Cox linear", "Cox cubic spline", "True"),
+    legend_cex = 0.8,
+    file = "testing/Articles/Discrete/Plots/discrete_comparison_cox_forest.png"
+)
+
+cox_transition_curves <- list(
+    True = list(
+        times = comparison_true_times, values = comparison_true_transition_rates,
+        type = "l", lty = 1
+    ),
+    `Jump Forest` = list(
+        times = comparison_forest_times, values = comparison_forest_transition_rates,
+        type = "s", lty = 2
+    ),
+    `Cox linear` = list(
+        times = cox_predictions$linear$times,
+        values = cox_predictions$linear$cumulative_transition_rates,
+        type = "s", lty = 3
+    ),
+    `Cox cubic spline` = list(
+        times = cox_predictions$cubic_spline$times,
+        values = cox_predictions$cubic_spline$cumulative_transition_rates,
+        type = "s", lty = 4
+    )
+)
+
+plot_panel_curves(
+    cox_transition_curves, component_labels = comparison_transition_names,
+    panel_titles = comparison_titles, component_colours = comparison_transition_colours,
+    ylab = "Cumulative transition rate", xlim = c(0, comparison_end),
+    include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c("Jump Forest", "Cox linear", "Cox cubic spline", "True"),
+    legend_cex = 0.8
+)
+plot_panel_curves(
+    cox_transition_curves, component_labels = comparison_transition_names,
+    panel_titles = comparison_titles, component_colours = comparison_transition_colours,
+    ylab = "Cumulative transition rate", xlim = c(0, comparison_end),
+    include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
+    legend_order = c("Jump Forest", "Cox linear", "Cox cubic spline", "True"),
+    legend_cex = 0.8,
+    file = "testing/Articles/Discrete/Plots/discrete_comparison_cox_forest_transition_rates.png"
+)
+
+# Time-averaged oracle curve errors provide one metric shared by all three
+# methods. With equal state weights, occupation MISE is proportional to the
+# integrated Brier-score regret relative to the true probabilities.
+step_matrix_at <- function(times, values, evaluation_times) {
+    values <- as.matrix(values)
+    if (!is.numeric(times) || length(times) != nrow(values) || is.unsorted(times)) {
+        stop("times must be sorted and match the rows of values")
+    }
+    index <- findInterval(evaluation_times, times)
+    if (any(index == 0L)) {
+        stop("the prediction grid must begin no later than the evaluation grid")
+    }
+    values[index, , drop = FALSE]
+}
+
+curve_error_table <- function(truth_times, truth_values, prediction_times, prediction_values, model, component_names, profile_names) {
+    if (length(truth_values) != length(prediction_values) ||
+        length(profile_names) != length(truth_values)) {
+        stop("truth, predictions and profile_names must have matching panels")
+    }
+    horizon <- max(truth_times) - min(truth_times)
+    if (!is.finite(horizon) || horizon <= 0) {
+        stop("truth_times must cover a positive finite interval")
+    }
+
+    do.call(rbind, lapply(seq_along(truth_values), function(i) {
+        panel_times <- if (is.list(prediction_times)) {
+            prediction_times[[i]]
+        } else {
+            prediction_times
+        }
+        truth <- as.matrix(truth_values[[i]])
+        prediction <- step_matrix_at(
+            panel_times, prediction_values[[i]], truth_times
+        )
+        if (!identical(dim(prediction), dim(truth)) ||
+            length(component_names) != ncol(truth)) {
+            stop("truth and prediction matrices must have matching dimensions")
+        }
+
+        squared_error <- (prediction - truth)^2
+        increments <- sweep(
+            (squared_error[-1L, , drop = FALSE] +
+             squared_error[-nrow(squared_error), , drop = FALSE]) / 2,
+            1L, diff(truth_times), "*"
+        )
+        mise <- colSums(increments) / horizon
+        data.frame(
+            model = model, profile = profile_names[i], component = component_names,
+            MISE = mise, RMSE = sqrt(mise), row.names = NULL
+        )
+    }))
+}
+
+occupation_curve_errors <- rbind(
+    curve_error_table(
+        comparison_true_times, comparison_true_occprobs,
+        comparison_forest_times, comparison_forest_occprobs,
+        "Jump Forest", paste("State", 0:2), comparison_titles
+    ),
+    curve_error_table(
+        comparison_true_times, comparison_true_occprobs,
+        cox_predictions$linear$times,
+        cox_predictions$linear$occupation_probabilities,
+        "Cox linear", paste("State", 0:2), comparison_titles
+    ),
+    curve_error_table(
+        comparison_true_times, comparison_true_occprobs,
+        cox_predictions$cubic_spline$times,
+        cox_predictions$cubic_spline$occupation_probabilities,
+        "Cox cubic spline", paste("State", 0:2), comparison_titles
+    )
+)
+
+transition_curve_errors <- rbind(
+    curve_error_table(
+        comparison_true_times, comparison_true_transition_rates,
+        comparison_forest_times, comparison_forest_transition_rates,
+        "Jump Forest", comparison_transition_names, comparison_titles
+    ),
+    curve_error_table(
+        comparison_true_times, comparison_true_transition_rates,
+        cox_predictions$linear$times,
+        cox_predictions$linear$cumulative_transition_rates,
+        "Cox linear", comparison_transition_names, comparison_titles
+    ),
+    curve_error_table(
+        comparison_true_times, comparison_true_transition_rates,
+        cox_predictions$cubic_spline$times,
+        cox_predictions$cubic_spline$cumulative_transition_rates,
+        "Cox cubic spline", comparison_transition_names, comparison_titles
+    )
+)
+
+summarise_curve_errors <- function(errors) {
+    summary <- stats::aggregate(MISE ~ model, data = errors, FUN = mean)
+    summary$RMSE <- sqrt(summary$MISE)
+    summary[order(summary$MISE), ]
+}
+
+occupation_error_summary <- summarise_curve_errors(occupation_curve_errors)
+transition_error_summary <- summarise_curve_errors(transition_curve_errors)
+occupation_error_summary
+transition_error_summary
+
+# The DGP contains time-varying effects of X2 and X3 (and additive hazard
+# constants for three transitions), so neither Cox specification is correctly
+# proportional. Cubic splines relax covariate shape, but not that PH assumption.
+
 
 # fit a Poisson regression model (how exactly is this done with covariates?)
 #--------------------------------------------------------------------------------
+
+
+
+# fit the true model?
+#--------------------------------------------------------------------------------
+
+#nolint end
