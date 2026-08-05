@@ -470,6 +470,7 @@ plot_panel_curves(
 
 # in principle we should test larger node sizes, but internal error prediction is too memory demanding
 
+{
 # load in data and fit benchmark jump forest to compare all the following models to
 #--------------------------------------------------------------------------------
 
@@ -481,11 +482,11 @@ sim <- readRDS("testing/Articles/Discrete/Data/sim.rds")
 test_data <- read.table("testing/Articles/Discrete/Data/test_data.txt", header = TRUE)
 
 # we choose to work with less data here and we drop the noise variables
-num.obs <- 2000
+num.obs <- 10000
 length(unique(unlist(lapply(sim[1:num.obs], function(z) z$times)))) # 21065
 
 fitted_forest <- jfforest(MM ~ ., data = sim[1:num.obs], feature_data = test_data[1:num.obs, 1:3], splitrule = "logrank",
-                          min_node_size = 100, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000)
+                          min_node_size = 200, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000)
 print_forest(fitted_forest)
 
 new_data <- data.frame(X1 = c(1,1,0,0), X2 = c(1,4,1,4), X3 = c(2,5,2,5))
@@ -1242,7 +1243,7 @@ poisson_regression_data <- build_markov_poisson_data(
     time_grid = poisson_regression_time_grid,
     transitions = comparison_transition_indices
 )
-toc()   # about 2 seconds
+toc()   # about 2 seconds for n = 10000
 
 poisson_regression_bin_diagnostics <- poisson_regression_data$diagnostics
 poisson_regression_bin_diagnostics
@@ -1550,8 +1551,10 @@ rownames(all_error_summaries) <- NULL
 all_curve_errors
 all_error_summaries
 
-write.table(all_curve_errors, file = "testing/Articles/Discrete/Data/all_curve_errors.txt")
-write.table(all_error_summaries, file = "testing/Articles/Discrete/Data/all_error_summaries.txt")
+}
+
+write.table(all_curve_errors, file = "testing/Articles/Discrete/Data/all_curve_errors_n2000.txt")
+write.table(all_error_summaries, file = "testing/Articles/Discrete/Data/all_error_summaries_n2000.txt")
 
 # The DGP has time-varying covariate effects. Consequently both Poisson models,
 # like the Cox models, remain misspecified: splines relax the covariate shape but
