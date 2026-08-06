@@ -429,15 +429,15 @@ sim <- readRDS(data_path("sim.rds"))
 test_data <- read.table(data_path("test_data.txt"), header = TRUE)
 
 length(unique(unlist(lapply(sim, function(z) z$times))))
-# 105090 event and censoring times total for 50,000 observations!
+# 100000+ event and censoring times total for 50,000 observations!
 
 # fit forest using num_obs observations with the best hyperparameters found above
 # (the original number of event times was 50,000+, we reduce it to 1000, could probably do with even less)
 num_obs <- 50000
 
 tic()
-final_forest <- jfforest(MM ~ ., data = sim[1:num_obs], feature_data = test_data[1:num_obs,], splitrule = "logrank",
-                         min_node_size = 100, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000)
+final_forest <- jfforest(MM ~ ., data = sim[1:num_obs], feature_data = test_data[1:num_obs,], splitrule = "taroneware",
+                         min_node_size = 200, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000)
 toc()   # only takes about 8 seconds to fit, 8 GB of ram usage though...
 print_forest(final_forest)
 
