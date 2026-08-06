@@ -3,11 +3,11 @@
 "2" "Occupation probability" "Poisson linear" 7.79307084474026e-05 0.00882783713303562
 "3" "Occupation probability" "Cox cubic spline" 0.000228405947404643 0.0151131051542905
 "4" "Occupation probability" "Poisson cubic spline" 0.000359137435814034 0.0189509217668702
-"5" "Occupation probability" "Jump Forest" 0.000403576246406905 0.0200892072120058
+"5" "Occupation probability" "Jump Forest" 0.000744191145376904 0.0272798670337101
 "6" "Occupation probability" "Conditional AJ" 0.00561840420266106 0.0749560151199426
 "7" "Cumulative transition rate" "Cox linear" 0.154600009201425 0.393192076727679
 "8" "Cumulative transition rate" "Poisson linear" 0.210207106199798 0.458483485198538
 "9" "Cumulative transition rate" "Poisson cubic spline" 0.329140653048636 0.573707811563199
 "10" "Cumulative transition rate" "Cox cubic spline" 0.335566913431248 0.579281376734354
-"11" "Cumulative transition rate" "Jump Forest" 2.67607704576798 1.63587195274202
+"11" "Cumulative transition rate" "Jump Forest" 2.65127074919322 1.6282723203424
 "12" "Cumulative transition rate" "Conditional AJ" 27.6187197793437 5.25535153718034

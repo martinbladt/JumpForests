@@ -1265,7 +1265,8 @@ List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t 
     Named("mtry") = mtry,
     Named("min.node.size") = min_node_size,
     Named("nsplits") = nsplits,
-    Named("honest") = honest
+    Named("honest") = honest,
+    Named("double.bootstrap") = double_bootstrap
   );
 
   // determine the (sorted) unique event times and the corresponding response IDs

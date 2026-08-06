@@ -1,0 +1,19 @@
+num_obs	metric	model	normalised_integrated_score
+10000	Brier	Optimal expected	0.0709726473269832
+10000	Brier	Jump Forest	0.0711035195670745
+10000	Brier	Poisson linear	0.0710082504130274
+10000	Brier	Poisson cubic spline	0.0710332827679531
+10000	Brier	Cox linear	0.0709902563568058
+10000	Brier	Cox cubic spline	0.0710393740632449
+10000	KL	Optimal expected	0.392996363268281
+10000	KL	Jump Forest	0.394889671964969
+10000	KL	Poisson linear	0.393915204240791
+10000	KL	Poisson cubic spline	0.394284912610903
+10000	KL	Cox linear	0.393286860325811
+10000	KL	Cox cubic spline	0.393619851214879
+10000	Spherical	Optimal expected	0.492813043373831
+10000	Spherical	Jump Forest	0.492946103958246
+10000	Spherical	Poisson linear	0.492834091940525
+10000	Spherical	Poisson cubic spline	0.492855182765438
+10000	Spherical	Cox linear	0.492827800583646
+10000	Spherical	Cox cubic spline	0.4928735783397

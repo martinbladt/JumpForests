@@ -1,0 +1,6 @@
+# prompts for Wednesday:
+
+
+
+# wait with this prompt until everything is ready!
+Now I want to compare the errors across all times. In the Helpers.r file, I have written functions with the optimal expected errors. I want, for each occupation probability, a plot with the optimal expected Brier score error, the Brier score error from the forest, the Brier score error from CAJ, the Brier score error from the Poisson regression and the Brier score error from the Cox model. Each plot contains all errors for a single metric and a single state, so 9 plots in total.

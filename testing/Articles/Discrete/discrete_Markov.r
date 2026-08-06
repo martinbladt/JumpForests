@@ -482,11 +482,13 @@ sim <- readRDS("testing/Articles/Discrete/Data/sim.rds")
 test_data <- read.table("testing/Articles/Discrete/Data/test_data.txt", header = TRUE)
 
 # we choose to work with less data here and we drop the noise variables
-num.obs <- 10000
+num.obs <- 2000
+forest_honest <- FALSE
 length(unique(unlist(lapply(sim[1:num.obs], function(z) z$times)))) # 21065
 
 fitted_forest <- jfforest(MM ~ ., data = sim[1:num.obs], feature_data = test_data[1:num.obs, 1:3], splitrule = "logrank",
-                          min_node_size = 200, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000)
+                          min_node_size = 200, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000,
+                          honest = forest_honest)
 print_forest(fitted_forest)
 
 new_data <- data.frame(X1 = c(1,1,0,0), X2 = c(1,4,1,4), X3 = c(2,5,2,5))
@@ -514,7 +516,7 @@ lengths(rows_by_profile)    # note: very few observations in groups 2 and 4
 AJfits <- lapply(rows_by_profile, function(rows) {aalen_johansen(sim[rows], p = 2)})
 
 # Compute the true probabilities over the complete range covered by either estimator.
-comparison_end <- max(comparison_forest_times,unlist(lapply(AJfits, function(fit) fit$t)))
+comparison_end <- max(comparison_forest_times, unlist(lapply(AJfits, function(fit) fit$t)))
 comparison_steps <- max(1L, ceiling(10^4 * comparison_end / (120 - x)))
 comparison_true_times <- seq(0, comparison_end, length.out = comparison_steps + 1L)
 comparison_true_occprobs <- lapply(seq_len(nrow(new_data)), function(i) {
@@ -1565,5 +1567,439 @@ write.table(all_error_summaries, file = "testing/Articles/Discrete/Data/all_erro
 # to use a Cox model here since the true intensities behave somewhat close to a
 # proportional hazards model. And apparently it is just very difficult to beat the
 # Poisson model.
+
+# pointwise expected Brier, KL and spherical errors
+#--------------------------------------------------------------------------------
+{
+# Score every estimator on the dense DGP grid. The forest and Cox curves
+# are step functions, so their most recent prediction is carried forward. The
+# resulting scores are theoretical expectations under the known DGP rather than
+# empirical IPCW scores; this puts all five estimators on exactly the same basis.
+expected_error_times <- comparison_true_times
+number_of_score_states <- ncol(comparison_true_occprobs[[1L]])
+
+# These are the defaults used by a Jump Forest fitted without state_weights:
+# Brier and spherical errors average over states, whereas KL uses the ordinary
+# categorical log score.
+expected_error_weights <- list(
+    Brier = rep(1 / number_of_score_states, number_of_score_states),
+    KL = rep(1, number_of_score_states),
+    Spherical = rep(1 / number_of_score_states, number_of_score_states)
+)
+
+normalise_score_probabilities <- function(probabilities, label) {
+    probabilities <- as.matrix(probabilities)
+    storage.mode(probabilities) <- "double"
+    tolerance <- 1e-7
+
+    if (ncol(probabilities) != number_of_score_states ||
+        any(!is.finite(probabilities)) ||
+        any(probabilities < -tolerance) ||
+        any(probabilities > 1 + tolerance)) {
+        stop(label, " contains invalid occupation probabilities")
+    }
+
+    # Remove negligible product-integral drift without concealing a material
+    # failure of a prediction to be a probability vector.
+    probabilities[probabilities < 0] <- 0
+    probabilities[probabilities > 1] <- 1
+    probability_totals <- rowSums(probabilities)
+    if (any(probability_totals <= 0) ||
+        any(abs(probability_totals - 1) > tolerance)) {
+        stop(label, " contains rows whose probabilities do not sum to one")
+    }
+    sweep(probabilities, 1L, probability_totals, "/")
+}
+
+expected_error_truth <- lapply(
+    seq_along(comparison_true_occprobs),
+    function(profile_index) {
+        normalise_score_probabilities(
+            comparison_true_occprobs[[profile_index]],
+            paste("DGP profile", profile_index)
+        )
+    }
+)
+
+expected_error_prediction_sets <- list(
+    `Jump Forest` = list(
+        times = comparison_forest_times,
+        values = comparison_forest_occprobs
+    ),
+    `Poisson linear` = list(
+        times = poisson_regression_predictions$linear$times,
+        values = poisson_regression_predictions$linear$occupation_probabilities
+    ),
+    `Poisson cubic spline` = list(
+        times = poisson_regression_predictions$cubic_spline$times,
+        values = poisson_regression_predictions$cubic_spline$occupation_probabilities
+    ),
+    `Cox linear` = list(
+        times = cox_predictions$linear$times,
+        values = cox_predictions$linear$occupation_probabilities
+    ),
+    `Cox cubic spline` = list(
+        times = cox_predictions$cubic_spline$times,
+        values = cox_predictions$cubic_spline$occupation_probabilities
+    )
+)
+
+align_expected_error_predictions <- function(prediction_set, model_name) {
+    if (length(prediction_set$values) != length(expected_error_truth)) {
+        stop(model_name, " does not contain one prediction per profile")
+    }
+
+    lapply(seq_along(expected_error_truth), function(profile_index) {
+        profile_times <- if (is.list(prediction_set$times)) {
+            prediction_set$times[[profile_index]]
+        } else {
+            prediction_set$times
+        }
+        aligned <- step_matrix_at(
+            profile_times,
+            prediction_set$values[[profile_index]],
+            expected_error_times
+        )
+        normalise_score_probabilities(
+            aligned,
+            paste(model_name, "profile", profile_index)
+        )
+    })
+}
+
+expected_error_predictions <- lapply(
+    names(expected_error_prediction_sets),
+    function(model_name) {
+        align_expected_error_predictions(
+            expected_error_prediction_sets[[model_name]], model_name
+        )
+    }
+)
+names(expected_error_predictions) <- names(expected_error_prediction_sets)
+
+# Return one column per state, matching the state-wise score vectors stored by
+# JumpForests. Summing the columns gives the usual total expected score. The
+# Bayes act minimises that sum; an individual state contribution can still fall
+# below its Bayes-act contribution if another state pays for the improvement.
+expected_score_components <- function(truth, prediction, metric, weights) {
+    if (!identical(dim(truth), dim(prediction))) {
+        stop("truth and prediction must have matching dimensions")
+    }
+
+    if (metric == "Brier") {
+        unweighted <- truth * (1 - prediction)^2 +
+            (1 - truth) * prediction^2
+        return(sweep(unweighted, 2L, weights, "*"))
+    }
+
+    if (metric == "KL") {
+        # This is the same truncation used by probabilityForLogScore() in the
+        # C++ score implementation. Multiplication by truth makes a state with
+        # zero true probability contribute zero.
+        prediction_for_log <- prediction
+        prediction_for_log[] <- pmin(
+            1 - 1e-15, pmax(1e-15, prediction_for_log)
+        )
+        return(-sweep(
+            truth * log(prediction_for_log), 2L, weights, "*"
+        ))
+    }
+
+    if (metric == "Spherical") {
+        denominator <- sqrt(rowSums(sweep(
+            prediction^2, 2L, weights, "*"
+        )))
+        if (any(!is.finite(denominator)) || any(denominator <= 0)) {
+            stop("spherical-score prediction has a zero or invalid norm")
+        }
+        weighted_prediction <- sweep(prediction, 2L, weights, "*")
+        reward <- sweep(weighted_prediction, 1L, denominator, "/")
+        return(truth * (1 - reward))
+    }
+
+    stop("unknown expected-score metric: ", metric)
+}
+
+# Compute the Bayes-act score by state. The helper functions provide the total
+# optimal expected errors, so check that the state decomposition sums to those
+# totals. optimal_KL() evaluates 0 * log(0) as NaN at boundary probabilities;
+# its mathematically continuous value is supplied by an explicit zero term.
+optimal_expected_score <- function(truth, metric, weights) {
+    optimal_prediction <- truth
+    if (metric == "KL") {
+        weighted_truth <- sweep(truth, 2L, weights, "*")
+        normalising_constant <- rowSums(weighted_truth)
+        if (any(normalising_constant <= 0)) {
+            stop("KL weights give the truth zero total mass")
+        }
+        optimal_prediction <- sweep(
+            weighted_truth, 1L, normalising_constant, "/"
+        )
+    }
+
+    if (metric == "KL") {
+        # Unlike model scores, the theoretical optimum does not need numerical
+        # log-score truncation: define each zero-mass logarithmic term as zero.
+        log_optimal_prediction <- matrix(0, nrow(truth), ncol(truth))
+        positive_prediction <- optimal_prediction > 0
+        log_optimal_prediction[positive_prediction] <- log(optimal_prediction[positive_prediction])
+        components <- -weighted_truth * log_optimal_prediction
+    } else {
+        components <- expected_score_components(
+            truth, optimal_prediction, metric, weights
+        )
+    }
+    truth_as_list <- lapply(seq_len(nrow(truth)), function(time_index) {
+        truth[time_index, ]
+    })
+    helper_totals <- switch(
+        metric,
+        Brier = optimal_brier(weights, truth_as_list),
+        KL = optimal_KL(weights, truth_as_list),
+        Spherical = optimal_spherical(weights, truth_as_list)
+    )
+    helper_totals <- as.numeric(unlist(helper_totals, use.names = FALSE))
+    component_totals <- rowSums(components)
+    boundary_nan <- is.nan(helper_totals)
+
+    if (any(is.infinite(helper_totals)) ||
+        any(is.na(helper_totals) & !boundary_nan)) {
+        stop(metric, " optimal-score helper returned an unexpected non-finite value")
+    }
+
+    if (any(abs(
+        helper_totals[!boundary_nan] -
+        component_totals[!boundary_nan]
+    ) > 1e-10)) {
+        stop(metric, " optimal score does not agree with its helper function")
+    }
+    helper_totals[boundary_nan] <- component_totals[boundary_nan]
+
+    list(components = components, total = helper_totals)
+}
+
+# Curves are organised as metric -> method -> profile -> time-by-state matrix.
+# Keeping the four profiles separate avoids imposing an arbitrary profile
+# weighting and lets every output figure use the same 2-by-2 panel structure as
+# the earlier model-comparison plots.
+expected_error_curves <- setNames(
+    vector("list", length(expected_error_weights)),
+    names(expected_error_weights)
+)
+optimal_expected_error_totals <- expected_error_curves
+
+for (metric in names(expected_error_weights)) {
+    metric_weights <- expected_error_weights[[metric]]
+    optimal_scores <- lapply(expected_error_truth, function(truth) {
+        optimal_expected_score(truth, metric, metric_weights)
+    })
+
+    metric_curves <- list(
+        `Optimal expected` = lapply(optimal_scores, `[[`, "components")
+    )
+    for (model_name in names(expected_error_predictions)) {
+        metric_curves[[model_name]] <- Map(
+            function(truth, prediction) {
+                expected_score_components(
+                    truth, prediction, metric, metric_weights
+                )
+            },
+            expected_error_truth,
+            expected_error_predictions[[model_name]]
+        )
+    }
+
+    expected_error_curves[[metric]] <- metric_curves
+    optimal_expected_error_totals[[metric]] <-
+        lapply(optimal_scores, `[[`, "total")
+}
+
+expected_error_linetypes <- c(
+    `Optimal expected` = "solid",
+    `Jump Forest` = "dashed",
+    `Poisson linear` = "dotted",
+    `Poisson cubic spline` = "dotdash",
+    `Cox linear` = "longdash",
+    `Cox cubic spline` = "twodash"
+)
+
+expected_error_plot_files <- character()
+for (metric in names(expected_error_curves)) {
+    metric_curves <- expected_error_curves[[metric]]
+
+    for (state_index in seq_len(number_of_score_states)) {
+        state_label <- paste("State", state_index - 1L)
+        plot_curve_sets <- lapply(names(metric_curves), function(method_name) {
+            list(
+                times = expected_error_times,
+                values = lapply(metric_curves[[method_name]], function(values) {
+                    values[, state_index, drop = FALSE]
+                }),
+                type = "l",
+                lty = unname(expected_error_linetypes[method_name]),
+                lwd = if (method_name == "Optimal expected") 2.5 else 1.5
+            )
+        })
+        names(plot_curve_sets) <- names(metric_curves)
+
+        maximum_error <- max(unlist(lapply(metric_curves, function(profiles) {
+            vapply(profiles, function(values) {
+                max(values[, state_index])
+            }, numeric(1))
+        })))
+        error_ylim <- c(0, if (maximum_error > 0) 1.04 * maximum_error else 0.5)
+
+        plot_key <- paste(tolower(metric), state_index - 1L, sep = "_state_")
+        plot_file <- file.path(
+            "testing/Articles/Discrete/Plots",
+            paste0("discrete_expected_", plot_key, ".png")
+        )
+        expected_error_plot_files[plot_key] <- plot_file
+
+        plot_panel_curves(
+            plot_curve_sets,
+            component_labels = state_label,
+            panel_titles = comparison_titles,
+            component_colours = comparison_colours[state_index],
+            ylab = paste("Expected", metric, "error -", state_label),
+            xlim = c(0, comparison_end), ylim = error_ylim,
+            panel_layout = c(2, 2), legend_position = "topright",
+            legend_order = names(metric_curves), legend_cex = 0.65,
+            file = plot_file, width = 11, height = 6.5
+        )
+    }
+}
+
+# Store every pointwise state contribution in one long table. This is the data
+# underlying the nine plots and retains the metric, model, profile, state and
+# evaluation time, so runs with different num.obs can be combined directly.
+time_dependent_error_rows <- vector(
+    "list",
+    length(expected_error_curves) *
+        length(expected_error_curves[[1L]]) *
+        length(comparison_titles)
+)
+time_dependent_error_row <- 0L
+state_labels <- paste("State", seq_len(number_of_score_states) - 1L)
+
+for (metric in names(expected_error_curves)) {
+    for (model_name in names(expected_error_curves[[metric]])) {
+        for (profile_index in seq_along(comparison_titles)) {
+            time_dependent_error_row <- time_dependent_error_row + 1L
+            values <- expected_error_curves[[metric]][[model_name]][[profile_index]]
+            time_dependent_error_rows[[time_dependent_error_row]] <- data.frame(
+                num_obs = num.obs,
+                metric = metric,
+                model = model_name,
+                profile = comparison_titles[profile_index],
+                state = rep(state_labels, each = length(expected_error_times)),
+                time = rep(expected_error_times, times = number_of_score_states),
+                expected_error = as.vector(values),
+                stringsAsFactors = FALSE
+            )
+        }
+    }
+}
+time_dependent_expected_errors <- do.call(
+    rbind, time_dependent_error_rows
+)
+rownames(time_dependent_expected_errors) <- NULL
+
+# Match JumpForests' normalised integrated multi-state scores: first sum the
+# state contributions, integrate over time by the trapezoidal rule, and divide
+# by the evaluation horizon. The final summary gives the four profiles equal
+# weight, consistently with the earlier benchmark summaries.
+normalised_integrated_score <- function(score_components) {
+    total_score <- rowSums(score_components)
+    horizon <- tail(expected_error_times, 1L) - expected_error_times[1L]
+    if (!is.finite(horizon) || horizon <= 0) {
+        stop("expected_error_times must cover a positive finite horizon")
+    }
+    sum(
+        (head(total_score, -1L) + tail(total_score, -1L)) *
+            diff(expected_error_times) / 2
+    ) / horizon
+}
+
+normalised_integrated_score_rows <- vector(
+    "list",
+    length(expected_error_curves) * length(expected_error_curves[[1L]])
+)
+normalised_integrated_score_row <- 0L
+normalised_integrated_scores_by_profile <- list()
+
+for (metric in names(expected_error_curves)) {
+    for (model_name in names(expected_error_curves[[metric]])) {
+        profile_scores <- vapply(
+            expected_error_curves[[metric]][[model_name]],
+            normalised_integrated_score,
+            numeric(1)
+        )
+        normalised_integrated_scores_by_profile[[paste(metric, model_name)]] <-
+            data.frame(
+                num_obs = num.obs,
+                metric = metric,
+                model = model_name,
+                profile = comparison_titles,
+                normalised_integrated_score = profile_scores,
+                stringsAsFactors = FALSE
+            )
+
+        normalised_integrated_score_row <-
+            normalised_integrated_score_row + 1L
+        normalised_integrated_score_rows[[normalised_integrated_score_row]] <-
+            data.frame(
+                num_obs = num.obs,
+                metric = metric,
+                model = model_name,
+                normalised_integrated_score = mean(profile_scores),
+                stringsAsFactors = FALSE
+            )
+    }
+}
+normalised_integrated_scores_by_profile <- do.call(
+    rbind, normalised_integrated_scores_by_profile
+)
+rownames(normalised_integrated_scores_by_profile) <- NULL
+normalised_integrated_score_summary <- do.call(
+    rbind, normalised_integrated_score_rows
+)
+rownames(normalised_integrated_score_summary) <- NULL
+
+expected_error_table_files <- c(
+    time_dependent = file.path(
+        "testing/Articles/Discrete/Data",
+        paste0(
+            "time_dependent_expected_errors_n", num.obs,
+            if (isTRUE(forest_honest)) "_honest" else "",
+            ".txt"
+        )
+    ),
+    summary = file.path(
+        "testing/Articles/Discrete/Data",
+        paste0(
+            "normalised_integrated_expected_scores_n", num.obs,
+            if (isTRUE(forest_honest)) "_honest" else "",
+            ".txt"
+        )
+    )
+)
+write.table(
+    time_dependent_expected_errors,
+    file = expected_error_table_files["time_dependent"],
+    sep = "\t", row.names = FALSE, quote = FALSE
+)
+write.table(
+    normalised_integrated_score_summary,
+    file = expected_error_table_files["summary"],
+    sep = "\t", row.names = FALSE, quote = FALSE
+)
+
+expected_error_plot_files
+normalised_integrated_score_summary
+expected_error_table_files
+}
+
+normalised_integrated_score_summary
 
 #nolint end

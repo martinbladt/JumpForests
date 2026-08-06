@@ -324,12 +324,23 @@ lazy_honest_forest <- jfforest(
   save_predictions = FALSE, seed = 301, nworkers = 2,
   fh_weights_a = c(0, 1, 2), fh_weights_b = c(2, 1, 0)
 )
+single_bootstrap_honest_forest <- jfforest(
+  MM ~ x + z, paths, features,
+  splitrule = "flemingharrington", ntrees = 1, min_node_size = 3, nsplits = 15,
+  honest = TRUE, double_bootstrap = FALSE, sample_rate = 0.8,
+  save_predictions = FALSE, seed = 302, nworkers = 1,
+  fh_weights_a = c(0, 1, 2), fh_weights_b = c(2, 1, 0)
+)
 lazy_predictions <- jfforest.predict(
   lazy_honest_forest, compute_initial = TRUE, compute_censoring = TRUE
 )
 stopifnot(
   identical(forest_one_worker$fh.weights.a, c(0, 0.5, 2)),
   identical(forest_one_worker$fh.weights.b, c(1, 0, 3)),
+  identical(lazy_honest_forest$double.bootstrap, TRUE),
+  identical(single_bootstrap_honest_forest$double.bootstrap, FALSE),
+  length(capture.output(JumpForests:::print_forest(lazy_honest_forest))) > 0,
+  length(capture.output(JumpForests:::print_forest(single_bootstrap_honest_forest))) > 0,
   isTRUE(all.equal(forest_one_worker$predictions, forest_two_workers$predictions, tolerance = 0)),
   all(is.finite(unlist(lazy_predictions$predictions))),
   all(is.finite(unlist(lazy_predictions$predictions.init))),

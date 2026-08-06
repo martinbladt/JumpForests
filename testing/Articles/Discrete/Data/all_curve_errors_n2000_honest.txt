@@ -1,16 +1,16 @@
 "curve_type" "model" "profile" "component" "MISE" "RMSE"
-"1" "Occupation probability" "Jump Forest" "Man: X2 = 1, X3 = 2" "State 0" 0.00046235209828397 0.0215023742476028
-"2" "Occupation probability" "Jump Forest" "Man: X2 = 1, X3 = 2" "State 1" 6.2866554217724e-05 0.00792884318281828
-"3" "Occupation probability" "Jump Forest" "Man: X2 = 1, X3 = 2" "State 2" 0.000352670651070727 0.018779527445352
-"4" "Occupation probability" "Jump Forest" "Man: X2 = 4, X3 = 5" "State 0" 0.000519252303410185 0.0227871082722268
-"5" "Occupation probability" "Jump Forest" "Man: X2 = 4, X3 = 5" "State 1" 0.00019016143579008 0.0137899034003172
-"6" "Occupation probability" "Jump Forest" "Man: X2 = 4, X3 = 5" "State 2" 0.0001724546590934 0.0131321993243097
-"7" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 2" "State 0" 0.000111735253901198 0.0105704897663825
-"8" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 2" "State 1" 8.53912502859994e-05 0.00924073862231799
-"9" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 2" "State 2" 3.12996955805588e-05 0.00559461308586741
-"10" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 5" "State 0" 0.00175111353009471 0.0418463084404671
-"11" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 5" "State 1" 0.000271758188767447 0.0164850898926105
-"12" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 5" "State 2" 0.000831859336386859 0.028841971783962
+"1" "Occupation probability" "Jump Forest" "Man: X2 = 1, X3 = 2" "State 0" 0.00095990078093458 0.0309822655875031
+"2" "Occupation probability" "Jump Forest" "Man: X2 = 1, X3 = 2" "State 1" 4.02238726137081e-05 0.00634222930945485
+"3" "Occupation probability" "Jump Forest" "Man: X2 = 1, X3 = 2" "State 2" 0.000871097884145643 0.0295143674190324
+"4" "Occupation probability" "Jump Forest" "Man: X2 = 4, X3 = 5" "State 0" 0.000727632232157129 0.026974659073974
+"5" "Occupation probability" "Jump Forest" "Man: X2 = 4, X3 = 5" "State 1" 0.000346876282217146 0.0186246149548694
+"6" "Occupation probability" "Jump Forest" "Man: X2 = 4, X3 = 5" "State 2" 0.000163984828143011 0.0128056560996698
+"7" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 2" "State 0" 0.000241793097287311 0.0155496976590322
+"8" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 2" "State 1" 0.000177892728642875 0.0133376432941834
+"9" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 2" "State 2" 1.94912346719416e-05 0.00441488784364242
+"10" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 5" "State 0" 0.00315065964774742 0.0561307371031899
+"11" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 5" "State 1" 0.000324321960103559 0.0180089411155559
+"12" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 5" "State 2" 0.00190641919585853 0.0436625605737745
 "13" "Occupation probability" "Conditional AJ" "Man: X2 = 1, X3 = 2" "State 0" 0.00107326489924059 0.0327607218974276
 "14" "Occupation probability" "Conditional AJ" "Man: X2 = 1, X3 = 2" "State 1" 0.000844233333739311 0.0290556936544167
 "15" "Occupation probability" "Conditional AJ" "Man: X2 = 1, X3 = 2" "State 2" 0.00167693935715233 0.0409504500238072
@@ -71,22 +71,22 @@
 "70" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "State 0" 0.000596365902164891 0.0244206040499593
 "71" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "State 1" 0.000312123536886196 0.0176670183360463
 "72" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "State 2" 0.00167831967060254 0.0409673000160194
-"73" "Cumulative transition rate" "Jump Forest" "Man: X2 = 1, X3 = 2" "0 -> 1" 0.0145472769017312 0.120612092684486
-"74" "Cumulative transition rate" "Jump Forest" "Man: X2 = 1, X3 = 2" "0 -> 2" 0.713098360566822 0.844451514633506
-"75" "Cumulative transition rate" "Jump Forest" "Man: X2 = 1, X3 = 2" "1 -> 0" 15.3882212767272 3.9227823386886
-"76" "Cumulative transition rate" "Jump Forest" "Man: X2 = 1, X3 = 2" "1 -> 2" 1.10726873343017 1.05226837519245
-"77" "Cumulative transition rate" "Jump Forest" "Man: X2 = 4, X3 = 5" "0 -> 1" 0.0249469692181526 0.157946095925644
-"78" "Cumulative transition rate" "Jump Forest" "Man: X2 = 4, X3 = 5" "0 -> 2" 0.21012539199635 0.458394362963104
-"79" "Cumulative transition rate" "Jump Forest" "Man: X2 = 4, X3 = 5" "1 -> 0" 5.03003533140886 2.24277402593504
-"80" "Cumulative transition rate" "Jump Forest" "Man: X2 = 4, X3 = 5" "1 -> 2" 0.937718423862637 0.968358623580457
-"81" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "0 -> 1" 0.0846615271499067 0.290966539570973
-"82" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "0 -> 2" 0.0526856755669944 0.229533604439512
-"83" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "1 -> 0" 3.51687599326621 1.87533356853286
-"84" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "1 -> 2" 0.396317880613487 0.629537830962911
-"85" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "0 -> 1" 0.0923266281075881 0.303852971200856
-"86" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "0 -> 2" 0.0331631018663802 0.18210739102623
-"87" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "1 -> 0" 15.064127413711 3.8812533302673
-"88" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "1 -> 2" 0.151112747894217 0.38873223161222
+"73" "Cumulative transition rate" "Jump Forest" "Man: X2 = 1, X3 = 2" "0 -> 1" 0.0858856962591326 0.293062614912125
+"74" "Cumulative transition rate" "Jump Forest" "Man: X2 = 1, X3 = 2" "0 -> 2" 0.580333650446079 0.761796331341966
+"75" "Cumulative transition rate" "Jump Forest" "Man: X2 = 1, X3 = 2" "1 -> 0" 5.39665510154177 2.32307018868173
+"76" "Cumulative transition rate" "Jump Forest" "Man: X2 = 1, X3 = 2" "1 -> 2" 1.80310187302539 1.34279628872938
+"77" "Cumulative transition rate" "Jump Forest" "Man: X2 = 4, X3 = 5" "0 -> 1" 0.0844358270570626 0.290578435292543
+"78" "Cumulative transition rate" "Jump Forest" "Man: X2 = 4, X3 = 5" "0 -> 2" 0.226159906736283 0.47556272639504
+"79" "Cumulative transition rate" "Jump Forest" "Man: X2 = 4, X3 = 5" "1 -> 0" 11.924587628305 3.45319962184421
+"80" "Cumulative transition rate" "Jump Forest" "Man: X2 = 4, X3 = 5" "1 -> 2" 0.704730928948645 0.839482536416717
+"81" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "0 -> 1" 0.107551562338262 0.327950548617108
+"82" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "0 -> 2" 0.0426557222871326 0.206532617973851
+"83" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "1 -> 0" 6.53121386165138 2.55562396718519
+"84" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "1 -> 2" 0.351291522078807 0.592698508584936
+"85" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "0 -> 1" 0.106831067104793 0.326850221209644
+"86" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "0 -> 2" 0.0606242307316584 0.246219882892626
+"87" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "1 -> 0" 14.2898699495939 3.78019443277643
+"88" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "1 -> 2" 0.124403458986259 0.352708745264785
 "89" "Cumulative transition rate" "Conditional AJ" "Man: X2 = 1, X3 = 2" "0 -> 1" 0.0281455047931691 0.167766220655915
 "90" "Cumulative transition rate" "Conditional AJ" "Man: X2 = 1, X3 = 2" "0 -> 2" 2.08765186052643 1.44487088022647
 "91" "Cumulative transition rate" "Conditional AJ" "Man: X2 = 1, X3 = 2" "1 -> 0" 52.0001834759216 7.21111527268297

@@ -8,3 +8,7 @@ src/*.dll
 DecisionTreePlots/df_normality_tree_predictions.txt
 DecisionTreePlots/df_normality_tree_tests.txt
 .VSCodeCounter/
+testing/Articles/Discrete/Data/time_dependent_expected_errors_n10000.txt
+testing/Articles/Discrete/Data/time_dependent_expected_errors_n10000_honest.txt
+testing/Articles/Discrete/Data/time_dependent_expected_errors_n2000.txt
+testing/Articles/Discrete/Data/time_dependent_expected_errors_n2000_honest.txt
