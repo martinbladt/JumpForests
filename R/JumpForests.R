@@ -23,6 +23,8 @@
 #'   for every other rule and model type.
 #' @param mtry Number of candidate features at each split.
 #' @param min_node_size Minimal node size.
+#' @param max_depth Maximum depth of the tree, where the root has depth zero.
+#'   `NULL` (the default) imposes no depth limit.
 #' @param nsplits Number of split points per feature.
 #' @param honest Whether to use honest splitting.
 #' @param seed Optional random seed.
@@ -39,11 +41,11 @@
 #' @export
 #'
 # the main function for fitting trees (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
-jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
-                   honest = FALSE, seed = NULL, num_event_times = 0, state_weights = NULL,
-                   fh_weights_a = NULL, fh_weights_b = NULL, splitrule_par = NULL) {
+jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, max_depth = NULL, nsplits = 10,
+                   honest = FALSE, seed = NULL, num_event_times = 0, state_weights = NULL, fh_weights_a = NULL, fh_weights_b = NULL, splitrule_par = NULL) {
   lhs <- as.character(formula[[2]])
   splitrule_par <- normalize_splitrule_par(splitrule_par)
+  max_depth <- normalize_max_depth(max_depth)
   if (lhs[1] != "MM" && (!is.null(fh_weights_a) || !is.null(fh_weights_b))) {
     stop("fh_weights_a and fh_weights_b are only valid for multi-state models")
   }
@@ -86,7 +88,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
       if (is.null(splitrule)) {
         splitrule <- "gini"
       }
-      result <- JFCppTree(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
+      result <- JFCppTree(2, processed_data$data, mtry, min_node_size, max_depth, nsplits, splitrule, honest,
                           response_index, feature_indices, processed_data$categorical,
                           processed_data$unique_values, seed, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
@@ -111,7 +113,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
         splitrule <- "mse"
       }
 
-      result <- JFCppTree(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
+      result <- JFCppTree(1, processed_data$data, mtry, min_node_size, max_depth, nsplits, splitrule, honest,
                           response_index, feature_indices, processed_data$categorical,
                           processed_data$unique_values, seed, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
@@ -154,7 +156,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
       splitrule <- "logrank"
     }
 
-    result <- JFCppTree(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, honest,
+    result <- JFCppTree(3, processed_data$data, mtry, min_node_size, max_depth, nsplits, splitrule, honest,
                         response_indices, feature_indices, processed_data$categorical,
                         processed_data$unique_values, seed, num_event_times, splitrule_par)
     result$categorical.levels <- processed_data$categorical_levels
@@ -201,7 +203,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 
     # data here is jump data, a list of lists, each containing a vector 'times' and a vector 'states'
     result <- JFCppTreeMultistate(data, max_response_length, num_states, processed_data$data,
-                          mtry, min_node_size, nsplits, splitrule, honest, feature_indices,
+                          mtry, min_node_size, max_depth, nsplits, splitrule, honest, feature_indices,
                           processed_data$categorical, processed_data$unique_values, seed,
                           state_weights, num_event_times, fh_weights_a, fh_weights_b)
     result$categorical.levels <- processed_data$categorical_levels
@@ -373,6 +375,8 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 #'   for every other rule and model type.
 #' @param mtry Number of candidate features at each split.
 #' @param min_node_size Minimal node size.
+#' @param max_depth Maximum depth allowed for each tree, where the root has
+#'   depth zero. `NULL` (the default) imposes no depth limit.
 #' @param nsplits Number of split points per feature.
 #' @param ntrees Number of trees.
 #' @param honest Whether to use honest splitting.
@@ -395,12 +399,13 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 #' @export
 #'
 # the main function for fitting forests (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
-jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, nsplits = 10,
+jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = NULL, min_node_size = NULL, max_depth = NULL, nsplits = 10,
                      ntrees = NULL, honest = FALSE, swr = FALSE, sample_rate = NULL, double_bootstrap = FALSE, 
                      seed = NULL, nworkers = 0, save_predictions = TRUE, num_event_times = 0, state_weights = NULL,
                      fh_weights_a = NULL, fh_weights_b = NULL, splitrule_par = NULL) {
   lhs <- as.character(formula[[2]])
   splitrule_par <- normalize_splitrule_par(splitrule_par)
+  max_depth <- normalize_max_depth(max_depth)
   if (lhs[1] != "MM" && (!is.null(fh_weights_a) || !is.null(fh_weights_b))) {
     stop("fh_weights_a and fh_weights_b are only valid for multi-state models")
   }
@@ -469,7 +474,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
       if (is.null(splitrule)) {
         splitrule <- "gini"
       }
-      result <- JFCppForest(2, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
+      result <- JFCppForest(2, processed_data$data, mtry, min_node_size, max_depth, nsplits, splitrule, ntrees, honest, swr,
                             sample_rate, double_bootstrap, response_index, feature_indices, processed_data$categorical,
                             processed_data$unique_values, seed, nworkers, save_predictions, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
@@ -497,7 +502,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
       if (is.null(splitrule)) {
         splitrule <- "mse"
       }
-      result <- JFCppForest(1, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
+      result <- JFCppForest(1, processed_data$data, mtry, min_node_size, max_depth, nsplits, splitrule, ntrees, honest, swr,
                             sample_rate, double_bootstrap, response_index, feature_indices, processed_data$categorical,
                             processed_data$unique_values, seed, nworkers, save_predictions, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
@@ -543,7 +548,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
       splitrule <- "logrank"
     }
 
-    result <- JFCppForest(3, processed_data$data, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr,
+    result <- JFCppForest(3, processed_data$data, mtry, min_node_size, max_depth, nsplits, splitrule, ntrees, honest, swr,
                           sample_rate, double_bootstrap, response_indices, feature_indices, processed_data$categorical,
                           processed_data$unique_values, seed, nworkers, save_predictions, num_event_times,
                           splitrule_par)
@@ -594,7 +599,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
     fh_weights_b <- normalize_fh_weights(fh_weights_b, "fh_weights_b")
 
     result <- JFCppForestMultistate(data, max_response_length, num_states, processed_data$data, mtry, min_node_size,
-                            nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, 
+                            max_depth, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices,
                             processed_data$categorical, processed_data$unique_values, seed, nworkers, save_predictions, 
                             state_weights, num_event_times, fh_weights_a, fh_weights_b)
     result$categorical.levels <- processed_data$categorical_levels
@@ -624,6 +629,18 @@ normalize_splitrule_par <- function(splitrule_par) {
     stop("splitrule_par must be a single numeric value")
   }
   as.numeric(splitrule_par)
+}
+
+normalize_max_depth <- function(max_depth) {
+  if (is.null(max_depth)) {
+    return(Inf)
+  }
+  if (!is.numeric(max_depth) || !is.null(dim(max_depth)) ||
+      length(max_depth) != 1L || is.na(max_depth) || max_depth < 0 ||
+      (!is.infinite(max_depth) && max_depth != floor(max_depth))) {
+    stop("max_depth must be a non-negative whole number or Inf")
+  }
+  as.numeric(max_depth)
 }
 
 #' Predict from a fitted forest
@@ -888,6 +905,7 @@ print_tree <- function(tree_list, full = FALSE) {
 
   # print hyperparameters
   cat("Minimal node size:", tree_list$min.node.size, "\n")
+  cat("Maximum tree depth:", tree_list$max.depth, "\n")
   cat("Number of selected features in each split:", tree_list$mtry, "\n")
   cat("Number of possible splits considered for each feature:", tree_list$nsplits, "\n")
   cat("Splitting rule:", tree_list$splitrule, "\n")
@@ -1000,6 +1018,7 @@ print_forest <- function(forest_list) {
     cat("Subsampling scheme: Without replacement \n")
   }
   cat("Minimal node size:", forest_list$min.node.size, "\n")
+  cat("Maximum depth allowed:", forest_list$max.depth, "\n")
   cat("Number of selected features in each split:", forest_list$mtry, "\n")
   cat("Number of possible splits considered for each feature:", forest_list$nsplits, "\n")
   cat("Splitting rule:", forest_list$splitrule, "\n")

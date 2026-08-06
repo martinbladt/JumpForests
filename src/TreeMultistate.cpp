@@ -525,7 +525,7 @@ bool MultistateTree::createSplit(size_t node_index) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
 
     // if no split is possible, make the node a leaf
-    if (current_node_obs.size() < 2 * min_node_size) {
+    if (current_node_obs.size() < 2 * min_node_size || depths[node_index] >= max_depth) {
         const vector<size_t>& estimation_obs = honest ? holdout_node_obs[node_index] : current_node_obs;
         computeMultistateQuantities(estimation_obs, num_jumps, num_at_risk);
         makeLeaf(node_index);

@@ -347,7 +347,7 @@ bool SurvivalTree::createSplit(size_t node_index) {
     const vector<size_t>& current_node_obs = node_obs[node_index];
 
     // if no split is possible, make the node a leaf
-    if (current_node_obs.size() < 2 * min_node_size) {
+    if (current_node_obs.size() < 2 * min_node_size || depths[node_index] >= max_depth) {
         if (!honest) {
             computeSurvivalQuantities(current_node_obs, num_deaths, num_at_risk);               // for dishonest trees, use the growing indices
         } else {

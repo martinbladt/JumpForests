@@ -78,7 +78,7 @@ void RegressionForest::grow() {
         }
 
         uniform_int_distribution<size_t> dist(0, numeric_limits<size_t>::max());
-        tree->initialise(data, mtry, min_node_size, nsplits, splitrule, honest,
+        tree->initialise(data, mtry, min_node_size, max_depth, nsplits, splitrule, honest,
                          dist(local_rng), splitrule_par);
         tree->setRNG(local_rng);
         tree->grow();

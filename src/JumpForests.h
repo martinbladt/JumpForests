@@ -11,33 +11,29 @@ using namespace std;
 using namespace Rcpp;
 
 // growing a tree
-List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, 
+List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule,
                bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
                unsigned int seed, size_t num_event_times,
                NumericVector splitrule_par);
-inline List JFCppTree(
-    uint tree_type, DataFrame df, unsigned int mtry,
-    unsigned int min_node_size, unsigned int nsplits,
+inline List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry,
+    unsigned int min_node_size, double max_depth, unsigned int nsplits,
     CharacterVector splitrule, bool honest, NumericVector response_indices,
     NumericVector feature_indices, LogicalVector categorical,
     NumericVector unique, unsigned int seed, size_t num_event_times) {
-  return JFCppTree(
-    tree_type, df, mtry, min_node_size, nsplits, splitrule, honest,
+  return JFCppTree(tree_type, df, mtry, min_node_size, max_depth, nsplits, splitrule, honest,
     response_indices, feature_indices, categorical, unique, seed,
     num_event_times, NumericVector());
 }
-List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
+List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, double max_depth,
                unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
                unsigned int seed, NumericVector state_weights = {}, size_t num_event_times = 0, NumericVector fh_weights_a = {}, NumericVector fh_weights_b = {});
 
 // prediction with trees
 void JFCppTreePredict(List& JFTree);
-NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector feature_indices, 
-                               LogicalVector categorical, NumericVector unique);
-List JFCppTreePredictCensoring(const List& JFTree, DataFrame df, NumericVector feature_indices, 
-                               LogicalVector categorical, NumericVector unique);
+NumericMatrix JFCppTreePredict(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
+List JFCppTreePredictCensoring(const List& JFTree, DataFrame df, NumericVector feature_indices, LogicalVector categorical, NumericVector unique);
 List JFCppTreePredictMultistate(const List& JFTree, DataFrame df, NumericVector feature_indices,
-                                 LogicalVector categorical, NumericVector unique, bool compute_initial, bool compute_censoring);
+                                LogicalVector categorical, NumericVector unique, bool compute_initial, bool compute_censoring);
 
 // error computation with trees
 void JFCppTreeErrorRegression(List& JFTree, const vector<double>& response);
@@ -51,26 +47,26 @@ List JFCppTreeError(const List& JFTree, DataFrame df, NumericVector feature_indi
 List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, uint8_t num_states, List jump_data, DataFrame df_features,
                       NumericVector feature_indices, LogicalVector categorical, NumericVector unique, NumericVector state_weights = {});
 // growing a forest
-List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule,
+List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule,
     unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, 
     LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers,
     bool save_predictions, size_t num_event_times,
     NumericVector splitrule_par);
 inline List JFCppForest(
     uint tree_type, DataFrame df, unsigned int mtry,
-    unsigned int min_node_size, unsigned int nsplits,
+    unsigned int min_node_size, double max_depth, unsigned int nsplits,
     CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr,
     double sample_rate, bool double_bootstrap, NumericVector response_indices,
     NumericVector feature_indices, LogicalVector categorical,
     NumericVector unique, unsigned int seed, unsigned int nworkers,
     bool save_predictions, size_t num_event_times) {
   return JFCppForest(
-    tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest,
+    tree_type, df, mtry, min_node_size, max_depth, nsplits, splitrule, ntrees, honest,
     swr, sample_rate, double_bootstrap, response_indices, feature_indices,
     categorical, unique, seed, nworkers, save_predictions, num_event_times,
     NumericVector());
 }
-List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size,
+List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, double max_depth,
   unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, 
   LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, NumericVector state_weights = {},
   size_t num_event_times = 0, NumericVector fh_weights_a = {}, NumericVector fh_weights_b = {});

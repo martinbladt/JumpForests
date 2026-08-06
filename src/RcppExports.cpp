@@ -11,8 +11,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // JFCppTree
-List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, size_t num_event_times, NumericVector splitrule_par);
-RcppExport SEXP _JumpForests_JFCppTree(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP honestSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP num_event_timesSEXP, SEXP splitrule_parSEXP) {
+List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, size_t num_event_times, NumericVector splitrule_par);
+RcppExport SEXP _JumpForests_JFCppTree(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP max_depthSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP honestSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP num_event_timesSEXP, SEXP splitrule_parSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -20,6 +20,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type mtry(mtrySEXP);
     Rcpp::traits::input_parameter< unsigned int >::type min_node_size(min_node_sizeSEXP);
+    Rcpp::traits::input_parameter< double >::type max_depth(max_depthSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type nsplits(nsplitsSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type splitrule(splitruleSEXP);
     Rcpp::traits::input_parameter< bool >::type honest(honestSEXP);
@@ -30,13 +31,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
     Rcpp::traits::input_parameter< size_t >::type num_event_times(num_event_timesSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type splitrule_par(splitrule_parSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppTree(tree_type, df, mtry, min_node_size, nsplits, splitrule, honest, response_indices, feature_indices, categorical, unique, seed, num_event_times, splitrule_par));
+    rcpp_result_gen = Rcpp::wrap(JFCppTree(tree_type, df, mtry, min_node_size, max_depth, nsplits, splitrule, honest, response_indices, feature_indices, categorical, unique, seed, num_event_times, splitrule_par));
     return rcpp_result_gen;
 END_RCPP
 }
 // JFCppTreeMultistate
-List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, NumericVector state_weights, size_t num_event_times, NumericVector fh_weights_a, NumericVector fh_weights_b);
-RcppExport SEXP _JumpForests_JFCppTreeMultistate(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP df_featuresSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP honestSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP state_weightsSEXP, SEXP num_event_timesSEXP, SEXP fh_weights_aSEXP, SEXP fh_weights_bSEXP) {
+List JFCppTreeMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, NumericVector state_weights, size_t num_event_times, NumericVector fh_weights_a, NumericVector fh_weights_b);
+RcppExport SEXP _JumpForests_JFCppTreeMultistate(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP df_featuresSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP max_depthSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP honestSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP state_weightsSEXP, SEXP num_event_timesSEXP, SEXP fh_weights_aSEXP, SEXP fh_weights_bSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -46,6 +47,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< DataFrame >::type df_features(df_featuresSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type mtry(mtrySEXP);
     Rcpp::traits::input_parameter< unsigned int >::type min_node_size(min_node_sizeSEXP);
+    Rcpp::traits::input_parameter< double >::type max_depth(max_depthSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type nsplits(nsplitsSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type splitrule(splitruleSEXP);
     Rcpp::traits::input_parameter< bool >::type honest(honestSEXP);
@@ -57,7 +59,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< size_t >::type num_event_times(num_event_timesSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type fh_weights_a(fh_weights_aSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type fh_weights_b(fh_weights_bSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppTreeMultistate(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, honest, feature_indices, categorical, unique, seed, state_weights, num_event_times, fh_weights_a, fh_weights_b));
+    rcpp_result_gen = Rcpp::wrap(JFCppTreeMultistate(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, max_depth, nsplits, splitrule, honest, feature_indices, categorical, unique, seed, state_weights, num_event_times, fh_weights_a, fh_weights_b));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -144,8 +146,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // JFCppForest
-List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times, NumericVector splitrule_par);
-RcppExport SEXP _JumpForests_JFCppForest(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP double_bootstrapSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP save_predictionsSEXP, SEXP num_event_timesSEXP, SEXP splitrule_parSEXP) {
+List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times, NumericVector splitrule_par);
+RcppExport SEXP _JumpForests_JFCppForest(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP max_depthSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP double_bootstrapSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP save_predictionsSEXP, SEXP num_event_timesSEXP, SEXP splitrule_parSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -153,6 +155,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type mtry(mtrySEXP);
     Rcpp::traits::input_parameter< unsigned int >::type min_node_size(min_node_sizeSEXP);
+    Rcpp::traits::input_parameter< double >::type max_depth(max_depthSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type nsplits(nsplitsSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type splitrule(splitruleSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type ntrees(ntreesSEXP);
@@ -169,13 +172,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type save_predictions(save_predictionsSEXP);
     Rcpp::traits::input_parameter< size_t >::type num_event_times(num_event_timesSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type splitrule_par(splitrule_parSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppForest(tree_type, df, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times, splitrule_par));
+    rcpp_result_gen = Rcpp::wrap(JFCppForest(tree_type, df, mtry, min_node_size, max_depth, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, response_indices, feature_indices, categorical, unique, seed, nworkers, save_predictions, num_event_times, splitrule_par));
     return rcpp_result_gen;
 END_RCPP
 }
 // JFCppForestMultistate
-List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, NumericVector state_weights, size_t num_event_times, NumericVector fh_weights_a, NumericVector fh_weights_b);
-RcppExport SEXP _JumpForests_JFCppForestMultistate(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP df_featuresSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP double_bootstrapSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP save_predictionsSEXP, SEXP state_weightsSEXP, SEXP num_event_timesSEXP, SEXP fh_weights_aSEXP, SEXP fh_weights_bSEXP) {
+List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t num_states, DataFrame df_features, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, NumericVector state_weights, size_t num_event_times, NumericVector fh_weights_a, NumericVector fh_weights_b);
+RcppExport SEXP _JumpForests_JFCppForestMultistate(SEXP jump_dataSEXP, SEXP max_response_lengthSEXP, SEXP num_statesSEXP, SEXP df_featuresSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP max_depthSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP double_bootstrapSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP save_predictionsSEXP, SEXP state_weightsSEXP, SEXP num_event_timesSEXP, SEXP fh_weights_aSEXP, SEXP fh_weights_bSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -185,6 +188,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< DataFrame >::type df_features(df_featuresSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type mtry(mtrySEXP);
     Rcpp::traits::input_parameter< unsigned int >::type min_node_size(min_node_sizeSEXP);
+    Rcpp::traits::input_parameter< double >::type max_depth(max_depthSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type nsplits(nsplitsSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type splitrule(splitruleSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type ntrees(ntreesSEXP);
@@ -202,7 +206,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< size_t >::type num_event_times(num_event_timesSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type fh_weights_a(fh_weights_aSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type fh_weights_b(fh_weights_bSEXP);
-    rcpp_result_gen = Rcpp::wrap(JFCppForestMultistate(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, state_weights, num_event_times, fh_weights_a, fh_weights_b));
+    rcpp_result_gen = Rcpp::wrap(JFCppForestMultistate(jump_data, max_response_length, num_states, df_features, mtry, min_node_size, max_depth, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, state_weights, num_event_times, fh_weights_a, fh_weights_b));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -526,15 +530,15 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_JumpForests_JFCppTree", (DL_FUNC) &_JumpForests_JFCppTree, 14},
-    {"_JumpForests_JFCppTreeMultistate", (DL_FUNC) &_JumpForests_JFCppTreeMultistate, 17},
+    {"_JumpForests_JFCppTree", (DL_FUNC) &_JumpForests_JFCppTree, 15},
+    {"_JumpForests_JFCppTreeMultistate", (DL_FUNC) &_JumpForests_JFCppTreeMultistate, 18},
     {"_JumpForests_JFCppTreePredict", (DL_FUNC) &_JumpForests_JFCppTreePredict, 5},
     {"_JumpForests_JFCppTreePredictCensoring", (DL_FUNC) &_JumpForests_JFCppTreePredictCensoring, 5},
     {"_JumpForests_JFCppTreePredictMultistate", (DL_FUNC) &_JumpForests_JFCppTreePredictMultistate, 7},
     {"_JumpForests_JFCppTreeError", (DL_FUNC) &_JumpForests_JFCppTreeError, 6},
     {"_JumpForests_JFCppTreeErrorMultistate", (DL_FUNC) &_JumpForests_JFCppTreeErrorMultistate, 9},
-    {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 20},
-    {"_JumpForests_JFCppForestMultistate", (DL_FUNC) &_JumpForests_JFCppForestMultistate, 23},
+    {"_JumpForests_JFCppForest", (DL_FUNC) &_JumpForests_JFCppForest, 21},
+    {"_JumpForests_JFCppForestMultistate", (DL_FUNC) &_JumpForests_JFCppForestMultistate, 24},
     {"_JumpForests_JFCppForestPredictTraining", (DL_FUNC) &_JumpForests_JFCppForestPredictTraining, 1},
     {"_JumpForests_JFCppForestPredict", (DL_FUNC) &_JumpForests_JFCppForestPredict, 5},
     {"_JumpForests_JFCppForestPredictCensoring", (DL_FUNC) &_JumpForests_JFCppForestPredictCensoring, 5},

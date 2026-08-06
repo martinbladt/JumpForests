@@ -15,7 +15,7 @@ using ValueType = variant<double, size_t, vector<double>, vector<vector<double>>
 class Tree {
 public:
   // function to initialise a general Tree (later many more options should be added such as honesty, max_depth etc.)
-  void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size,
+  void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, double max_depth,
                   unsigned int nsplits, string splitrule, bool honest, unsigned int seed,
                   double splitrule_par = numeric_limits<double>::quiet_NaN());
   void setRNG(mt19937 rng);
@@ -114,6 +114,7 @@ protected:
   string splitrule;               // splitting rule
   double splitrule_par;           // optional scalar parameter used by parameterised splitting rules
   bool honest;                    // true if the trees in the forest are honest, otherwise false
+  double max_depth;               // maximum allowed depth of a tree
   
   // misc. information
   size_t num_terminal_nodes;      // number of terminal nodes in the tree

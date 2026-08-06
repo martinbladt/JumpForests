@@ -9,10 +9,9 @@ mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id) {
     return mt19937(tree_seed);
 }
 
-void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size,
-                        unsigned int nsplits, string splitrule, unsigned int ntrees, bool honest,
-                        bool swr, double sample_rate, bool double_bootstrap, unsigned int seed,
-                        unsigned int nworkers, double splitrule_par) {
+void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits,
+                        string splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap,
+                        unsigned int seed, unsigned int nworkers, double splitrule_par) {
     // initialise with the chosen hyperparameters
     this->data = data;
     this->mtry = mtry;
@@ -27,6 +26,7 @@ void Forest::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int m
     this->swr = swr;
     this->sample_rate = sample_rate;
     this->double_bootstrap = double_bootstrap;
+    this->max_depth = max_depth;
     
     // set number of threads to use during fitting and predicting
     int max_workers = thread::hardware_concurrency();

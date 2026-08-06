@@ -93,7 +93,7 @@ void ClassificationForest::grow() {
         }
 
         uniform_int_distribution<size_t> dist(0, numeric_limits<size_t>::max());
-        tree->initialise(data, mtry, min_node_size, nsplits, splitrule, honest, dist(local_rng));
+        tree->initialise(data, mtry, min_node_size, max_depth, nsplits, splitrule, honest, dist(local_rng));
         tree->setRNG(local_rng);
         tree->grow();
         trees[i] = std::move(tree);

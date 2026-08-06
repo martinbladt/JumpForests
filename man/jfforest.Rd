@@ -11,6 +11,7 @@ jfforest(
   splitrule = NULL,
   mtry = NULL,
   min_node_size = NULL,
+  max_depth = NULL,
   nsplits = 10,
   ntrees = NULL,
   honest = FALSE,
@@ -47,6 +48,9 @@ follows its power: real for \eqn{\xi \le 0}, non-negative counts at
 \item{mtry}{Number of candidate features at each split.}
 
 \item{min_node_size}{Minimal node size.}
+
+\item{max_depth}{Maximum depth allowed for each tree, where the root has
+depth zero. `NULL` (the default) imposes no depth limit.}
 
 \item{nsplits}{Number of split points per feature.}
 

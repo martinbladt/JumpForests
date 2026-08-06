@@ -318,7 +318,7 @@ bool ClassificationTree::createSplit(size_t node_index) {
     }
 
     // if no split is possible, make the node a leaf
-    if (current_node_obs.size() < 2 * min_node_size) {
+    if (current_node_obs.size() < 2 * min_node_size || depths[node_index] >= max_depth) {
       if (!honest) {
         // for dishonest trees, use the earlier computed class counts
         pair<double, vector<double>> predictions = computePredictedClass(class_counts_node[node_index], node_sizes[node_index]);

@@ -1293,7 +1293,7 @@ bool RegressionTree::createSplit(size_t node_index) {
     sum_node[node_index] = parent_sum;
 
     // if no split is possible, make the node a leaf
-    if (current_node_obs.size() < 2 * min_node_size) {
+    if (current_node_obs.size() < 2 * min_node_size || depths[node_index] >= max_depth) {
         if (!honest) {
             means.push_back(parent_sum / (double) node_sizes[node_index]);  // for dishonest trees, we may simply reuse the computed sum
         } else {

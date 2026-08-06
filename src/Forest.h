@@ -18,7 +18,7 @@ mt19937 makeVIMPTreeRNG(int feature_seed, size_t tree_id);
 class Forest {
 public:
   // function to initialise a general Forest (later add more options such as OOB, honesty etc.)
-  void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size,
+  void initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, double max_depth,
                   unsigned int nsplits, string splitrule, unsigned int ntrees, bool honest,
                   bool swr, double sample_rate, bool double_bootstrap, unsigned int seed,
                   unsigned int nworkers,
@@ -72,6 +72,7 @@ protected:
   double sample_rate;             // the subsampling rate (if double_bootstrap == true, applies to both subsets)
   bool double_bootstrap;          // use bootstrap separately (true) or not (false), only relevant when honest == true
   bool honest;                    // true if the trees in the forest are honest, otherwise false
+  double max_depth;               // maximum allowed depth of a tree in the forest
 
   // other options (need to think about this further)
   unsigned int nworkers;

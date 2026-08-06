@@ -2,9 +2,8 @@
 
 #include <cmath>
 
-void Tree::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size,
-                      unsigned int nsplits, string splitrule, bool honest, unsigned int seed,
-                      double splitrule_par) {
+void Tree::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min_node_size, double max_depth,
+                      unsigned int nsplits, string splitrule, bool honest, unsigned int seed, double splitrule_par) {
     // initialise with the chosen hyperparameters
     this->data = data;
     this->mtry = mtry;
@@ -13,6 +12,7 @@ void Tree::initialise(shared_ptr<Data> data, unsigned int mtry, unsigned int min
     this->splitrule = splitrule;
     this->splitrule_par = splitrule_par;
     this->honest = honest;
+    this->max_depth = max_depth;
 
     // initialise tree info
     num_nodes = 1;

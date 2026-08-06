@@ -243,7 +243,7 @@ void MultistateForest::grow() {
         }
 
         uniform_int_distribution<size_t> dist(0, numeric_limits<size_t>::max());
-        tree->initialise(data, mtry, min_node_size, nsplits, splitrule, honest, dist(local_rng));
+        tree->initialise(data, mtry, min_node_size, max_depth, nsplits, splitrule, honest, dist(local_rng));
         // forest trees route observations directly, so remove the N-entry base allocation before growing any nodes
         tree->releasePredictionNodeIDs();
         tree->setRNG(local_rng);
