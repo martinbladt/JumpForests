@@ -1,0 +1,169 @@
+"curve_type" "model" "profile" "component" "MISE" "RMSE"
+"1" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 2" "State 0" 0.000947056891129537 0.0307742894496288
+"2" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 2" "State 1" 0.000125122190670003 0.0111858030856082
+"3" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 2" "State 2" 0.000841068788787315 0.0290011859893232
+"4" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 5" "State 0" 0.00261971153416055 0.0511831176674551
+"5" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 5" "State 1" 0.000633966177543167 0.0251786849843904
+"6" "Occupation probability" "Jump Forest" "Woman: X2 = 1, X3 = 5" "State 2" 0.00546203673637776 0.0739055934038674
+"7" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 2" "State 0" 0.000877730637105048 0.0296265191526958
+"8" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 2" "State 1" 0.000105749151376609 0.0102834406390376
+"9" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 2" "State 2" 0.00102785061961806 0.0320601094760773
+"10" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 5" "State 0" 0.000318763550434578 0.0178539505553975
+"11" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 5" "State 1" 0.00122243196361271 0.0349632945188624
+"12" "Occupation probability" "Jump Forest" "Woman: X2 = 4, X3 = 5" "State 2" 0.00207245199360191 0.0455241913009106
+"13" "Occupation probability" "Conditional AJ" "Woman: X2 = 1, X3 = 2" "State 0" 0.00126122844894024 0.0355137782971658
+"14" "Occupation probability" "Conditional AJ" "Woman: X2 = 1, X3 = 2" "State 1" 0.0010003995341206 0.0316290931599469
+"15" "Occupation probability" "Conditional AJ" "Woman: X2 = 1, X3 = 2" "State 2" 0.00156961270253887 0.0396183379578052
+"16" "Occupation probability" "Conditional AJ" "Woman: X2 = 1, X3 = 5" "State 0" 0.00592219534071827 0.0769558012154917
+"17" "Occupation probability" "Conditional AJ" "Woman: X2 = 1, X3 = 5" "State 1" 0.00834130019978859 0.0913307188178687
+"18" "Occupation probability" "Conditional AJ" "Woman: X2 = 1, X3 = 5" "State 2" 0.0107276028202009 0.103574141658046
+"19" "Occupation probability" "Conditional AJ" "Woman: X2 = 4, X3 = 2" "State 0" 0.00201506868374385 0.0448895164124526
+"20" "Occupation probability" "Conditional AJ" "Woman: X2 = 4, X3 = 2" "State 1" 0.00183046442225589 0.0427839271485903
+"21" "Occupation probability" "Conditional AJ" "Woman: X2 = 4, X3 = 2" "State 2" 0.0027986694942505 0.0529024526298215
+"22" "Occupation probability" "Conditional AJ" "Woman: X2 = 4, X3 = 5" "State 0" 0.00674678556151373 0.0821388188465949
+"23" "Occupation probability" "Conditional AJ" "Woman: X2 = 4, X3 = 5" "State 1" 0.00427969271561242 0.0654193604035718
+"24" "Occupation probability" "Conditional AJ" "Woman: X2 = 4, X3 = 5" "State 2" 0.00685377857524833 0.0827875508470224
+"25" "Occupation probability" "Cox linear" "Woman: X2 = 1, X3 = 2" "State 0" 9.43822992531869e-05 0.0097150552882208
+"26" "Occupation probability" "Cox linear" "Woman: X2 = 1, X3 = 2" "State 1" 0.000224370743109943 0.0149790100844463
+"27" "Occupation probability" "Cox linear" "Woman: X2 = 1, X3 = 2" "State 2" 0.000523438516905668 0.0228787787459398
+"28" "Occupation probability" "Cox linear" "Woman: X2 = 1, X3 = 5" "State 0" 0.00304832511587862 0.0552116393152624
+"29" "Occupation probability" "Cox linear" "Woman: X2 = 1, X3 = 5" "State 1" 0.000574402972503238 0.0239667054995725
+"30" "Occupation probability" "Cox linear" "Woman: X2 = 1, X3 = 5" "State 2" 0.00584381977505261 0.0764448806333858
+"31" "Occupation probability" "Cox linear" "Woman: X2 = 4, X3 = 2" "State 0" 4.86153660946541e-05 0.0069724720217907
+"32" "Occupation probability" "Cox linear" "Woman: X2 = 4, X3 = 2" "State 1" 5.77735887021143e-05 0.00760089394098578
+"33" "Occupation probability" "Cox linear" "Woman: X2 = 4, X3 = 2" "State 2" 5.25439966096213e-05 0.00724872379178716
+"34" "Occupation probability" "Cox linear" "Woman: X2 = 4, X3 = 5" "State 0" 0.00339435079617532 0.058261057286796
+"35" "Occupation probability" "Cox linear" "Woman: X2 = 4, X3 = 5" "State 1" 0.000455837387528206 0.0213503486512096
+"36" "Occupation probability" "Cox linear" "Woman: X2 = 4, X3 = 5" "State 2" 0.0061699671972368 0.0785491387428073
+"37" "Occupation probability" "Cox cubic spline" "Woman: X2 = 1, X3 = 2" "State 0" 9.90515604135234e-05 0.00995246504206487
+"38" "Occupation probability" "Cox cubic spline" "Woman: X2 = 1, X3 = 2" "State 1" 0.000164879580511534 0.0128405444009019
+"39" "Occupation probability" "Cox cubic spline" "Woman: X2 = 1, X3 = 2" "State 2" 0.000425519092424581 0.0206281141267102
+"40" "Occupation probability" "Cox cubic spline" "Woman: X2 = 1, X3 = 5" "State 0" 0.00214710255029398 0.0463368379401744
+"41" "Occupation probability" "Cox cubic spline" "Woman: X2 = 1, X3 = 5" "State 1" 0.000454059015186015 0.0213086605676193
+"42" "Occupation probability" "Cox cubic spline" "Woman: X2 = 1, X3 = 5" "State 2" 0.00432636001521194 0.0657750713812759
+"43" "Occupation probability" "Cox cubic spline" "Woman: X2 = 4, X3 = 2" "State 0" 9.18050654211229e-05 0.00958149599076902
+"44" "Occupation probability" "Cox cubic spline" "Woman: X2 = 4, X3 = 2" "State 1" 0.000183012367784888 0.0135282063772286
+"45" "Occupation probability" "Cox cubic spline" "Woman: X2 = 4, X3 = 2" "State 2" 0.000109981114099714 0.0104871880930836
+"46" "Occupation probability" "Cox cubic spline" "Woman: X2 = 4, X3 = 5" "State 0" 0.00508951624684186 0.0713408455713966
+"47" "Occupation probability" "Cox cubic spline" "Woman: X2 = 4, X3 = 5" "State 1" 0.000357142696987983 0.0188982194131612
+"48" "Occupation probability" "Cox cubic spline" "Woman: X2 = 4, X3 = 5" "State 2" 0.00785802899877142 0.0886455244147804
+"49" "Occupation probability" "Poisson linear" "Woman: X2 = 1, X3 = 2" "State 0" 7.18060513549419e-05 0.00847384513399566
+"50" "Occupation probability" "Poisson linear" "Woman: X2 = 1, X3 = 2" "State 1" 0.000157232857075836 0.0125392526522052
+"51" "Occupation probability" "Poisson linear" "Woman: X2 = 1, X3 = 2" "State 2" 0.000390293449021974 0.019755845945491
+"52" "Occupation probability" "Poisson linear" "Woman: X2 = 1, X3 = 5" "State 0" 0.00326060013491986 0.0571016649049733
+"53" "Occupation probability" "Poisson linear" "Woman: X2 = 1, X3 = 5" "State 1" 0.000636935420418029 0.0252375795277207
+"54" "Occupation probability" "Poisson linear" "Woman: X2 = 1, X3 = 5" "State 2" 0.00630733868468164 0.0794187552451034
+"55" "Occupation probability" "Poisson linear" "Woman: X2 = 4, X3 = 2" "State 0" 6.80883594246344e-05 0.00825156708902221
+"56" "Occupation probability" "Poisson linear" "Woman: X2 = 4, X3 = 2" "State 1" 9.05132990696526e-05 0.00951384775312558
+"57" "Occupation probability" "Poisson linear" "Woman: X2 = 4, X3 = 2" "State 2" 0.000238490082941114 0.0154431241315063
+"58" "Occupation probability" "Poisson linear" "Woman: X2 = 4, X3 = 5" "State 0" 0.00279520580901133 0.0528697059667569
+"59" "Occupation probability" "Poisson linear" "Woman: X2 = 4, X3 = 5" "State 1" 0.000382280429086632 0.0195519929696855
+"60" "Occupation probability" "Poisson linear" "Woman: X2 = 4, X3 = 5" "State 2" 0.00516585290509758 0.0718738680265476
+"61" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 1, X3 = 2" "State 0" 6.47540777645573e-05 0.00804699184568726
+"62" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 1, X3 = 2" "State 1" 0.000135331936367767 0.011633225535842
+"63" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 1, X3 = 2" "State 2" 0.000339551223135014 0.0184269157249664
+"64" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 1, X3 = 5" "State 0" 0.00270731967474373 0.0520319101585145
+"65" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 1, X3 = 5" "State 1" 0.000516148177368182 0.0227188947215348
+"66" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 1, X3 = 5" "State 2" 0.00523515329221247 0.0723543591790603
+"67" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 4, X3 = 2" "State 0" 7.20835203302342e-05 0.00849020143048645
+"68" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 4, X3 = 2" "State 1" 0.000219823500518034 0.0148264459840528
+"69" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 4, X3 = 2" "State 2" 0.000353974558811764 0.0188142116181296
+"70" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "State 0" 0.00376803380257381 0.0613843123491158
+"71" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "State 1" 0.000284167484638419 0.0168572680063651
+"72" "Occupation probability" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "State 2" 0.00598791772085746 0.0773816368452973
+"73" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "0 -> 1" 0.1123134416449 0.33513197645838
+"74" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "0 -> 2" 0.138117903409586 0.371642171193725
+"75" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "1 -> 0" 4.431922193065 2.10521309920516
+"76" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 2" "1 -> 2" 0.88510406069917 0.940799692123233
+"77" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 5" "0 -> 1" 0.00658949685398457 0.0811757159129784
+"78" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 5" "0 -> 2" 0.232069748001332 0.481736180913715
+"79" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 5" "1 -> 0" 6.56166778156641 2.56157525393388
+"80" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 1, X3 = 5" "1 -> 2" 0.434980803582359 0.659530744986433
+"81" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 2" "0 -> 1" 0.00689978951863861 0.0830649716706062
+"82" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 2" "0 -> 2" 0.030850139945832 0.175642079086511
+"83" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 2" "1 -> 0" 11.4635370280983 3.38578455134084
+"84" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 2" "1 -> 2" 0.0503044709043516 0.224286582087185
+"85" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "0 -> 1" 0.108514318422781 0.32941511565619
+"86" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "0 -> 2" 0.892797476558788 0.944879609558164
+"87" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "1 -> 0" 15.7450111085943 3.96799837557859
+"88" "Cumulative transition rate" "Jump Forest" "Woman: X2 = 4, X3 = 5" "1 -> 2" 4.31279723706302 2.07672753077119
+"89" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 1, X3 = 2" "0 -> 1" 0.0551923464099504 0.234930514003504
+"90" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 1, X3 = 2" "0 -> 2" 0.98554584299156 0.992746615703906
+"91" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 1, X3 = 2" "1 -> 0" 59.1269553766927 7.68940539812362
+"92" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 1, X3 = 2" "1 -> 2" 2.31237183826057 1.52064849267034
+"93" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 1, X3 = 5" "0 -> 1" 0.0558179540006652 0.23625823583669
+"94" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 1, X3 = 5" "0 -> 2" 0.0742125629435794 0.272419828469918
+"95" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 1, X3 = 5" "1 -> 0" 85.4411317151095 9.24343722405846
+"96" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 1, X3 = 5" "1 -> 2" 1.06716416182629 1.03303637972062
+"97" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 4, X3 = 2" "0 -> 1" 0.0139042603947695 0.117916327939643
+"98" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 4, X3 = 2" "0 -> 2" 0.155634594401667 0.39450550617408
+"99" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 4, X3 = 2" "1 -> 0" 23.4988254813765 4.84755871355639
+"100" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 4, X3 = 2" "1 -> 2" 1.05963513877781 1.02938580657488
+"101" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 4, X3 = 5" "0 -> 1" 0.163449138788504 0.404288435140686
+"102" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 4, X3 = 5" "0 -> 2" 2.61808388685492 1.61804940803886
+"103" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 4, X3 = 5" "1 -> 0" 158.201490976223 12.5778174170332
+"104" "Cumulative transition rate" "Conditional AJ" "Woman: X2 = 4, X3 = 5" "1 -> 2" 17.7502832319156 4.21310849989834
+"105" "Cumulative transition rate" "Cox linear" "Woman: X2 = 1, X3 = 2" "0 -> 1" 0.0246708708909671 0.157069637075302
+"106" "Cumulative transition rate" "Cox linear" "Woman: X2 = 1, X3 = 2" "0 -> 2" 0.0161192827105094 0.126961737190814
+"107" "Cumulative transition rate" "Cox linear" "Woman: X2 = 1, X3 = 2" "1 -> 0" 5.843840907112 2.41740375343301
+"108" "Cumulative transition rate" "Cox linear" "Woman: X2 = 1, X3 = 2" "1 -> 2" 0.907720025613716 0.952743420661468
+"109" "Cumulative transition rate" "Cox linear" "Woman: X2 = 1, X3 = 5" "0 -> 1" 0.00917431678858027 0.0957826539023652
+"110" "Cumulative transition rate" "Cox linear" "Woman: X2 = 1, X3 = 5" "0 -> 2" 0.511195504518015 0.714979373491302
+"111" "Cumulative transition rate" "Cox linear" "Woman: X2 = 1, X3 = 5" "1 -> 0" 2.10501513794245 1.45086702972479
+"112" "Cumulative transition rate" "Cox linear" "Woman: X2 = 1, X3 = 5" "1 -> 2" 0.555196757185097 0.745115264361895
+"113" "Cumulative transition rate" "Cox linear" "Woman: X2 = 4, X3 = 2" "0 -> 1" 0.00435683310751231 0.0660063111188037
+"114" "Cumulative transition rate" "Cox linear" "Woman: X2 = 4, X3 = 2" "0 -> 2" 0.00481522218349363 0.0693918019905351
+"115" "Cumulative transition rate" "Cox linear" "Woman: X2 = 4, X3 = 2" "1 -> 0" 0.793132637098823 0.890579944249152
+"116" "Cumulative transition rate" "Cox linear" "Woman: X2 = 4, X3 = 2" "1 -> 2" 0.178555345454096 0.422558097134697
+"117" "Cumulative transition rate" "Cox linear" "Woman: X2 = 4, X3 = 5" "0 -> 1" 0.0116928842007149 0.108133640467317
+"118" "Cumulative transition rate" "Cox linear" "Woman: X2 = 4, X3 = 5" "0 -> 2" 1.11019073485735 1.05365589015454
+"119" "Cumulative transition rate" "Cox linear" "Woman: X2 = 4, X3 = 5" "1 -> 0" 0.719017247344028 0.847948847127012
+"120" "Cumulative transition rate" "Cox linear" "Woman: X2 = 4, X3 = 5" "1 -> 2" 2.5179445992333 1.58680326418662
+"121" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 1, X3 = 2" "0 -> 1" 0.0487443101609405 0.220781136334019
+"122" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 1, X3 = 2" "0 -> 2" 0.0106300618626208 0.103102191357026
+"123" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 1, X3 = 2" "1 -> 0" 6.20650532801533 2.49128587842009
+"124" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 1, X3 = 2" "1 -> 2" 1.03762348217367 1.01863805258476
+"125" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 1, X3 = 5" "0 -> 1" 0.00321006731958941 0.0566574559929178
+"126" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 1, X3 = 5" "0 -> 2" 0.437079516965791 0.661119896059551
+"127" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 1, X3 = 5" "1 -> 0" 3.33355765078877 1.82580328918226
+"128" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 1, X3 = 5" "1 -> 2" 0.302930481333419 0.550391207536438
+"129" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 4, X3 = 2" "0 -> 1" 0.00650242437155803 0.0806376113954154
+"130" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 4, X3 = 2" "0 -> 2" 0.0061529173615324 0.0784405339192206
+"131" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 4, X3 = 2" "1 -> 0" 0.4782885525967 0.691584089317199
+"132" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 4, X3 = 2" "1 -> 2" 0.578547506054646 0.760623103813345
+"133" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 4, X3 = 5" "0 -> 1" 0.00621292509312726 0.0788221104330965
+"134" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 4, X3 = 5" "0 -> 2" 1.30810356796177 1.14372355399448
+"135" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 4, X3 = 5" "1 -> 0" 3.31904062484955 1.82182343404885
+"136" "Cumulative transition rate" "Cox cubic spline" "Woman: X2 = 4, X3 = 5" "1 -> 2" 1.94009909015924 1.39287439855833
+"137" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 1, X3 = 2" "0 -> 1" 0.0147070473894652 0.121272615991679
+"138" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 1, X3 = 2" "0 -> 2" 0.299033667260534 0.546839708928068
+"139" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 1, X3 = 2" "1 -> 0" 4.41544177929206 2.10129526228278
+"140" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 1, X3 = 2" "1 -> 2" 1.52294564458485 1.23407683901159
+"141" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 1, X3 = 5" "0 -> 1" 0.00837977030836805 0.0915410853571666
+"142" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 1, X3 = 5" "0 -> 2" 0.129155206219409 0.359381699894985
+"143" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 1, X3 = 5" "1 -> 0" 1.39967248663747 1.18307754886883
+"144" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 1, X3 = 5" "1 -> 2" 0.252021504649573 0.502017434607179
+"145" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 4, X3 = 2" "0 -> 1" 0.000653656646371941 0.0255667097290977
+"146" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 4, X3 = 2" "0 -> 2" 0.0979414671180586 0.312956014669887
+"147" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 4, X3 = 2" "1 -> 0" 0.26103961398947 0.510920359732777
+"148" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 4, X3 = 2" "1 -> 2" 0.0928177349928052 0.304660031826961
+"149" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 4, X3 = 5" "0 -> 1" 0.0129066400357096 0.113607394282721
+"150" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 4, X3 = 5" "0 -> 2" 1.84178794395324 1.35712488148779
+"151" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 4, X3 = 5" "1 -> 0" 0.876407304682567 0.936166280466546
+"152" "Cumulative transition rate" "Poisson linear" "Woman: X2 = 4, X3 = 5" "1 -> 2" 3.75767230752161 1.93847164217628
+"153" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 1, X3 = 2" "0 -> 1" 0.027549997747112 0.165981919940432
+"154" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 1, X3 = 2" "0 -> 2" 0.263720948172993 0.513537679409206
+"155" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 1, X3 = 2" "1 -> 0" 5.09726207620853 2.25771169023162
+"156" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 1, X3 = 2" "1 -> 2" 1.63677114272214 1.27936356940556
+"157" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 1, X3 = 5" "0 -> 1" 0.00093749007233112 0.0306184596662066
+"158" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 1, X3 = 5" "0 -> 2" 0.11834956190462 0.344019711505926
+"159" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 1, X3 = 5" "1 -> 0" 2.57877577605528 1.60585671093509
+"160" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 1, X3 = 5" "1 -> 2" 0.11465862634842 0.33861279708307
+"161" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 4, X3 = 2" "0 -> 1" 0.000787609065036273 0.0280643735906625
+"162" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 4, X3 = 2" "0 -> 2" 0.0990607008764079 0.314739099694347
+"163" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 4, X3 = 2" "1 -> 0" 0.687505446921775 0.82915948219976
+"164" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 4, X3 = 2" "1 -> 2" 0.323160288466101 0.56847188889698
+"165" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "0 -> 1" 0.00897500178626316 0.094736486035018
+"166" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "0 -> 2" 1.9660712054124 1.40216661114591
+"167" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "1 -> 0" 4.09718030315632 2.02414927887158
+"168" "Cumulative transition rate" "Poisson cubic spline" "Woman: X2 = 4, X3 = 5" "1 -> 2" 3.08662702013857 1.75687991056263

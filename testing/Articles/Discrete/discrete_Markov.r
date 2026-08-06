@@ -9,14 +9,37 @@ source("testing/Articles/Discrete/Helpers.r")
 # defining the data-generating process and simulating data
 #--------------------------------------------------------------------------------
 
+interactions <- TRUE
+
 {
-# Mortality parameters are calibrated so that, after averaging over the X2/X3
-# distribution below, residual life expectancy at age 30 is approximately
-# 50.9 years for men (X1 = 1) and 54.2 years for women (X1 = 0). For comparison,
-# Statistics Denmark table HISB8 reports 50.92 and 54.50 years in 2024:2025.
-# In particular, beta3_02 = -0.007 previously made a four-level increase in X3
-# multiply healthy-state mortality at age 100 by exp(-0.007 * 4 * 100) = 0.061.
-# The revised value gives a much more moderate multiplier of exp(-0.1) = 0.905.
+# Keep both versions of the study reproducible from this script. All generated
+# artifacts use the same basenames and are separated by their study directory.
+study_name <- if (interactions) "Interactions" else "NoInteractions"
+data_directory <- file.path(
+    "testing", "Articles", "Discrete", "Data", study_name
+)
+plot_directory <- file.path(
+    "testing", "Articles", "Discrete", "Plots", study_name
+)
+dir.create(data_directory, recursive = TRUE, showWarnings = FALSE)
+dir.create(plot_directory, recursive = TRUE, showWarnings = FALSE)
+
+data_path <- function(filename) file.path(data_directory, filename)
+plot_path <- function(filename) file.path(plot_directory, filename)
+
+# These probabilities are used both to simulate X2/X3 and to centre their
+# interaction. Independence and centring make the interaction orthogonal to
+# both main effects in the population linear predictor.
+x2_probabilities <- c(0.2, 0.4, 0.3, 0.1)
+x3_probabilities <- c(0.15, 0.3, 0.4, 0.1, 0.05)
+x2_centre <- weighted.mean(seq_along(x2_probabilities), x2_probabilities)
+x3_centre <- weighted.mean(seq_along(x3_probabilities), x3_probabilities)
+
+# Mortality parameters in the interaction DGP are calibrated so that, after
+# averaging over the X2/X3 distribution, residual life expectancy at age 30 is
+# 50.92 years for men (X1 = 1) and 54.50 years for women (X1 = 0). These are the
+# 2024:2025 values in Statistics Denmark table HISB8. The original coefficients
+# remain in force when interactions is FALSE.
 
 # baseline intercepts
 alpha0_02 <- 2e-05
@@ -58,6 +81,17 @@ beta3_02 <- -2.5e-04
 beta3_12 <- -2.5e-04
 beta3_10 <- 5e-04
 
+# Centred X2-by-X3 interaction in both mortality intensities. At absolute age
+# 100, beta23_mortality = 0.0015 gives a maximum-versus-minimum interaction
+# hazard-ratio contrast of exp(0.0015 * (4.08 - (-3.12)) * 100) = 2.94. The intercept
+# adjustments compensate for the interaction's nonlinear effect on population-
+# averaged mortality without changing the original no-interaction DGP. They add
+# -0.030684 for women and -0.030684 + 0.030758 = 0.000074 for men to the two
+# exponential mortality predictors.
+beta23_mortality <- if (interactions) 1.5e-03 else 0
+mortality_intercept_calibration <- if (interactions) -0.030684 else 0
+mortality_sex_calibration <- if (interactions) 0.030758 else 0
+
 # misc. coefficients
 gamma2_01 <- 1.183597e-03
 beta4_01 <- -1.111111e-05
@@ -69,16 +103,30 @@ beta6_01 <- 1.234568e-07
 x <- 30
 
 # define intensities
+interaction_23 <- function(X) {
+    (X[2] - x2_centre) * (X[3] - x3_centre)
+}
+
 mu01 <- function(t, X) {
     exp(beta0_01 + beta1_01 * X[1] + (gamma1_01 + beta2_01 * X[2] + beta3_01 * X[3]) * (t + x)
         + (gamma2_01 + beta4_01 * X[2] + beta5_01 * X[3]) * (t + x)^2
         + (gamma3_01 + beta6_01 * X[2]) * (t + x)^3)
 }
 mu02 <- function(t, X) {
-    alpha0_02 + alpha1_02 * X[1] + exp(beta0_02 + beta1_02 * X[1] + (gamma1_02 + beta2_02 * X[2] + beta3_02 * X[3]) * (t + x))
+    alpha0_02 + alpha1_02 * X[1] + exp(
+        beta0_02 + mortality_intercept_calibration +
+        (beta1_02 + mortality_sex_calibration) * X[1] +
+        (gamma1_02 + beta2_02 * X[2] + beta3_02 * X[3] +
+         beta23_mortality * interaction_23(X)) * (t + x)
+    )
 }
 mu12 <- function(t, X) {
-    alpha0_12 + alpha1_12 * X[1] + exp(beta0_12 + beta1_12 * X[1] + (gamma1_12 + beta2_12 * X[2] + beta3_12 * X[3]) * (t + x))
+    alpha0_12 + alpha1_12 * X[1] + exp(
+        beta0_12 + mortality_intercept_calibration +
+        (beta1_12 + mortality_sex_calibration) * X[1] +
+        (gamma1_12 + beta2_12 * X[2] + beta3_12 * X[3] +
+         beta23_mortality * interaction_23(X)) * (t + x)
+    )
 }
 mu10 <- function(t, X) {
     alpha0_10 + alpha1_10 * X[1] + exp(beta0_10 + beta1_10 * X[1] + (gamma1_10 + beta2_10 * X[2] + beta3_10 * X[3]) * (t + x))
@@ -90,7 +138,33 @@ Lambda <- function(t, X) {
     diag(A) <- -rowSums(A)
     A
 }
+
+# Retain the original evaluation profiles for the no-interaction study. For the
+# interaction study, hold sex fixed and evaluate the complete 2-by-2 X2/X3
+# corner design. This exposes both positive and negative interaction cells
+# instead of confounding the interaction contrast with the sex effect.
+evaluation_profiles <- if (interactions) {
+    data.frame(
+        X1 = rep(0, 4),
+        X2 = c(1, 1, 4, 4),
+        X3 = c(2, 5, 2, 5)
+    )
+} else {
+    data.frame(
+        X1 = c(1, 1, 0, 0),
+        X2 = c(1, 4, 1, 4),
+        X3 = c(2, 5, 2, 5)
+    )
 }
+evaluation_profile_titles <- paste0(
+    ifelse(evaluation_profiles$X1 == 1, "Man", "Woman"),
+    ": X2 = ", evaluation_profiles$X2,
+    ", X3 = ", evaluation_profiles$X3
+)
+}
+
+# simulations
+#--------------------------------------------------------------------------------
 
 # now simulate the paths
 {
@@ -98,9 +172,9 @@ tic()
 set.seed(2026)
 n <- 50000
 # signal
-X1 <- rbinom(n, 1, 1/2)                                                   # sex, 0: female, 1: male
-X2 <- sample(1:4, n, replace = TRUE, prob = c(0.2, 0.4, 0.3, 0.1))        # education level
-X3 <- sample(1:5, n, replace = TRUE, prob = c(0.15, 0.3, 0.4, 0.1, 0.05)) # wage level
+X1 <- rbinom(n, 1, 1/2)                                       # sex, 0: female, 1: male
+X2 <- sample(1:4, n, replace = TRUE, prob = x2_probabilities) # education level
+X3 <- sample(1:5, n, replace = TRUE, prob = x3_probabilities) # wage level
 
 # noise
 X4 <- rnorm(n)
@@ -130,8 +204,8 @@ toc()   # takes about 230 seconds for n = 50,000
 }
 
 # save data
-saveRDS(sim, file = "testing/Articles/Discrete/Data/sim.rds")
-write.table(test_data, file = "testing/Articles/Discrete/Data/test_data.txt")
+saveRDS(sim, file = data_path("sim.rds"))
+write.table(test_data, file = data_path("test_data.txt"))
 
 # empirical censoring rate in the current simulation
 sum(R == unlist(lapply(sim, FUN = function(z){tail(z$times, 1)}))) / n
@@ -204,24 +278,47 @@ lifetime_diagnostics <- t(vapply(seq_len(nrow(lifetime_profiles)), function(i) {
 }, numeric(4)))
 lifetime_diagnostics <- cbind(lifetime_profiles, lifetime_diagnostics)
 
-range(lifetime_diagnostics$mean.residual.lifetime)       # approximately 49.7--56.0 years
-max(lifetime_diagnostics$probability.age.above.120)      # approximately 2e-6
+range(lifetime_diagnostics$mean.residual.lifetime)
+max(lifetime_diagnostics$probability.age.above.120)
 
-profile_weights <- c(0.2, 0.4, 0.3, 0.1)[lifetime_profiles$X2] * c(0.15, 0.3, 0.4, 0.1, 0.05)[lifetime_profiles$X3]
+profile_weights <- x2_probabilities[lifetime_profiles$X2] *
+    x3_probabilities[lifetime_profiles$X3]
 weighted_residual_lifetime <- vapply(0:1, function(sex) {
     use <- lifetime_profiles$X1 == sex
     weighted.mean(lifetime_diagnostics$mean.residual.lifetime[use], profile_weights[use])
 }, numeric(1))
 names(weighted_residual_lifetime) <- c("women", "men")
-weighted_residual_lifetime                              # approximately 54.2 and 50.9 years
+weighted_residual_lifetime
+
+# Guard the Statistics Denmark calibration and the intended interaction size
+# against accidental coefficient changes. Under the interaction DGP, the
+# profile range is approximately 47.77--58.36 residual years and the maximum
+# probability of surviving beyond age 120 is approximately 1.61e-4.
+statistics_denmark_residual_lifetime <- c(women = 54.50, men = 50.92)
+if (interactions && any(abs(
+    weighted_residual_lifetime - statistics_denmark_residual_lifetime
+) > 0.01)) {
+    stop("the interaction DGP no longer matches the HISB8 calibration")
+}
+
+interaction_profile_values <- outer(
+    seq_along(x2_probabilities) - x2_centre,
+    seq_along(x3_probabilities) - x3_centre
+)
+interaction_contrast_age_100 <- exp(
+    beta23_mortality * diff(range(interaction_profile_values)) * 100
+)
+if (interactions && interaction_contrast_age_100 < 2) {
+    stop("the X2-by-X3 interaction is no longer substantively large")
+}
 
 
 # fit a jump forest (hyperparameter tuning)
 #--------------------------------------------------------------------------------
 
 # read in the data
-sim <- readRDS("testing/Articles/Discrete/Data/sim.rds")
-test_data <- read.table("testing/Articles/Discrete/Data/test_data.txt", header = TRUE)
+sim <- readRDS(data_path("sim.rds"))
+test_data <- read.table(data_path("test_data.txt"), header = TRUE)
 
 num_obs <- 1000
 #fitted_forest <- jfforest(MM ~ ., data = sim[1:100], feature_data = test_data[1:100,])
@@ -250,26 +347,33 @@ for (i in 1:5) {
     }
 }
 
-min(ibs)
-ibs # best is logrank with min_node_size = 100
-
-min(kl)
-kl  # best is logrank with min_node_size = 200
-
-min(spherical)
-spherical   # best is petoprentice with min_node_size = 20
+best_tuning_configuration <- function(scores, metric) {
+    best <- which(scores == min(scores), arr.ind = TRUE)[1, ]
+    data.frame(
+        metric = metric,
+        split_rule = split_rules[best["row"]],
+        min_node_size = min_node_sizes[best["col"]],
+        score = scores[best["row"], best["col"]]
+    )
+}
+best_tuning_results <- rbind(
+    best_tuning_configuration(ibs, "IBS"),
+    best_tuning_configuration(kl, "KL"),
+    best_tuning_configuration(spherical, "Spherical")
+)
+best_tuning_results
 
 # for plots later
-write.table(ibs, file = "testing/Articles/Discrete/Data/tuning_ibs.txt", sep = "\t", row.names = FALSE)
-write.table(kl, file = "testing/Articles/Discrete/Data/tuning_kl.txt", sep = "\t", row.names = FALSE)
-write.table(spherical, file = "testing/Articles/Discrete/Data/tuning_spherical.txt", sep = "\t", row.names = FALSE)
+write.table(ibs, file = data_path("tuning_ibs.txt"), sep = "\t", row.names = FALSE)
+write.table(kl, file = data_path("tuning_kl.txt"), sep = "\t", row.names = FALSE)
+write.table(spherical, file = data_path("tuning_spherical.txt"), sep = "\t", row.names = FALSE)
 
 # now make hyperparameter tuning plots
-ibs <- read.table("testing/Articles/Discrete/Data/tuning_ibs.txt", header = TRUE)
+ibs <- read.table(data_path("tuning_ibs.txt"), header = TRUE)
 colnames(ibs) <- as.factor(min_node_sizes)
-ikl <- read.table("testing/Articles/Discrete/Data/tuning_kl.txt", header = TRUE)
+ikl <- read.table(data_path("tuning_kl.txt"), header = TRUE)
 colnames(ikl) <- as.factor(min_node_sizes)
-spherical <- read.table("testing/Articles/Discrete/Data/tuning_spherical.txt", header = TRUE)
+spherical <- read.table(data_path("tuning_spherical.txt"), header = TRUE)
 colnames(spherical) <- as.factor(min_node_sizes)
 
 tuning_colours <- c("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00")
@@ -283,25 +387,26 @@ plot_score_curves(
     scores = ibs, x = min_node_sizes, series_labels = split_rules,
     x_tick_labels = colnames(ibs), colours = tuning_colours,
     pch = seq_along(split_rules), ylab = "Normalised IBS",
-    file = "testing/Articles/Discrete/Plots/tuning_ibs.png", width = 6, height = 6
+    file = plot_path("tuning_ibs.png"), width = 6, height = 6
 )
 plot_score_curves(
     scores = ikl, x = min_node_sizes, series_labels = split_rules,
     x_tick_labels = colnames(ikl), colours = tuning_colours,
     pch = seq_along(split_rules), ylab = "Normalised KL",
-    file = "testing/Articles/Discrete/Plots/tuning_ikl.png", width = 6, height = 6
+    file = plot_path("tuning_ikl.png"), width = 6, height = 6
 )
 plot_score_curves(
     scores = spherical, x = min_node_sizes, series_labels = split_rules,
     x_tick_labels = colnames(spherical), colours = tuning_colours,
     pch = seq_along(split_rules), ylab = "Normalised Spherical error",
     legend_position = "bottomright",
-    file = "testing/Articles/Discrete/Plots/tuning_is.png", width = 6, height = 6
+    file = plot_path("tuning_is.png"), width = 6, height = 6
 )
 
-# we choose to go with the final choices of logrank with min_node_size = 100 to start
+# without interaction: we choose to go with the final choices of logrank with min_node_size = 100 to start
+# with interaction: we go with taroneware and min_node_size = 200
 fitted_forest <- jfforest(MM ~ ., data = sim[1:num_obs], feature_data = test_data[1:num_obs,],
-                          splitrule = "logrank", min_node_size = 100, seed = 2026)
+                          splitrule = "taroneware", min_node_size = 200, seed = 2026)
 print_forest(fitted_forest)
 
 # VIMP (should do several runs, it seems that JF has a hard time distinguishing noise from signal),
@@ -320,8 +425,8 @@ unlist(jfforest.vimp(fitted_forest, method = "random", loss = "spherical", seed 
 source("testing/Articles/Discrete/Helpers.r")
 
 # read in the data
-sim <- readRDS("testing/Articles/Discrete/Data/sim.rds")
-test_data <- read.table("testing/Articles/Discrete/Data/test_data.txt", header = TRUE)
+sim <- readRDS(data_path("sim.rds"))
+test_data <- read.table(data_path("test_data.txt"), header = TRUE)
 
 length(unique(unlist(lapply(sim, function(z) z$times))))
 # 105090 event and censoring times total for 50,000 observations!
@@ -343,14 +448,13 @@ print_forest(final_forest)
 
 # we know the initial distribution is c(1, 0, 0), so no need to predict it
 
-# we consider the following four combinations of covariates
-# man (X_1 = 1) with education level X_2 = 1 and income level X3 = 2
-# man (X_1 = 1) with education level X_2 = 4 and income level X3 = 5
-# woman (X_1 = 0) with education level X_2 = 1 and income level X3 = 2
-# woman (X_1 = 0) with education level X_2 = 4 and income level X3 = 5
-
-new_data <- data.frame(X1 = c(1,1,0,0), X2 = c(1,4,1,4), X3 = c(2,5,2,5),
-                       X4 = rep(0, 4), X5 = rep(0, 4), X6 = rep(0, 4))
+# Add zero-valued noise covariates to the four signal profiles defined above.
+new_data <- cbind(
+    evaluation_profiles,
+    X4 = rep(0, nrow(evaluation_profiles)),
+    X5 = rep(0, nrow(evaluation_profiles)),
+    X6 = rep(0, nrow(evaluation_profiles))
+)
 predictions <- jfforest.predict(final_forest, new_data = new_data)
 
 # predicted occupation probabilities for each state
@@ -380,8 +484,7 @@ true_occprobs <- lapply(
     list(occprobs1, occprobs2, occprobs3, occprobs4),
     function(probabilities) do.call(rbind, probabilities)
 )
-panel_titles <- c("Man: X2 = 1, X3 = 2", "Man: X2 = 4, X3 = 5",
-                  "Woman: X2 = 1, X3 = 2", "Woman: X2 = 4, X3 = 5")
+panel_titles <- evaluation_profile_titles
 state_colours <- c("#0072B2", "#D55E00", "#009E73")
 
 consistency_occupation_curves <- list(
@@ -401,7 +504,7 @@ plot_panel_curves(
     panel_titles = panel_titles, component_colours = state_colours,
     ylab = "Occupation probability", ylim = c(0, 1), panel_layout = c(2, 2),
     legend_position = "right", legend_order = c("Predicted", "True"),
-    file = "testing/Articles/Discrete/Plots/discrete_consistency_Markov.png"
+    file = plot_path("discrete_consistency_Markov.png")
 )
 
 # Compare the forest and true cumulative transition rates.
@@ -462,7 +565,7 @@ plot_panel_curves(
     ylab = "Cumulative transition rate", xlim = c(0, plot_end),
     include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
     legend_order = c("Predicted", "True"),
-    file = "testing/Articles/Discrete/Plots/discrete_consistency_Markov_transition_rates.png"
+    file = plot_path("discrete_consistency_Markov_transition_rates.png")
 )
 
 # how to plot the errors? should the forest be modified to return the whole vector of scores?
@@ -478,20 +581,35 @@ plot_panel_curves(
 source("testing/Articles/Discrete/Helpers.r")
 
 # read in the data
-sim <- readRDS("testing/Articles/Discrete/Data/sim.rds")
-test_data <- read.table("testing/Articles/Discrete/Data/test_data.txt", header = TRUE)
+sim <- readRDS(data_path("sim.rds"))
+test_data <- read.table(data_path("test_data.txt"), header = TRUE)
 
 # we choose to work with less data here and we drop the noise variables
 num.obs <- 2000
-forest_honest <- FALSE
+forest_honest <- TRUE
+forest_min_node_size <- 200
+comparison_run_name <- paste0(
+    "n", num.obs, "_mns", forest_min_node_size,
+    if (isTRUE(forest_honest)) "_honest" else ""
+)
+analysis_file_suffix <- paste0(
+    "_n", num.obs, if (isTRUE(forest_honest)) "_honest" else ""
+)
+comparison_plot_directory <- file.path(plot_directory, comparison_run_name)
+dir.create(
+    comparison_plot_directory, recursive = TRUE, showWarnings = FALSE
+)
+comparison_plot_path <- function(filename) {
+    file.path(comparison_plot_directory, filename)
+}
 length(unique(unlist(lapply(sim[1:num.obs], function(z) z$times)))) # 21065
 
-fitted_forest <- jfforest(MM ~ ., data = sim[1:num.obs], feature_data = test_data[1:num.obs, 1:3], splitrule = "logrank",
-                          min_node_size = 200, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000,
+fitted_forest <- jfforest(MM ~ ., data = sim[1:num.obs], feature_data = test_data[1:num.obs, 1:3], splitrule = "taroneware",
+                          min_node_size = forest_min_node_size, seed = 2026, ntrees = 500, save_predictions = FALSE, num_event_times = 1000,
                           honest = forest_honest)
 print_forest(fitted_forest)
 
-new_data <- data.frame(X1 = c(1,1,0,0), X2 = c(1,4,1,4), X3 = c(2,5,2,5))
+new_data <- evaluation_profiles
 forest_predictions <- jfforest.predict(fitted_forest, new_data = new_data)
 
 # Convert the forest Nelson--Aalen predictions to occupation probabilities.
@@ -530,8 +648,7 @@ comparison_AJ_occprobs <- lapply(AJfits, function(fit) {
     do.call(rbind, fit$p)
 })
 
-comparison_titles <- c("Man: X2 = 1, X3 = 2", "Man: X2 = 4, X3 = 5",
-                       "Woman: X2 = 1, X3 = 2", "Woman: X2 = 4, X3 = 5")
+comparison_titles <- evaluation_profile_titles
 comparison_colours <- c("#0072B2", "#D55E00", "#009E73")
 
 comparison_occupation_curves <- list(
@@ -562,7 +679,7 @@ plot_panel_curves(
     ylab = "Occupation probability", xlim = c(0, comparison_end),
     ylim = c(0, 1), panel_layout = c(2, 2), legend_position = "right",
     legend_order = c("Forest", "Conditional AJ", "True"),
-    file = "testing/Articles/Discrete/Plots/discrete_comparison_AJ_forest.png"
+    file = comparison_plot_path("discrete_comparison_AJ_forest.png")
 )
 
 # Compare the four nonzero cumulative transition rates.
@@ -634,7 +751,9 @@ plot_panel_curves(
     ylab = "Cumulative transition rate", xlim = c(0, comparison_end),
     include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
     legend_order = c("Forest", "Conditional AJ", "True"),
-    file = "testing/Articles/Discrete/Plots/discrete_comparison_AJ_forest_transition_rates.png"
+    file = comparison_plot_path(
+        "discrete_comparison_AJ_forest_transition_rates.png"
+    )
 )
 
 # Time-averaged integrated squared errors against the known DGP curves. The
@@ -913,7 +1032,7 @@ plot_panel_curves(
     ylim = c(0, 1), panel_layout = c(2, 2), legend_position = "right",
     legend_order = c("Jump Forest", "Cox linear", "Cox cubic spline", "True"),
     legend_cex = 0.8,
-    file = "testing/Articles/Discrete/Plots/discrete_comparison_cox_forest.png"
+    file = comparison_plot_path("discrete_comparison_cox_forest.png")
 )
 
 cox_transition_curves <- list(
@@ -952,7 +1071,9 @@ plot_panel_curves(
     include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
     legend_order = c("Jump Forest", "Cox linear", "Cox cubic spline", "True"),
     legend_cex = 0.8,
-    file = "testing/Articles/Discrete/Plots/discrete_comparison_cox_forest_transition_rates.png"
+    file = comparison_plot_path(
+        "discrete_comparison_cox_forest_transition_rates.png"
+    )
 )
 
 cox_occupation_curve_errors <- rbind(
@@ -1006,7 +1127,9 @@ transition_error_summary_cox
 
 # The DGP contains time-varying effects of X2 and X3 (and additive hazard
 # constants for three transitions), so neither Cox specification is correctly
-# proportional. Cubic splines relax covariate shape, but not that PH assumption.
+# proportional. With interactions enabled, both specifications also omit the
+# X2-by-X3 term. Cubic splines relax the separate covariate shapes, but neither
+# that interaction nor the PH assumption.
 
 
 # fit a Poisson regression model naively using stratified sampling as for the CAJ
@@ -1076,7 +1199,7 @@ comparison_poisson_occprobs <- lapply(seq_len(nrow(new_data)), function(i) {
     do.call(rbind, occprob_from_data(cumulative_markov_poisson(pois_fits[[i]], comparison_true_times), c(1,0,0)))
 })
 
-comparison_titles <- c("Man: X2 = 1, X3 = 2", "Man: X2 = 4, X3 = 5", "Woman: X2 = 1, X3 = 2", "Woman: X2 = 4, X3 = 5")
+comparison_titles <- evaluation_profile_titles
 comparison_colours <- c("#0072B2", "#D55E00", "#009E73")
 
 comparison_occupation_curves <- list(
@@ -1108,7 +1231,7 @@ plot_panel_curves(
     ylab = "Occupation probability", xlim = c(0, comparison_end),
     ylim = c(0, 1), panel_layout = c(2, 2), legend_position = "right",
     legend_order = c("Forest", "Poisson regression", "True"),
-    file = "testing/Articles/Discrete/Plots/discrete_comparison_poisson_forest.png"
+    file = comparison_plot_path("discrete_comparison_poisson_forest.png")
 )
 
 # Compare the four nonzero cumulative transition rates.
@@ -1161,7 +1284,9 @@ plot_panel_curves(
     ylab = "Cumulative transition rate", xlim = c(0, comparison_end),
     include_zero = TRUE, panel_layout = c(2, 2), legend_position = "topleft",
     legend_order = c("Forest", "Poisson regression", "True"),
-    file = "testing/Articles/Discrete/Plots/discrete_comparison_poisson_forest_transition_rates.png"
+    file = comparison_plot_path(
+        "discrete_comparison_poisson_forest_transition_rates.png"
+    )
 )
 
 stratified_poisson_occupation_curve_errors <- rbind(
@@ -1272,6 +1397,64 @@ toc()   # well below one second for the grouped sufficient statistics (about 0.2
 poisson_regression_fit_diagnostics <- lapply(poisson_regression_fits, `[[`, "diagnostics")
 poisson_regression_fit_diagnostics
 
+# DGP sanity check only: fit one oracle linear Poisson model with X2:X3 and
+# likelihood-ratio test it against the unchanged additive linear benchmark.
+# The oracle is excluded from every prediction, error summary and comparison
+# plot. Summing the two mortality-transition deviances gives a joint two-degree-
+# of-freedom check that the generated interaction is empirically detectable.
+if (interactions) {
+    oracle_interaction_fit <- fit_markov_poisson_regression(
+        poisson_regression_data,
+        count ~ interval_factor + X1 + X2 + X3 + X2:X3 +
+            offset(log(exposure))
+    )
+    interaction_signal_diagnostic <- do.call(rbind, Map(
+        function(additive_fit, oracle_fit, transition) {
+            likelihood_ratio_test <- stats::anova(
+                additive_fit, oracle_fit, test = "Chisq"
+            )
+            data.frame(
+                transition = transition,
+                interaction_coefficient = unname(
+                    stats::coef(oracle_fit)["X2:X3"]
+                ),
+                likelihood_ratio = likelihood_ratio_test$Deviance[2L],
+                degrees_of_freedom = 1L,
+                p_value = likelihood_ratio_test[["Pr(>Chi)"]][2L]
+            )
+        },
+        poisson_regression_fits$linear$models,
+        oracle_interaction_fit$models,
+        names(oracle_interaction_fit$models)
+    ))
+    mortality_rows <- interaction_signal_diagnostic$transition %in%
+        c("1->3", "2->3")
+    joint_mortality_likelihood_ratio <- sum(
+        interaction_signal_diagnostic$likelihood_ratio[mortality_rows]
+    )
+    interaction_signal_diagnostic <- rbind(
+        interaction_signal_diagnostic,
+        data.frame(
+            transition = "mortality jointly",
+            interaction_coefficient = NA_real_,
+            likelihood_ratio = joint_mortality_likelihood_ratio,
+            degrees_of_freedom = sum(mortality_rows),
+            p_value = stats::pchisq(
+                joint_mortality_likelihood_ratio,
+                df = sum(mortality_rows), lower.tail = FALSE
+            )
+        )
+    )
+    write.table(
+        interaction_signal_diagnostic,
+        file = data_path(paste0(
+            "interaction_signal_diagnostic", analysis_file_suffix, ".txt"
+        )),
+        sep = "\t", row.names = FALSE, quote = FALSE
+    )
+    interaction_signal_diagnostic
+}
+
 poisson_regression_true_times <- comparison_true_times
 poisson_regression_true_occprobs <- comparison_true_occprobs
 poisson_regression_true_transition_rates <- comparison_true_transition_rates
@@ -1338,8 +1521,7 @@ plot_panel_curves(
         "Jump Forest", "Poisson linear", "Poisson cubic spline", "True"
     ),
     legend_cex = 0.8,
-    file = paste0(
-        "testing/Articles/Discrete/Plots/",
+    file = comparison_plot_path(
         "discrete_comparison_poisson_regression_forest.png"
     )
 )
@@ -1392,8 +1574,7 @@ plot_panel_curves(
         "Jump Forest", "Poisson linear", "Poisson cubic spline", "True"
     ),
     legend_cex = 0.8,
-    file = paste0(
-        "testing/Articles/Discrete/Plots/",
+    file = comparison_plot_path(
         "discrete_comparison_poisson_regression_forest_transition_rates.png"
     )
 )
@@ -1555,18 +1736,23 @@ all_error_summaries
 
 }
 
-write.table(all_curve_errors, file = "testing/Articles/Discrete/Data/all_curve_errors_n2000.txt")
-write.table(all_error_summaries, file = "testing/Articles/Discrete/Data/all_error_summaries_n2000.txt")
+write.table(
+    all_curve_errors,
+    file = data_path(paste0("all_curve_errors", analysis_file_suffix, ".txt"))
+)
+write.table(
+    all_error_summaries,
+    file = data_path(paste0("all_error_summaries", analysis_file_suffix, ".txt"))
+)
 
 # The DGP has time-varying covariate effects. Consequently both Poisson models,
-# like the Cox models, remain misspecified: splines relax the covariate shape but
-# do not make the covariate effects vary over time.
+# like the Cox models, remain misspecified: splines relax the separate covariate
+# shapes but do not add the X2-by-X3 term or make effects vary over time.
 
-# Final conclusion: For num.obs observations from the DGP above, it seems that
-# the linear and cubic cox Poisson and Cox models are best. It is not completely fair
-# to use a Cox model here since the true intensities behave somewhat close to a
-# proportional hazards model. And apparently it is just very difficult to beat the
-# Poisson model.
+# Do not hard-code a winner: the study-specific rankings are recorded in
+# all_error_summaries and the expected-score table below. In the interaction
+# study, the key question is whether the forest improves on the unchanged
+# additive linear and cubic-spline benchmarks across all four factorial cells.
 
 # pointwise expected Brier, KL and spherical errors
 #--------------------------------------------------------------------------------
@@ -1850,8 +2036,7 @@ for (metric in names(expected_error_curves)) {
         error_ylim <- c(0, if (maximum_error > 0) 1.04 * maximum_error else 0.5)
 
         plot_key <- paste(tolower(metric), state_index - 1L, sep = "_state_")
-        plot_file <- file.path(
-            "testing/Articles/Discrete/Plots",
+        plot_file <- comparison_plot_path(
             paste0("discrete_expected_", plot_key, ".png")
         )
         expected_error_plot_files[plot_key] <- plot_file
@@ -1967,20 +2152,13 @@ normalised_integrated_score_summary <- do.call(
 rownames(normalised_integrated_score_summary) <- NULL
 
 expected_error_table_files <- c(
-    time_dependent = file.path(
-        "testing/Articles/Discrete/Data",
-        paste0(
-            "time_dependent_expected_errors_n", num.obs,
-            if (isTRUE(forest_honest)) "_honest" else "",
-            ".txt"
-        )
+    time_dependent = data_path(
+        paste0("time_dependent_expected_errors", analysis_file_suffix, ".txt")
     ),
-    summary = file.path(
-        "testing/Articles/Discrete/Data",
+    summary = data_path(
         paste0(
-            "normalised_integrated_expected_scores_n", num.obs,
-            if (isTRUE(forest_honest)) "_honest" else "",
-            ".txt"
+            "normalised_integrated_expected_scores",
+            analysis_file_suffix, ".txt"
         )
     )
 )
