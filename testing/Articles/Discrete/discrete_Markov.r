@@ -9,7 +9,7 @@ source("testing/Articles/Discrete/Helpers.r")
 # defining the data-generating process and simulating data
 #--------------------------------------------------------------------------------
 
-interactions <- TRUE
+interactions <- FALSE
 
 {
 # Keep both versions of the study reproducible from this script. All generated
@@ -585,7 +585,7 @@ sim <- readRDS(data_path("sim.rds"))
 test_data <- read.table(data_path("test_data.txt"), header = TRUE)
 
 # we choose to work with less data here and we drop the noise variables
-num.obs <- 2000
+num.obs <- 10000
 forest_honest <- TRUE
 forest_min_node_size <- 200
 comparison_run_name <- paste0(

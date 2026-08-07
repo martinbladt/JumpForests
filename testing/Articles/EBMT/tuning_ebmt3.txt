@@ -1,0 +1,4 @@
+"metric"	"split_rule"	"min_node_size"	"score"
+"IBS"	"taroneware"	100	0.21132271259053
+"KL"	"taroneware"	100	1.04700825053716
+"Spherical"	"taroneware"	100	0.652818109407239
