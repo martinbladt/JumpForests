@@ -169,6 +169,72 @@ optimal_spherical <- function(c, occ_prob) {
 # Helper functions for plotting
 #--------------------------------------------------------------------------------
 
+# set path if the plot should be saved
+plot_vimp <- function(method, metric, vimp_table, path = NULL) {
+    method <- match.arg(method, c("random", "permute"))
+    metric <- match.arg(metric, c("brier", "kl", "spherical"))
+
+    plot_data <- stack(vimp_table)
+    names(plot_data) <- c("vimp", "covariate")
+
+    plot_data$covariate <- reorder(
+        plot_data$covariate,
+        plot_data$vimp,
+        FUN = median,
+        na.rm = TRUE
+    )
+    covariates <- levels(plot_data$covariate)
+    fill_colours <- setNames(
+        grDevices::hcl.colors(length(covariates), palette = "Dark 3"),
+        covariates
+    )
+
+    p <- ggplot(plot_data, aes(x = covariate, y = vimp, fill = covariate)) +
+        geom_boxplot(
+            width = 0.7,
+            outlier.shape = 21,
+            outlier.fill = "white",
+            outlier.size = 1.7,
+            na.rm = TRUE
+        ) +
+        geom_hline(yintercept = 0, colour = "grey35", linewidth = 0.4) +
+        coord_flip() +
+        scale_fill_manual(values = fill_colours) +
+        labs(
+            title = paste(
+                tools::toTitleCase(method),
+                tools::toTitleCase(metric),
+                "VIMP"
+            ),
+            x = NULL,
+            y = "VIMP",
+            fill = "Covariate"
+        ) +
+        guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
+        theme_bw() +
+        theme(
+            legend.position = "bottom",
+            legend.title = element_blank(),
+            plot.title = element_text(hjust = 0.5)
+        )
+
+    if (!is.null(path)) {
+        dir.create(path, recursive = TRUE, showWarnings = FALSE)
+        ggsave(
+            filename = file.path(
+                path,
+                paste0("vimp_", method, "_", metric, ".png")
+            ),
+            plot = p,
+            width = 10,
+            height = 6,
+            units = "in",
+            dpi = 300
+        )
+    }
+    p
+}
+
 .open_plot_device <- function(file, width, height, resolution) {
     if (is.null(file)) {
         return(FALSE)

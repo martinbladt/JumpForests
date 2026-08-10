@@ -148,83 +148,15 @@ vimp_random_brier <- read.table("testing/Articles/EBMT/vimp_random_brier_ebmt3.t
 vimp_random_kl <- read.table("testing/Articles/EBMT/vimp_random_kl_ebmt3.txt", header = TRUE)
 vimp_random_spherical <- read.table("testing/Articles/EBMT/vimp_random_spherical_ebmt3.txt", header = TRUE)
 
-plot_vimp <- function(method, metric, vimp_table, save = FALSE) {
-    method <- match.arg(method, c("random", "permute"))
-    metric <- match.arg(metric, c("brier", "kl", "spherical"))
-    if (!is.logical(save) || length(save) != 1L || is.na(save)) {
-        stop("save must be TRUE or FALSE")
-    }
-
-    plot_data <- stack(vimp_table)
-    names(plot_data) <- c("vimp", "covariate")
-
-    plot_data$covariate <- reorder(
-        plot_data$covariate,
-        plot_data$vimp,
-        FUN = median,
-        na.rm = TRUE
-    )
-
-    p <- ggplot(plot_data, aes(x = covariate, y = vimp, fill = covariate)) +
-        geom_boxplot(
-            width = 0.7,
-            outlier.shape = 21,
-            outlier.fill = "white",
-            outlier.size = 1.7,
-            na.rm = TRUE
-        ) +
-        geom_hline(yintercept = 0, colour = "grey35", linewidth = 0.4) +
-        coord_flip() +
-        scale_fill_manual(values = c(
-            dissub = "#66C2A5",
-            age = "#FC8D62",
-            drmatch = "#8DA0CB",
-            tcd = "#E78AC3"
-        )) +
-        labs(
-            title = paste(
-                tools::toTitleCase(method),
-                tools::toTitleCase(metric),
-                "VIMP"
-            ),
-            x = NULL,
-            y = "VIMP",
-            fill = "Covariate"
-        ) +
-        guides(fill = guide_legend(nrow = 1, byrow = TRUE)) +
-        theme_bw() +
-        theme(
-            legend.position = "bottom",
-            legend.title = element_blank(),
-            plot.title = element_text(hjust = 0.5)
-        )
-
-    if (save) {
-        plot_directory <- "testing/Articles/EBMT/Plots"
-        dir.create(plot_directory, recursive = TRUE, showWarnings = FALSE)
-        ggsave(
-            filename = file.path(
-                plot_directory,
-                paste0("vimp_", method, "_", metric, ".png")
-            ),
-            plot = p,
-            width = 10,
-            height = 6,
-            units = "in",
-            dpi = 300
-        )
-    }
-    p
-}
-
 save <- TRUE
+vimp_plot_path <- if (save) "testing/Articles/EBMT/Plots" else NULL
 # show plots
-plot_vimp("permute", "brier", vimp_permute_brier, save = save)
-plot_vimp("permute", "kl", vimp_permute_kl, save = save)
-plot_vimp("permute", "spherical", vimp_permute_spherical, save = save)
-plot_vimp("random", "brier", vimp_random_brier, save = save)
-plot_vimp("random", "kl", vimp_random_kl, save = save)
-plot_vimp("random", "spherical", vimp_random_spherical, save = save)
+plot_vimp("permute", "brier", vimp_permute_brier, path = vimp_plot_path)
+plot_vimp("permute", "kl", vimp_permute_kl, path = vimp_plot_path)
+plot_vimp("permute", "spherical", vimp_permute_spherical, path = vimp_plot_path)
+plot_vimp("random", "brier", vimp_random_brier, path = vimp_plot_path)
+plot_vimp("random", "kl", vimp_random_kl, path = vimp_plot_path)
+plot_vimp("random", "spherical", vimp_random_spherical, path = vimp_plot_path)
 
 colMeans(vimp_permute_brier)
 colMeans(vimp_permute_kl)
@@ -390,7 +322,6 @@ fit_interaction_ebmt_cox <- function(paths, features, ties = "breslow") {
     model
 }
 
-
 simple_cox_model <- fit_simple_ebmt_cox(jump_data, feature_data)
 interaction_cox_model <- fit_interaction_ebmt_cox(jump_data, feature_data)
 
@@ -429,17 +360,11 @@ delta_summary
 minimum_error_censoring_survival <- 0.05
 error_evaluation_times <- sort(unique(c(fitted_forest$unique.event.times, vapply(jump_data, function(path) tail(path$times, 1L), numeric(1)))))
 error_censoring_model <- reverse_km_censoring(jump_data)
-error_censoring_survival <- censoring_survival_at(
-    error_censoring_model, error_evaluation_times
-)
-error_evaluation_times <- error_evaluation_times[
-    error_censoring_survival >= minimum_error_censoring_survival
-]
+error_censoring_survival <- censoring_survival_at(error_censoring_model, error_evaluation_times)
+error_evaluation_times <- error_evaluation_times[error_censoring_survival >= minimum_error_censoring_survival]
 initial_distribution <- c(1, 0, 0)
 number_of_error_folds <- 5L
-error_folds <- stratified_multistate_folds(
-    jump_data, number_of_error_folds, seed = 2026
-)
+error_folds <- stratified_multistate_folds(jump_data, number_of_error_folds, seed = 2026)
 
 # The selected forest hyperparameters are held fixed in the outer folds. A
 # fully nested performance study would repeat the tuning inside each training
