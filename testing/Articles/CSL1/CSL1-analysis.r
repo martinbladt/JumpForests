@@ -3,7 +3,7 @@
 # this file is for analysing the CSL1 liver cirrhosis dataset (https://publicifsv.sund.ku.dk/~linearpredictors/?page=datasets&dataset=Csl)
 
 # import helper functions and packages
-source("testing/Articles/Discrete/Helpers.r")
+source("testing/Articles/Helpers.r")
 library(mstate)
 library(tidyverse)
 

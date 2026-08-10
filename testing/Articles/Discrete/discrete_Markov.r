@@ -4,7 +4,7 @@
 # with discrete covariates
 
 # import helper functions and packages
-source("testing/Articles/Discrete/Helpers.r")
+source("testing/Articles/Helpers.r")
 
 # defining the data-generating process and simulating data
 #--------------------------------------------------------------------------------
@@ -422,7 +422,7 @@ unlist(jfforest.vimp(fitted_forest, method = "random", loss = "spherical", seed 
 #--------------------------------------------------------------------------------
 
 # import helper functions and packages
-source("testing/Articles/Discrete/Helpers.r")
+source("testing/Articles/Helpers.r")
 
 # read in the data
 sim <- readRDS(data_path("sim.rds"))
@@ -578,7 +578,7 @@ plot_panel_curves(
 #--------------------------------------------------------------------------------
 
 # import helper functions and packages
-source("testing/Articles/Discrete/Helpers.r")
+source("testing/Articles/Helpers.r")
 
 # read in the data
 sim <- readRDS(data_path("sim.rds"))

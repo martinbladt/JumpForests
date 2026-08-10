@@ -1,0 +1,37 @@
+"model"	"metric"	"component"	"integrated_error"	"evaluation_start"	"evaluation_end"
+"JumpForest"	"brier"	"State 1"	0.0618539096130745	0	2385
+"JumpForest"	"brier"	"State 2"	0.0758731193892684	0	2385
+"JumpForest"	"brier"	"State 3"	0.0726260239684935	0	2385
+"JumpForest"	"brier"	"Total"	0.210353052970836	0	2385
+"JumpForest"	"kl"	"State 1"	0.330929862646753	0	2385
+"JumpForest"	"kl"	"State 2"	0.365540794691431	0	2385
+"JumpForest"	"kl"	"State 3"	0.34551585569695	0	2385
+"JumpForest"	"kl"	"Total"	1.04198651303513	0	2385
+"JumpForest"	"spherical"	"State 1"	0.192150985174511	0	2385
+"JumpForest"	"spherical"	"State 2"	0.235540565026401	0	2385
+"JumpForest"	"spherical"	"State 3"	0.222449335486397	0	2385
+"JumpForest"	"spherical"	"Total"	0.650140885687309	0	2385
+"Simple Cox"	"brier"	"State 1"	0.0617360129911917	0	2385
+"Simple Cox"	"brier"	"State 2"	0.0754653312228031	0	2385
+"Simple Cox"	"brier"	"State 3"	0.0728521128829125	0	2385
+"Simple Cox"	"brier"	"Total"	0.210053457096907	0	2385
+"Simple Cox"	"kl"	"State 1"	0.330481542338881	0	2385
+"Simple Cox"	"kl"	"State 2"	0.362989680350013	0	2385
+"Simple Cox"	"kl"	"State 3"	0.345820620560545	0	2385
+"Simple Cox"	"kl"	"Total"	1.03929184324944	0	2385
+"Simple Cox"	"spherical"	"State 1"	0.191397383659873	0	2385
+"Simple Cox"	"spherical"	"State 2"	0.235456742380957	0	2385
+"Simple Cox"	"spherical"	"State 3"	0.222925513187541	0	2385
+"Simple Cox"	"spherical"	"Total"	0.649779639228371	0	2385
+"Interaction Cox"	"brier"	"State 1"	0.0617930966205704	0	2385
+"Interaction Cox"	"brier"	"State 2"	0.0758616109990378	0	2385
+"Interaction Cox"	"brier"	"State 3"	0.0733657593492967	0	2385
+"Interaction Cox"	"brier"	"Total"	0.211020466968905	0	2385
+"Interaction Cox"	"kl"	"State 1"	0.328361644832997	0	2385
+"Interaction Cox"	"kl"	"State 2"	0.367966773527326	0	2385
+"Interaction Cox"	"kl"	"State 3"	0.347593477304892	0	2385
+"Interaction Cox"	"kl"	"Total"	1.04392189566521	0	2385
+"Interaction Cox"	"spherical"	"State 1"	0.190722898434124	0	2385
+"Interaction Cox"	"spherical"	"State 2"	0.23699875376581	0	2385
+"Interaction Cox"	"spherical"	"State 3"	0.223224893156475	0	2385
+"Interaction Cox"	"spherical"	"Total"	0.650946545356408	0	2385

@@ -1,0 +1,26 @@
+Tuning:
+
+Simple hyperparameter tuning over a 2D grid of min_node_size in (5, 10, 25, 50, 100) and all basic splitting rules revealed that taroneware with min_node_size = 100 was best across all three error metrics.
+
+VIMP:
+
+According to both Brier and spherical, age was the most important, followed by dissub and tcd. drmatch may actually hurt performance. 
+
+Exploratory plots for interactions:
+
+age:tcd
+1->2: Little to no interaction it seems
+1->3: Certainly some interaction. The difference in mortality becomes smaller for the high age group.
+2->3: Same phenomenon as for 2->3.
+Conclusion: Certainly some level of interaction for mortality (transitions into 3)
+
+age:dissub
+1->2: Yes, interaction. The difference for the high age group is less pronounced.
+1->3: Yes, some interaction, although the difference becomes more pronounced over time of the study.
+2->3: Yes, the disease subclass has a noticeably larger effect in the high age group.
+
+Errors:
+
+The errors are extremely similar. Overall, the linear Cox model predicts slightly better when using 5-fold cross-validation for prediction, followed by the Jump Forest. Interestingly, the interaction Cox model performs the worst even though we visually saw that there is interaction present.
+
+Conclusion: The Jump Forest is on par in terms of prediction for this dataset. In this case, the primary selling point is that the Jump Forest automatically detects interactions which can be inspected visually.

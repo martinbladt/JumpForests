@@ -1321,6 +1321,1134 @@ summarise_curve_errors <- function(errors) {
     summary[order(summary$MISE), ]
 }
 
+# Generic multi-state prediction and model-comparison helpers
+#--------------------------------------------------------------------------------
+
+# Plot one predicted cumulative transition rate for all covariate profiles.
+plot_transition_rate <- function(predictions, event_times, new_data, from, to,
+                                 colour_by, linetype_by, max_time = NULL,
+                                 xlab = "Time", save = FALSE,
+                                 plot_directory = "Plots",
+                                 width = 10, height = 6, dpi = 300) {
+    if (!is.data.frame(new_data)) {
+        stop("new_data must be a data frame")
+    }
+    if (!all(c(colour_by, linetype_by) %in% names(new_data))) {
+        stop("colour_by and linetype_by must name columns in new_data")
+    }
+    if (!is.numeric(event_times) || length(event_times) == 0L ||
+        any(!is.finite(event_times)) || is.unsorted(event_times, strictly = TRUE)) {
+        stop("event_times must be a non-empty, strictly increasing numeric vector")
+    }
+    if (!is.list(predictions) || length(predictions) != nrow(new_data)) {
+        stop("predictions must contain one prediction for each row of new_data")
+    }
+    if (!is.null(max_time) &&
+        (!is.numeric(max_time) || length(max_time) != 1L ||
+         !is.finite(max_time) || max_time <= 0)) {
+        stop("max_time must be NULL or one positive finite number")
+    }
+    if (!is.logical(save) || length(save) != 1L || is.na(save)) {
+        stop("save must be TRUE or FALSE")
+    }
+
+    valid_state <- function(state) {
+        is.numeric(state) && length(state) == 1L && is.finite(state) &&
+            state >= 1 && state == as.integer(state)
+    }
+    if (!valid_state(from) || !valid_state(to) || from == to) {
+        stop("from and to must be distinct positive integers")
+    }
+    from <- as.integer(from)
+    to <- as.integer(to)
+
+    add_zero <- event_times[1L] > 0
+    plot_data <- do.call(rbind, lapply(seq_along(predictions), function(i) {
+        predicted_matrices <- predictions[[i]]
+        if (length(predicted_matrices) != length(event_times)) {
+            stop("each prediction must contain one matrix per event time")
+        }
+
+        transition_rate <- vapply(predicted_matrices, function(rate_matrix) {
+            if (!is.matrix(rate_matrix) ||
+                from > nrow(rate_matrix) || to > ncol(rate_matrix)) {
+                stop("from or to is outside the predicted transition matrix")
+            }
+            rate_matrix[from, to]
+        }, numeric(1))
+
+        data.frame(
+            time = if (add_zero) c(0, event_times) else event_times,
+            transition_rate = if (add_zero) c(0, transition_rate) else transition_rate,
+            profile = i,
+            colour_value = as.character(new_data[[colour_by]][i]),
+            linetype_value = as.character(new_data[[linetype_by]][i])
+        )
+    }))
+
+    plot_data$colour_value <- factor(
+        plot_data$colour_value,
+        levels = unique(as.character(new_data[[colour_by]]))
+    )
+    plot_data$linetype_value <- factor(
+        plot_data$linetype_value,
+        levels = unique(as.character(new_data[[linetype_by]]))
+    )
+
+    p <- ggplot(
+        plot_data,
+        aes(
+            x = time,
+            y = transition_rate,
+            colour = colour_value,
+            linetype = linetype_value,
+            group = profile
+        )
+    ) +
+        geom_step(linewidth = 0.9, direction = "hv") +
+        labs(
+            title = paste0("Predicted transition rate: ", from, " → ", to),
+            x = xlab,
+            y = "Cumulative transition rate",
+            colour = colour_by,
+            linetype = linetype_by
+        ) +
+        guides(
+            colour = guide_legend(order = 1),
+            linetype = guide_legend(order = 2)
+        ) +
+        theme_classic() +
+        theme(
+            legend.position = "bottom",
+            plot.title = element_text(hjust = 0.5)
+        )
+
+    if (!is.null(max_time)) {
+        p <- p + coord_cartesian(xlim = c(0, max_time))
+    }
+
+    if (save) {
+        dir.create(plot_directory, recursive = TRUE, showWarnings = FALSE)
+        ggsave(
+            filename = file.path(
+                plot_directory,
+                paste0(
+                    "transition_rate_", from, "_", to, "_",
+                    colour_by, "_", linetype_by, ".png"
+                )
+            ),
+            plot = p,
+            width = width,
+            height = height,
+            units = "in",
+            dpi = dpi
+        )
+    }
+    p
+}
+
+# Validate the common trajectory format used by the multi-state helpers.
+validate_jump_paths <- function(paths) {
+    if (!is.list(paths) || length(paths) == 0L) {
+        stop("paths must be a non-empty list")
+    }
+
+    for (i in seq_along(paths)) {
+        path <- paths[[i]]
+        if (!is.list(path) || !all(c("states", "times") %in% names(path)) ||
+            length(path$states) != length(path$times) ||
+            length(path$states) < 2L ||
+            !is.integer(path$states) || !is.numeric(path$times) ||
+            any(!is.finite(path$states)) || any(!is.finite(path$times)) ||
+            any(path$states < 1) ||
+            path$times[1L] != 0 || any(diff(path$times) <= 0)) {
+            stop(
+                "invalid jump path at observation ", i,
+                "; states must be integer and times must start at zero and increase"
+            )
+        }
+    }
+    invisible(TRUE)
+}
+
+# Convert trajectories to counting-process rows for one cause-specific
+# transition. Competing transitions and a repeated final state have event = 0;
+# intervals beginning after time zero retain their delayed-entry start time.
+paths_to_transition_cox_data <- function(paths, features, from, to) {
+    validate_jump_paths(paths)
+    if (!is.data.frame(features) || nrow(features) != length(paths)) {
+        stop("features must be a data frame with one row per path")
+    }
+    if (length(from) != 1L || length(to) != 1L ||
+        !is.numeric(from) || !is.numeric(to) ||
+        !is.finite(from) || !is.finite(to) ||
+        from < 1 || to < 1 || from != as.integer(from) ||
+        to != as.integer(to) || from == to) {
+        stop("from and to must be distinct positive integers")
+    }
+    from <- as.integer(from)
+    to <- as.integer(to)
+
+    rows <- Map(function(path, id) {
+        interval <- seq_len(length(path$states) - 1L)
+        interval <- interval[path$states[interval] == from]
+        if (length(interval) == 0L) {
+            return(NULL)
+        }
+
+        cbind(
+            data.frame(
+                id = rep.int(id, length(interval)),
+                tstart = path$times[interval],
+                tstop = path$times[interval + 1L],
+                event = as.integer(path$states[interval + 1L] == to)
+            ),
+            features[rep.int(id, length(interval)), , drop = FALSE]
+        )
+    }, paths, seq_along(paths))
+
+    result <- do.call(rbind, rows)
+    if (is.null(result) || nrow(result) == 0L) {
+        stop("no risk intervals were found for transition ", from, " -> ", to)
+    }
+    rownames(result) <- NULL
+    result
+}
+
+# A common representation for transition-specific Cox hazards. A transition
+# entry may reuse a fitted model and add fixed values to its prediction data.
+new_multistate_cox_model <- function(transitions, number_of_states, label) {
+    if (!is.list(transitions) || length(transitions) == 0L ||
+        !is.numeric(number_of_states) || length(number_of_states) != 1L ||
+        !is.finite(number_of_states) || number_of_states < 2L ||
+        number_of_states != as.integer(number_of_states)) {
+        stop("invalid transition-specific Cox model specification")
+    }
+    number_of_states <- as.integer(number_of_states)
+    transitions <- lapply(transitions, function(transition) {
+        if (is.list(transition) && is.null(transition$fixed_values)) {
+            transition$fixed_values <- list()
+        }
+        transition
+    })
+    valid_state_index <- function(value) {
+        is.numeric(value) && length(value) == 1L && is.finite(value) &&
+            value == as.integer(value) && value >= 1L &&
+            value <= number_of_states
+    }
+
+    transition_keys <- vapply(transitions, function(transition) {
+        if (!is.list(transition) ||
+            !all(c("from", "to", "fit") %in% names(transition)) ||
+            !inherits(transition$fit, "coxph")) {
+            stop("each transition must contain from, to and a coxph fit")
+        }
+        if (!valid_state_index(transition$from) ||
+            !valid_state_index(transition$to) ||
+            transition$from == transition$to) {
+            stop("a transition has an invalid state index")
+        }
+        paste(as.integer(transition$from), as.integer(transition$to), sep = ":")
+    }, character(1))
+    if (anyDuplicated(transition_keys)) {
+        stop("each directed transition must occur only once")
+    }
+
+    structure(
+        list(
+            label = label,
+            number_of_states = number_of_states,
+            transitions = transitions
+        ),
+        class = c("multistate_cox_model", "list")
+    )
+}
+
+cox_term_summary <- function(fit, term, confidence_level = 0.95) {
+    coefficient_table <- summary(fit)$coefficients
+    term_index <- match(term, rownames(coefficient_table))
+    if (is.na(term_index)) {
+        stop("term was not found in the fitted Cox model: ", term)
+    }
+    if (!is.numeric(confidence_level) || length(confidence_level) != 1L ||
+        confidence_level <= 0 || confidence_level >= 1) {
+        stop("confidence_level must lie strictly between zero and one")
+    }
+
+    estimate <- coefficient_table[term_index, "coef"]
+    standard_error <- coefficient_table[term_index, "se(coef)"]
+    critical_value <- stats::qnorm(1 - (1 - confidence_level) / 2)
+    data.frame(
+        term = term,
+        estimate = estimate,
+        standard_error = standard_error,
+        hazard_ratio = exp(estimate),
+        lower_confidence_limit = exp(estimate - critical_value * standard_error),
+        upper_confidence_limit = exp(estimate + critical_value * standard_error),
+        p_value = coefficient_table[term_index, "Pr(>|z|)"],
+        row.names = NULL
+    )
+}
+
+normalise_occupation_probabilities <- function(probabilities, label = "prediction", tolerance = 1e-7) {
+    probabilities <- as.matrix(probabilities)
+    storage.mode(probabilities) <- "double"
+    if (nrow(probabilities) == 0L || ncol(probabilities) < 2L ||
+        any(!is.finite(probabilities)) ||
+        any(probabilities < -tolerance) ||
+        any(probabilities > 1 + tolerance)) {
+        stop(label, " contains invalid occupation probabilities")
+    }
+
+    probabilities[probabilities < 0] <- 0
+    probabilities[probabilities > 1] <- 1
+    probability_totals <- rowSums(probabilities)
+    if (any(probability_totals <= 0) ||
+        any(abs(probability_totals - 1) > tolerance)) {
+        stop(label, " contains rows whose probabilities do not sum to one")
+    }
+    sweep(probabilities, 1L, probability_totals, "/")
+}
+
+baseline_cumulative_hazard_at <- function(fit, evaluation_times, baseline = NULL) {
+    if (is.null(baseline)) {
+        # basehaz() emits an irrelevant warning for interaction models about a
+        # mean-covariate curve; centered = FALSE requests the zero-covariate
+        # baseline explicitly.
+        baseline <- suppressWarnings(survival::basehaz(fit, centered = FALSE))
+    }
+    if ("strata" %in% names(baseline)) {
+        stop("stratified Cox baselines are not supported by this predictor")
+    }
+    index <- findInterval(evaluation_times, baseline$time)
+    result <- numeric(length(evaluation_times))
+    result[index > 0L] <- baseline$hazard[index[index > 0L]]
+    result
+}
+
+# Convert any model created by new_multistate_cox_model() to one time-by-state
+# occupation-probability matrix per individual. The exponential stype = 2
+# update is the stable default. The direct Aalen-Johansen update is available
+# and can be selected by callers that require a direct product integral.
+predict_multistate_cox <- function(model, new_data, evaluation_times, initial, stype = c("exponential", "aalen-johansen")) {
+    stype <- match.arg(stype)
+    if (!inherits(model, "multistate_cox_model") || !is.data.frame(new_data)) {
+        stop("model must be a multistate_cox_model and new_data a data frame")
+    }
+    if (!is.numeric(evaluation_times) || length(evaluation_times) == 0L ||
+        any(!is.finite(evaluation_times)) || evaluation_times[1L] != 0 ||
+        any(diff(evaluation_times) <= 0)) {
+        stop("evaluation_times must be strictly increasing and start at zero")
+    }
+    number_of_states <- model$number_of_states
+    if (!is.numeric(initial) || length(initial) != number_of_states ||
+        any(!is.finite(initial)) || any(initial < 0) ||
+        abs(sum(initial) - 1) > 1e-10) {
+        stop("initial must be a probability vector with one value per state")
+    }
+
+    number_of_observations <- nrow(new_data)
+    number_of_times <- length(evaluation_times)
+    number_of_transitions <- length(model$transitions)
+    risk_multipliers <- matrix(0, number_of_observations, number_of_transitions)
+    baseline_tables <- vector("list", number_of_transitions)
+    product_times <- evaluation_times
+
+    for (transition_index in seq_along(model$transitions)) {
+        transition <- model$transitions[[transition_index]]
+        prediction_data <- new_data
+        for (variable in names(transition$fixed_values)) {
+            prediction_data[[variable]] <- transition$fixed_values[[variable]]
+        }
+        linear_predictor <- stats::predict(
+            transition$fit, newdata = prediction_data,
+            type = "lp", reference = "zero"
+        )
+        risk_multipliers[, transition_index] <- exp(as.numeric(linear_predictor))
+        baseline_tables[[transition_index]] <- suppressWarnings(
+            survival::basehaz(transition$fit, centered = FALSE)
+        )
+        if ("strata" %in% names(baseline_tables[[transition_index]])) {
+            stop("stratified Cox baselines are not supported by this predictor")
+        }
+        baseline_event_times <- baseline_tables[[transition_index]]$time
+        product_times <- sort(unique(c(
+            product_times,
+            baseline_event_times[baseline_event_times <= tail(evaluation_times, 1L)]
+        )))
+    }
+
+    # A product integral must update at every baseline-hazard jump. This union
+    # makes predictions correct even when the requested output grid is sparse.
+    number_of_product_times <- length(product_times)
+    hazard_increments <- matrix(
+        0, number_of_product_times, number_of_transitions
+    )
+    for (transition_index in seq_along(model$transitions)) {
+        cumulative_hazard <- baseline_cumulative_hazard_at(
+            model$transitions[[transition_index]]$fit,
+            product_times,
+            baseline = baseline_tables[[transition_index]]
+        )
+        hazard_increments[, transition_index] <- c(
+            cumulative_hazard[1L], diff(cumulative_hazard)
+        )
+    }
+    if (any(!is.finite(risk_multipliers)) ||
+        any(!is.finite(hazard_increments)) || any(hazard_increments < -1e-12)) {
+        stop("the Cox model produced an invalid transition hazard")
+    }
+
+    current <- matrix(
+        rep(initial, each = number_of_observations),
+        nrow = number_of_observations, ncol = number_of_states
+    )
+    probability_array <- array(
+        NA_real_, dim = c(number_of_observations, number_of_times, number_of_states)
+    )
+    output_time_index <- match(product_times, evaluation_times)
+    transition_keys <- vapply(model$transitions, function(transition) {
+        paste(transition$from, transition$to, sep = ":")
+    }, character(1))
+    illness_death_columns <- match(c("1:2", "1:3", "2:3"), transition_keys)
+    fast_illness_death <- number_of_states == 3L &&
+        length(model$transitions) == 3L && !anyNA(illness_death_columns)
+
+    for (time_index in seq_len(number_of_product_times)) {
+        individual_hazards <- sweep(
+            risk_multipliers, 2L,
+            hazard_increments[time_index, ], "*"
+        )
+
+        if (stype == "aalen-johansen") {
+            updated <- current
+            # All jumps use the probabilities immediately before this time.
+            for (transition_index in seq_along(model$transitions)) {
+                transition <- model$transitions[[transition_index]]
+                jump <- current[, transition$from] *
+                    individual_hazards[, transition_index]
+                updated[, transition$from] <- updated[, transition$from] - jump
+                updated[, transition$to] <- updated[, transition$to] + jump
+            }
+            current <- updated
+        } else if (fast_illness_death) {
+            # Closed form of exp(dA) for the acyclic 1 -> 2, 1 -> 3, 2 -> 3
+            # system. This avoids millions of small matrix exponentials in the
+            # illness-death prediction loop.
+            hazard_12 <- individual_hazards[, illness_death_columns[1L]]
+            hazard_13 <- individual_hazards[, illness_death_columns[2L]]
+            hazard_23 <- individual_hazards[, illness_death_columns[3L]]
+            exit_1 <- hazard_12 + hazard_13
+            probability_11 <- exp(-exit_1)
+            probability_22 <- exp(-hazard_23)
+            difference <- exit_1 - hazard_23
+            close_rates <- abs(difference) <=
+                sqrt(.Machine$double.eps) * pmax(1, abs(exit_1), abs(hazard_23))
+            probability_12 <- numeric(number_of_observations)
+            probability_12[close_rates] <-
+                hazard_12[close_rates] * exp(-exit_1[close_rates])
+            probability_12[!close_rates] <- hazard_12[!close_rates] *
+                (exp(-hazard_23[!close_rates]) - exp(-exit_1[!close_rates])) /
+                difference[!close_rates]
+            # The following bounds only remove round-off at the two boundaries.
+            probability_12 <- pmax(
+                0, pmin(1 - probability_11, probability_12)
+            )
+            probability_13 <- 1 - probability_11 - probability_12
+            probability_23 <- 1 - probability_22
+
+            updated <- current
+            updated[, 1L] <- current[, 1L] * probability_11
+            updated[, 2L] <- current[, 1L] * probability_12 +
+                current[, 2L] * probability_22
+            updated[, 3L] <- current[, 1L] * probability_13 +
+                current[, 2L] * probability_23 + current[, 3L]
+            current <- updated
+        } else {
+            if (!requireNamespace("Matrix", quietly = TRUE)) {
+                stop("Matrix is required for exponential prediction of this transition system")
+            }
+            updated <- current
+            for (observation in seq_len(number_of_observations)) {
+                generator_increment <- matrix(
+                    0, nrow = number_of_states, ncol = number_of_states
+                )
+                for (transition_index in seq_along(model$transitions)) {
+                    transition <- model$transitions[[transition_index]]
+                    generator_increment[transition$from, transition$to] <-
+                        generator_increment[transition$from, transition$to] +
+                        individual_hazards[observation, transition_index]
+                }
+                diag(generator_increment) <- -rowSums(generator_increment)
+                updated[observation, ] <- as.numeric(
+                    current[observation, ] %*%
+                        as.matrix(Matrix::expm(generator_increment))
+                )
+            }
+            current <- updated
+        }
+        if (!is.na(output_time_index[time_index])) {
+            probability_array[, output_time_index[time_index], ] <- current
+        }
+    }
+
+    state_names <- paste("State", seq_len(number_of_states))
+    values <- lapply(seq_len(number_of_observations), function(i) {
+        probabilities <- matrix(
+            probability_array[i, , , drop = FALSE],
+            nrow = number_of_times, ncol = number_of_states,
+            dimnames = list(NULL, state_names)
+        )
+        normalise_occupation_probabilities(
+            probabilities, paste(model$label, "observation", i)
+        )
+    })
+    list(times = evaluation_times, values = values)
+}
+
+stratified_multistate_folds <- function(paths, number_of_folds = 5L, seed = 2026) {
+    validate_jump_paths(paths)
+    if (!is.numeric(number_of_folds) || length(number_of_folds) != 1L ||
+        !is.finite(number_of_folds) ||
+        number_of_folds != as.integer(number_of_folds) ||
+        number_of_folds < 2L || number_of_folds > length(paths)) {
+        stop("number_of_folds must be between 2 and the number of paths")
+    }
+    number_of_folds <- as.integer(number_of_folds)
+
+    # Balance the observed state-sequence patterns across folds.
+    path_type <- vapply(paths, function(path) {
+        paste(path$states, collapse = "-")
+    }, character(1))
+    set.seed(seed)
+    folds <- integer(length(paths))
+    for (stratum in unique(path_type)) {
+        indices <- sample(which(path_type == stratum))
+        folds[indices] <- rep(seq_len(number_of_folds), length.out = length(indices))
+    }
+    if (any(tabulate(folds, nbins = number_of_folds) == 0L)) {
+        stop("fold construction produced an empty validation fold")
+    }
+    folds
+}
+
+validate_fold_assignments <- function(folds, number_of_observations) {
+    if (!is.numeric(folds) || length(folds) != number_of_observations ||
+        any(!is.finite(folds)) || any(folds < 1) ||
+        any(folds != as.integer(folds))) {
+        stop("folds must contain one positive integer per observation")
+    }
+    folds <- as.integer(folds)
+    fold_levels <- sort(unique(folds))
+    if (!identical(fold_levels, seq_len(max(folds))) || length(fold_levels) < 2L) {
+        stop("folds must use consecutive values beginning at one")
+    }
+    folds
+}
+
+crossfit_multistate_cox <- function(paths, features, fit_function, evaluation_times, number_of_folds = 5L, seed = 2026, 
+                                    initial, verbose = TRUE, prediction_stype = "exponential", folds = NULL, ...) {
+    if (!is.function(fit_function) || !is.data.frame(features) ||
+        nrow(features) != length(paths)) {
+        stop("fit_function must be a function and features must match paths")
+    }
+    if (is.null(folds)) {
+        folds <- stratified_multistate_folds(paths, number_of_folds, seed)
+    } else {
+        folds <- validate_fold_assignments(folds, length(paths))
+        number_of_folds <- max(folds)
+    }
+    predictions <- vector("list", length(paths))
+
+    for (fold in seq_len(number_of_folds)) {
+        validation_rows <- which(folds == fold)
+        training_rows <- which(folds != fold)
+        fitted <- fit_function(
+            paths[training_rows], features[training_rows, , drop = FALSE], ...
+        )
+        fold_predictions <- predict_multistate_cox(
+            fitted,
+            new_data = features[validation_rows, , drop = FALSE],
+            evaluation_times = evaluation_times,
+            initial = initial,
+            stype = prediction_stype
+        )
+        predictions[validation_rows] <- fold_predictions$values
+        if (verbose) {
+            message("Finished Cox cross-fitting fold ", fold, " of ", number_of_folds)
+        }
+        rm(fitted, fold_predictions)
+        gc(verbose = FALSE)
+    }
+
+    structure(
+        list(times = evaluation_times, values = predictions, folds = folds),
+        class = c("occupation_prediction_set", "list")
+    )
+}
+
+# Apply an initial distribution and product integral to a set of cumulative
+# Nelson-Aalen matrix predictions. This works for fitted-forest OOB predictions
+# as well as predictions made by a cross-fitted forest.
+nelson_aalen_to_occupation_predictions <- function(predictions, prediction_times, initial, label = "forest") {
+    if (!is.list(predictions) || length(predictions) == 0L ||
+        !is.numeric(prediction_times) || length(prediction_times) == 0L) {
+        stop("invalid Nelson-Aalen predictions")
+    }
+    number_of_observations <- length(predictions)
+    number_of_states <- nrow(predictions[[1L]][[1L]])
+    initial_values <- if (is.list(initial)) {
+        initial
+    } else {
+        rep(list(initial), number_of_observations)
+    }
+    if (length(initial_values) != number_of_observations ||
+        any(vapply(initial_values, length, integer(1)) != number_of_states)) {
+        stop("initial must be one vector or one vector per observation")
+    }
+    valid_initial <- vapply(initial_values, function(value) {
+        is.numeric(value) && all(is.finite(value)) && all(value >= 0) &&
+            abs(sum(value) - 1) <= 1e-10
+    }, logical(1))
+    if (!all(valid_initial)) {
+        stop("every initial distribution must be a probability vector")
+    }
+
+    state_names <- paste("State", seq_len(number_of_states))
+    lapply(seq_len(number_of_observations), function(i) {
+        if (length(predictions[[i]]) != length(prediction_times)) {
+            stop("a forest prediction does not match its event-time grid")
+        }
+        probabilities <- do.call(
+            rbind, occprob_from_data(predictions[[i]], initial_values[[i]])
+        )
+        colnames(probabilities) <- state_names
+        normalise_occupation_probabilities(
+            probabilities, paste(label, "observation", i)
+        )
+    })
+}
+
+# Turn the forest's cumulative Nelson-Aalen matrices into the same prediction
+# representation used by predict_multistate_cox().
+as_jumpforest_occupation_predictions <- function(forest, oob = TRUE, initial = NULL) {
+    prediction_name <- if (oob) "oob.predictions" else "predictions"
+    initial_name <- if (oob) "oob.init" else "init"
+    predictions <- forest[[prediction_name]]
+    prediction_times <- forest$unique.event.times
+    if (is.null(predictions) || is.null(prediction_times)) {
+        stop("the forest does not contain saved ", prediction_name)
+    }
+
+    if (is.null(initial)) {
+        initial <- forest[[initial_name]]
+        if (is.null(initial)) {
+            stop("supply initial because the forest has no saved initial distributions")
+        }
+    }
+    occupation_probabilities <- nelson_aalen_to_occupation_predictions(
+        predictions, prediction_times, initial, label = "JumpForest"
+    )
+
+    structure(
+        list(times = prediction_times, values = occupation_probabilities),
+        class = c("occupation_prediction_set", "list")
+    )
+}
+
+# Matched K-fold predictions for a JumpForest. Supplying the same `folds` to
+# this helper and crossfit_multistate_cox() gives every model exactly the same
+# training and validation subjects.
+crossfit_jumpforest <- function(paths, features, initial, number_of_folds = 5L, folds = NULL, seed = 2026, verbose = TRUE, formula = MM ~ ., ...) {
+    validate_jump_paths(paths)
+    if (!is.data.frame(features) || nrow(features) != length(paths)) {
+        stop("features must be a data frame with one row per path")
+    }
+    if (is.null(folds)) {
+        folds <- stratified_multistate_folds(paths, number_of_folds, seed)
+    } else {
+        folds <- validate_fold_assignments(folds, length(paths))
+        number_of_folds <- max(folds)
+    }
+    forest_arguments <- list(...)
+    reserved_arguments <- c(
+        "formula", "data", "feature_data", "seed", "save_predictions"
+    )
+    if (any(names(forest_arguments) %in% reserved_arguments)) {
+        stop("do not pass reserved fitting arguments through ...")
+    }
+
+    prediction_values <- vector("list", length(paths))
+    prediction_times <- vector("list", length(paths))
+    # The JumpForests C++ interface expects this exact element order and type.
+    forest_paths <- lapply(paths, function(path) {
+        list(times = as.numeric(path$times), states = as.integer(path$states))
+    })
+    for (fold in seq_len(number_of_folds)) {
+        validation_rows <- which(folds == fold)
+        training_rows <- which(folds != fold)
+        fit_arguments <- c(
+            list(
+                formula = formula,
+                data = forest_paths[training_rows],
+                feature_data = features[training_rows, , drop = FALSE]
+            ),
+            forest_arguments,
+            list(seed = seed + fold - 1L, save_predictions = FALSE)
+        )
+        fitted <- do.call(jfforest, fit_arguments)
+        fold_nelson_aalen <- jfforest.predict(
+            fitted, features[validation_rows, , drop = FALSE]
+        )
+        fold_occupation <- nelson_aalen_to_occupation_predictions(
+            fold_nelson_aalen,
+            fitted$unique.event.times,
+            initial,
+            label = paste("JumpForest fold", fold)
+        )
+        prediction_values[validation_rows] <- fold_occupation
+        prediction_times[validation_rows] <- rep(
+            list(fitted$unique.event.times), length(validation_rows)
+        )
+        if (verbose) {
+            message("Finished JumpForest cross-fitting fold ", fold,
+                    " of ", number_of_folds)
+        }
+        rm(fitted, fold_nelson_aalen, fold_occupation)
+        gc(verbose = FALSE)
+    }
+
+    structure(
+        list(times = prediction_times, values = prediction_values, folds = folds),
+        class = c("occupation_prediction_set", "list")
+    )
+}
+
+# Marginal reverse Kaplan-Meier estimate for the censoring distribution. At a
+# tied time, terminal events are removed before censorings, matching the usual
+# competing-event convention used by JumpForests.
+reverse_km_censoring <- function(paths) {
+    validate_jump_paths(paths)
+    endpoint_times <- vapply(paths, function(path) tail(path$times, 1L), numeric(1))
+    censored <- vapply(paths, function(path) {
+        number_of_states <- length(path$states)
+        path$states[number_of_states] == path$states[number_of_states - 1L]
+    }, logical(1))
+
+    unique_times <- sort(unique(endpoint_times))
+    survival <- numeric(length(unique_times))
+    number_at_risk <- length(paths)
+    previous_survival <- 1
+    for (i in seq_along(unique_times)) {
+        at_time <- endpoint_times == unique_times[i]
+        number_of_events <- sum(at_time & !censored)
+        number_censored <- sum(at_time & censored)
+        denominator <- number_at_risk - number_of_events
+        if (denominator > 0L) {
+            previous_survival <- previous_survival *
+                (1 - number_censored / denominator)
+        }
+        survival[i] <- previous_survival
+        number_at_risk <- number_at_risk - number_of_events - number_censored
+    }
+
+    structure(
+        list(
+            times = unique_times,
+            survival = survival,
+            endpoint_times = endpoint_times,
+            censored = censored
+        ),
+        class = c("reverse_km_censoring", "list")
+    )
+}
+
+censoring_survival_at <- function(censoring_model, times, left_limit = FALSE) {
+    index <- findInterval(times, censoring_model$times)
+    if (left_limit) {
+        exact_match <- index > 0L
+        exact_match[exact_match] <-
+            censoring_model$times[index[exact_match]] == times[exact_match]
+        index[exact_match] <- index[exact_match] - 1L
+    }
+    result <- rep(1, length(times))
+    result[index > 0L] <- censoring_model$survival[index[index > 0L]]
+    result
+}
+
+# The state at a transition time is the post-transition state. At and after a
+# censoring endpoint it is unknown (NA); a terminal state remains known.
+observed_states_at <- function(paths, evaluation_times) {
+    validate_jump_paths(paths)
+    number_of_states <- max(unlist(lapply(paths, `[[`, "states")))
+    observed <- matrix(
+        NA_integer_, nrow = length(paths), ncol = length(evaluation_times)
+    )
+
+    for (i in seq_along(paths)) {
+        path <- paths[[i]]
+        previous_states <- head(path$states, -1L)
+        next_states <- tail(path$states, -1L)
+        genuine_transition <- next_states != previous_states
+        known_times <- c(path$times[1L], tail(path$times, -1L)[genuine_transition])
+        known_states <- c(path$states[1L], next_states[genuine_transition])
+        index <- findInterval(evaluation_times, known_times)
+        if (any(index == 0L)) {
+            stop("evaluation_times cannot precede the initial path time")
+        }
+        observed[i, ] <- as.integer(known_states[index])
+
+        if (tail(path$states, 1L) == tail(previous_states, 1L)) {
+            observed[i, evaluation_times >= tail(path$times, 1L)] <- NA_integer_
+        }
+    }
+    colnames(observed) <- as.character(evaluation_times)
+    attr(observed, "number_of_states") <- number_of_states
+    observed
+}
+
+multistate_ipcw <- function(paths, evaluation_times, minimum_censoring_survival = 0.05, max_time = NULL) {
+    # This default uses a marginal G(t), so its statistical interpretation
+    # assumes censoring is independent without further covariate adjustment.
+    if (!is.numeric(evaluation_times) || length(evaluation_times) == 0L ||
+        any(!is.finite(evaluation_times)) || evaluation_times[1L] != 0 ||
+        any(diff(evaluation_times) <= 0)) {
+        stop("evaluation_times must be strictly increasing and start at zero")
+    }
+    if (!is.numeric(minimum_censoring_survival) ||
+        length(minimum_censoring_survival) != 1L ||
+        minimum_censoring_survival <= 0 || minimum_censoring_survival > 1) {
+        stop("minimum_censoring_survival must lie in (0, 1]")
+    }
+    if (!is.null(max_time) &&
+        (!is.numeric(max_time) || length(max_time) != 1L ||
+         !is.finite(max_time) || max_time <= 0)) {
+        stop("max_time must be NULL or a positive finite number")
+    }
+
+    censoring_model <- reverse_km_censoring(paths)
+    if (!is.null(max_time)) {
+        evaluation_times <- evaluation_times[evaluation_times <= max_time]
+    }
+    censoring_survival <- censoring_survival_at(
+        censoring_model, evaluation_times
+    )
+    keep <- is.finite(censoring_survival) &
+        censoring_survival >= minimum_censoring_survival
+    evaluation_times <- evaluation_times[keep]
+    censoring_survival <- censoring_survival[keep]
+    if (length(evaluation_times) < 2L) {
+        stop("fewer than two evaluation times remain after IPCW truncation")
+    }
+
+    observed_states <- observed_states_at(paths, evaluation_times)
+    weights <- matrix(
+        0, nrow = length(paths), ncol = length(evaluation_times)
+    )
+    number_of_observations <- length(paths)
+    for (i in seq_along(paths)) {
+        endpoint <- censoring_model$endpoint_times[i]
+        before_endpoint <- evaluation_times < endpoint
+        weights[i, before_endpoint] <-
+            1 / (number_of_observations * censoring_survival[before_endpoint])
+
+        if (!censoring_model$censored[i]) {
+            after_terminal_event <- evaluation_times >= endpoint
+            censoring_before_event <- censoring_survival_at(
+                censoring_model, endpoint, left_limit = TRUE
+            )
+            if (any(after_terminal_event) &&
+                (!is.finite(censoring_before_event) || censoring_before_event <= 0)) {
+                stop("the censoring survival is zero before a terminal event")
+            }
+            weights[i, after_terminal_event] <-
+                1 / (number_of_observations * censoring_before_event)
+        }
+    }
+
+    list(
+        times = evaluation_times,
+        weights = weights,
+        observed_states = observed_states,
+        censoring_survival = censoring_survival,
+        censoring_model = censoring_model
+    )
+}
+
+step_occupation_probabilities_at <- function(times, values, evaluation_times) {
+    values <- as.matrix(values)
+    if (!is.numeric(times) || length(times) != nrow(values) ||
+        any(!is.finite(times)) || any(diff(times) <= 0)) {
+        stop("prediction times must be strictly increasing and match values")
+    }
+    index <- findInterval(evaluation_times, times)
+    if (any(index == 0L)) {
+        stop("a prediction grid begins after the evaluation grid")
+    }
+    values[index, , drop = FALSE]
+}
+
+normalised_trapezoid <- function(times, values) {
+    horizon <- tail(times, 1L) - times[1L]
+    if (length(times) < 2L || !is.finite(horizon) || horizon <= 0) {
+        stop("times must cover a positive finite interval")
+    }
+    sum(
+        (head(values, -1L) + tail(values, -1L)) * diff(times) / 2
+    ) / horizon
+}
+
+# Generic empirical Brier, KL and spherical score curves for any named set of
+# occupation predictions. Weights follow JumpForests' defaults: 1/S for Brier
+# and spherical, and 1 for KL. If state_weights is supplied, it is used for all
+# three metrics, which also matches the package interface.
+multistate_score_curves <- function(prediction_sets, paths, evaluation_times, state_weights = NULL, minimum_censoring_survival = 0.05, max_time = NULL) {
+    if (!is.list(prediction_sets) || length(prediction_sets) == 0L ||
+        is.null(names(prediction_sets)) || any(names(prediction_sets) == "") ||
+        anyDuplicated(names(prediction_sets))) {
+        stop("prediction_sets must be a named non-empty list")
+    }
+
+    ipcw <- multistate_ipcw(
+        paths, evaluation_times,
+        minimum_censoring_survival = minimum_censoring_survival,
+        max_time = max_time
+    )
+    score_times <- ipcw$times
+    observed_states <- ipcw$observed_states
+    number_of_states <- attr(observed_states, "number_of_states")
+    state_names <- paste("State", seq_len(number_of_states))
+
+    if (is.null(state_weights)) {
+        metric_weights <- list(
+            brier = rep(1 / number_of_states, number_of_states),
+            kl = rep(1, number_of_states),
+            spherical = rep(1 / number_of_states, number_of_states)
+        )
+    } else {
+        if (!is.numeric(state_weights) || length(state_weights) != number_of_states ||
+            any(!is.finite(state_weights)) || any(state_weights < 0) ||
+            !any(state_weights > 0)) {
+            stop("state_weights must be a non-negative vector with one value per state")
+        }
+        metric_weights <- list(
+            brier = state_weights,
+            kl = state_weights,
+            spherical = state_weights
+        )
+    }
+
+    curve_rows <- list()
+    integrated_rows <- list()
+    curve_row <- 0L
+    integrated_row <- 0L
+
+    for (model_name in names(prediction_sets)) {
+        prediction_set <- prediction_sets[[model_name]]
+        if (!is.list(prediction_set) ||
+            !all(c("times", "values") %in% names(prediction_set)) ||
+            length(prediction_set$values) != length(paths)) {
+            stop(model_name, " must contain one prediction matrix per path")
+        }
+        if (is.list(prediction_set$times) &&
+            length(prediction_set$times) != length(paths)) {
+            stop(model_name, " must contain one prediction-time grid per path")
+        }
+        scores <- list(
+            brier = matrix(0, length(score_times), number_of_states),
+            kl = matrix(0, length(score_times), number_of_states),
+            spherical = matrix(0, length(score_times), number_of_states)
+        )
+
+        for (i in seq_along(paths)) {
+            individual_times <- if (is.list(prediction_set$times)) {
+                prediction_set$times[[i]]
+            } else {
+                prediction_set$times
+            }
+            probabilities <- step_occupation_probabilities_at(
+                individual_times, prediction_set$values[[i]], score_times
+            )
+            probabilities <- normalise_occupation_probabilities(
+                probabilities, paste(model_name, "observation", i)
+            )
+            if (ncol(probabilities) != number_of_states) {
+                stop(model_name, " predicts the wrong number of states")
+            }
+
+            individual_weights <- ipcw$weights[i, ]
+            individual_states <- observed_states[i, ]
+            known <- which(individual_weights > 0 & !is.na(individual_states))
+            if (length(known) == 0L) {
+                next
+            }
+
+            indicators <- matrix(0, length(score_times), number_of_states)
+            indicators[cbind(known, individual_states[known])] <- 1
+            for (state in seq_len(number_of_states)) {
+                scores$brier[, state] <- scores$brier[, state] +
+                    individual_weights * metric_weights$brier[state] *
+                    (indicators[, state] - probabilities[, state])^2
+            }
+
+            observed_probabilities <- probabilities[
+                cbind(known, individual_states[known])
+            ]
+            probabilities_for_log <- pmin(
+                1 - 1e-15, pmax(1e-15, observed_probabilities)
+            )
+            kl_contribution <- -individual_weights[known] *
+                metric_weights$kl[individual_states[known]] *
+                log(probabilities_for_log)
+            scores$kl[cbind(known, individual_states[known])] <-
+                scores$kl[cbind(known, individual_states[known])] +
+                kl_contribution
+
+            spherical_denominator <- sqrt(rowSums(sweep(
+                probabilities^2, 2L, metric_weights$spherical, "*"
+            )))
+            spherical_reward <- rep(0, length(known))
+            positive_denominator <- spherical_denominator[known] > 0
+            spherical_reward[positive_denominator] <-
+                metric_weights$spherical[
+                    individual_states[known][positive_denominator]
+                ] * observed_probabilities[positive_denominator] /
+                spherical_denominator[known][positive_denominator]
+            spherical_contribution <- individual_weights[known] *
+                (1 - spherical_reward)
+            scores$spherical[cbind(known, individual_states[known])] <-
+                scores$spherical[cbind(known, individual_states[known])] +
+                spherical_contribution
+        }
+
+        for (metric in names(scores)) {
+            colnames(scores[[metric]]) <- state_names
+            values <- cbind(scores[[metric]], Total = rowSums(scores[[metric]]))
+            components <- colnames(values)
+            curve_row <- curve_row + 1L
+            curve_rows[[curve_row]] <- data.frame(
+                model = model_name,
+                metric = metric,
+                component = rep(components, each = length(score_times)),
+                time = rep(score_times, times = length(components)),
+                error = as.vector(values),
+                stringsAsFactors = FALSE
+            )
+            integrated_row <- integrated_row + 1L
+            integrated_rows[[integrated_row]] <- data.frame(
+                model = model_name,
+                metric = metric,
+                component = components,
+                integrated_error = vapply(
+                    seq_along(components),
+                    function(component) {
+                        normalised_trapezoid(score_times, values[, component])
+                    },
+                    numeric(1)
+                ),
+                evaluation_start = score_times[1L],
+                evaluation_end = tail(score_times, 1L),
+                stringsAsFactors = FALSE
+            )
+        }
+    }
+
+    structure(
+        list(
+            curves = do.call(rbind, curve_rows),
+            integrated = do.call(rbind, integrated_rows),
+            evaluation_times = score_times,
+            censoring_survival = ipcw$censoring_survival,
+            state_weights = metric_weights,
+            integration_horizon = range(score_times),
+            minimum_censoring_survival = minimum_censoring_survival
+        ),
+        class = c("multistate_score_curves", "list")
+    )
+}
+
+plot_multistate_error_curves <- function(score_result,
+                                         metrics = c("brier", "kl", "spherical"),
+                                         xlab = "Time", save = FALSE,
+                                         plot_directory = "Plots",
+                                         filename_prefix = "error_curve",
+                                         width = 10, height = 7, dpi = 300) {
+    if (!inherits(score_result, "multistate_score_curves")) {
+        stop("score_result must be returned by multistate_score_curves()")
+    }
+    available_metrics <- unique(score_result$curves$metric)
+    if (any(!metrics %in% available_metrics)) {
+        stop("unknown metric: ", paste(setdiff(metrics, available_metrics), collapse = ", "))
+    }
+    if (!is.logical(save) || length(save) != 1L || is.na(save)) {
+        stop("save must be TRUE or FALSE")
+    }
+
+    model_levels <- unique(score_result$curves$model)
+    component_levels <- unique(score_result$curves$component)
+    colours <- setNames(
+        grDevices::hcl.colors(length(model_levels), palette = "Dark 3"),
+        model_levels
+    )
+    line_types <- setNames(
+        rep(c("solid", "dashed", "dotdash", "longdash", "twodash"),
+            length.out = length(model_levels)),
+        model_levels
+    )
+
+    plots <- setNames(vector("list", length(metrics)), metrics)
+    for (metric in metrics) {
+        plot_data <- score_result$curves[
+            score_result$curves$metric == metric, , drop = FALSE
+        ]
+        plot_data$model <- factor(plot_data$model, levels = model_levels)
+        plot_data$component <- factor(
+            plot_data$component, levels = component_levels
+        )
+        metric_label <- switch(
+            metric,
+            brier = "Brier",
+            kl = "KL",
+            spherical = "Spherical"
+        )
+
+        p <- ggplot(
+            plot_data,
+            aes(x = time, y = error, colour = model, linetype = model)
+        ) +
+            geom_step(direction = "hv", linewidth = 0.8) +
+            facet_wrap(~component, ncol = 2, scales = "free_y") +
+            scale_colour_manual(values = colours) +
+            scale_linetype_manual(values = line_types) +
+            labs(
+                title = paste(metric_label, "IPCW error curves"),
+                x = xlab,
+                y = paste(metric_label, "error"),
+                colour = NULL,
+                linetype = NULL
+            ) +
+            theme_bw() +
+            theme(
+                legend.position = "bottom",
+                plot.title = element_text(hjust = 0.5)
+            )
+        plots[[metric]] <- p
+
+        if (save) {
+            dir.create(plot_directory, recursive = TRUE, showWarnings = FALSE)
+            ggsave(
+                filename = file.path(
+                    plot_directory,
+                    paste0(filename_prefix, "_", metric, ".png")
+                ),
+                plot = p, width = width, height = height,
+                units = "in", dpi = dpi
+            )
+        }
+    }
+    plots
+}
+
 # Testing the helper functions
 #--------------------------------------------------------------------------------
 
@@ -1357,5 +2485,4 @@ test_helper_functions <- function() {
         KL_uniform = optimal_KL(weights, uniform)
     )
 }
-
 #nolint end

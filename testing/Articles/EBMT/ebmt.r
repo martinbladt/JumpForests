@@ -3,13 +3,14 @@
 # This file is for analysing the EBMT platelet-recovery data.
 
 # import helper functions and packages
-source("testing/Articles/Discrete/Helpers.r")
+source("testing/Articles/Helpers.r")
 library(mstate)
 library(tidyverse)
 library(etm)
 
 # data preparation
 #--------------------------------------------------------------------------------
+{
 options(scipen = 1)
 data(ebmt3)
 head(ebmt3)
@@ -51,6 +52,7 @@ feature_data$drmatch <- as.factor(feature_data$drmatch)
 feature_data$tcd <- as.factor(feature_data$tcd)
 
 # this concludes data preparation since the features are already in the same order as the patients
+}
 
 # tune the jump forest
 #--------------------------------------------------------------------------------
@@ -250,126 +252,6 @@ new_data <- data.frame(age = c(">40", "20-40", "<=20", ">40", "20-40", "<=20"), 
 
 age_tcd_predictions <- jfforest.predict(fitted_forest, new_data)
 
-# Plot one predicted cumulative transition rate for all covariate profiles.
-plot_transition_rate <- function(predictions, event_times, new_data, from, to, colour_by, linetype_by, max_time = NULL, save = FALSE) {
-    if (!is.data.frame(new_data)) {
-        stop("new_data must be a data frame")
-    }
-    if (!all(c(colour_by, linetype_by) %in% names(new_data))) {
-        stop("colour_by and linetype_by must name columns in new_data")
-    }
-    if (!is.numeric(event_times) || length(event_times) == 0L ||
-        any(!is.finite(event_times)) || is.unsorted(event_times, strictly = TRUE)) {
-        stop("event_times must be a non-empty, strictly increasing numeric vector")
-    }
-    if (!is.list(predictions) || length(predictions) != nrow(new_data)) {
-        stop("predictions must contain one prediction for each row of new_data")
-    }
-    if (!is.null(max_time) &&
-        (!is.numeric(max_time) || length(max_time) != 1L ||
-         !is.finite(max_time) || max_time <= 0)) {
-        stop("max_time must be NULL or one positive finite number")
-    }
-    if (!is.logical(save) || length(save) != 1L || is.na(save)) {
-        stop("save must be TRUE or FALSE")
-    }
-
-    valid_state <- function(state) {
-        is.numeric(state) && length(state) == 1L && is.finite(state) &&
-            state >= 1 && state == as.integer(state)
-    }
-    if (!valid_state(from) || !valid_state(to) || from == to) {
-        stop("from and to must be distinct positive integers")
-    }
-    from <- as.integer(from)
-    to <- as.integer(to)
-
-    add_zero <- event_times[1L] > 0
-    plot_data <- do.call(rbind, lapply(seq_along(predictions), function(i) {
-        predicted_matrices <- predictions[[i]]
-        if (length(predicted_matrices) != length(event_times)) {
-            stop("each prediction must contain one matrix per event time")
-        }
-
-        transition_rate <- vapply(predicted_matrices, function(rate_matrix) {
-            if (!is.matrix(rate_matrix) ||
-                from > nrow(rate_matrix) || to > ncol(rate_matrix)) {
-                stop("from or to is outside the predicted transition matrix")
-            }
-            rate_matrix[from, to]
-        }, numeric(1))
-
-        data.frame(
-            time = if (add_zero) c(0, event_times) else event_times,
-            transition_rate = if (add_zero) c(0, transition_rate) else transition_rate,
-            profile = i,
-            colour_value = as.character(new_data[[colour_by]][i]),
-            linetype_value = as.character(new_data[[linetype_by]][i])
-        )
-    }))
-
-    plot_data$colour_value <- factor(
-        plot_data$colour_value,
-        levels = unique(as.character(new_data[[colour_by]]))
-    )
-    plot_data$linetype_value <- factor(
-        plot_data$linetype_value,
-        levels = unique(as.character(new_data[[linetype_by]]))
-    )
-
-    p <- ggplot(
-        plot_data,
-        aes(
-            x = time,
-            y = transition_rate,
-            colour = colour_value,
-            linetype = linetype_value,
-            group = profile
-        )
-    ) +
-        geom_step(linewidth = 0.9, direction = "hv") +
-        labs(
-            title = paste0("Predicted transition rate: ", from, " → ", to),
-            x = "Time (days)",
-            y = "Cumulative transition rate",
-            colour = colour_by,
-            linetype = linetype_by
-        ) +
-        guides(
-            colour = guide_legend(order = 1),
-            linetype = guide_legend(order = 2)
-        ) +
-        theme_classic() +
-        theme(
-            legend.position = "bottom",
-            plot.title = element_text(hjust = 0.5)
-        )
-
-    if (!is.null(max_time)) {
-        p <- p + coord_cartesian(xlim = c(0, max_time))
-    }
-
-    if (save) {
-        plot_directory <- "testing/Articles/EBMT/Plots"
-        dir.create(plot_directory, recursive = TRUE, showWarnings = FALSE)
-        ggsave(
-            filename = file.path(
-                plot_directory,
-                paste0(
-                    "transition_rate_", from, "_", to, "_",
-                    colour_by, "_", linetype_by, ".png"
-                )
-            ),
-            plot = p,
-            width = 10,
-            height = 6,
-            units = "in",
-            dpi = 300
-        )
-    }
-    p
-}
-
 plot_transition_rate(
     predictions = age_tcd_predictions,
     event_times = fitted_forest$unique.event.times,
@@ -378,7 +260,9 @@ plot_transition_rate(
     to = 2,
     colour_by = "age",
     linetype_by = "tcd",
-    max_time = NULL,
+    max_time = 500,
+    xlab = "Time (days)",
+    plot_directory = "testing/Articles/EBMT/Plots",
     save = TRUE
 )
 
@@ -397,11 +281,133 @@ plot_transition_rate(
     colour_by = "age",
     linetype_by = "dissub",
     max_time = NULL,
+    xlab = "Time (days)",
+    plot_directory = "testing/Articles/EBMT/Plots",
     save = TRUE
 )
 
 # fitting the Cox model of Putter, Fiocco and Geskus
 #--------------------------------------------------------------------------------
+
+{
+
+fit_simple_ebmt_cox <- function(paths, features, ties = "breslow") {
+    cox_12_data <- paths_to_transition_cox_data(paths, features, 1L, 2L)
+    cox_13_data <- paths_to_transition_cox_data(paths, features, 1L, 3L)
+    cox_23_data <- paths_to_transition_cox_data(paths, features, 2L, 3L)
+
+    # Equation (25) has one common baseline for both transitions into state 3.
+    # PR is a time-dependent indicator: 0 before and 1 after platelet recovery.
+    endpoint_data <- rbind(
+        transform(cox_13_data, PR = 0),
+        transform(cox_23_data, PR = 1)
+    )
+    rownames(endpoint_data) <- NULL
+
+    fit_12 <- survival::coxph(
+        survival::Surv(tstart, tstop, event) ~
+            dissub + age + drmatch + tcd,
+        data = cox_12_data, ties = ties,
+        model = TRUE, x = TRUE, y = TRUE, singular.ok = FALSE
+    )
+    fit_endpoint <- survival::coxph(
+        survival::Surv(tstart, tstop, event) ~
+            dissub + age + drmatch + tcd + PR +
+            PR:(dissub + age + drmatch + tcd),
+        data = endpoint_data, ties = ties,
+        model = TRUE, x = TRUE, y = TRUE, singular.ok = FALSE
+    )
+
+    model <- new_multistate_cox_model(
+        transitions = list(
+            `1 -> 2` = list(
+                from = 1L, to = 2L, fit = fit_12,
+                fixed_values = list()
+            ),
+            `1 -> 3` = list(
+                from = 1L, to = 3L, fit = fit_endpoint,
+                fixed_values = list(PR = 0)
+            ),
+            `2 -> 3` = list(
+                from = 2L, to = 3L, fit = fit_endpoint,
+                fixed_values = list(PR = 1)
+            )
+        ),
+        number_of_states = 3L,
+        label = "Simple Cox"
+    )
+    model$fits <- list(`1 -> 2` = fit_12, endpoint = fit_endpoint)
+    model$sample_sizes <- data.frame(
+        transition = c("1 -> 2", "1 -> 3", "2 -> 3"),
+        risk_intervals = c(nrow(cox_12_data), nrow(cox_13_data), nrow(cox_23_data)),
+        events = c(sum(cox_12_data$event), sum(cox_13_data$event), sum(cox_23_data$event))
+    )
+    model
+}
+
+fit_interaction_ebmt_cox <- function(paths, features, ties = "breslow") {
+    cox_12_data <- paths_to_transition_cox_data(paths, features, 1L, 2L)
+    cox_13_data <- paths_to_transition_cox_data(paths, features, 1L, 3L)
+    cox_23_data <- paths_to_transition_cox_data(paths, features, 2L, 3L)
+
+    # age:dissub is included in every transition. age:tcd is included only in
+    # the two relapse/death transitions, as requested. These are three separate
+    # fits, so this model also relaxes equation (25)'s shared endpoint baseline.
+    fit_12 <- survival::coxph(
+        survival::Surv(tstart, tstop, event) ~
+            age * dissub + drmatch + tcd,
+        data = cox_12_data, ties = ties,
+        model = TRUE, x = TRUE, y = TRUE, singular.ok = FALSE
+    )
+    fit_13 <- survival::coxph(
+        survival::Surv(tstart, tstop, event) ~
+            age * dissub + age * tcd + drmatch,
+        data = cox_13_data, ties = ties,
+        model = TRUE, x = TRUE, y = TRUE, singular.ok = FALSE
+    )
+    fit_23 <- survival::coxph(
+        survival::Surv(tstart, tstop, event) ~
+            age * dissub + age * tcd + drmatch,
+        data = cox_23_data, ties = ties,
+        model = TRUE, x = TRUE, y = TRUE, singular.ok = FALSE
+    )
+
+    model <- new_multistate_cox_model(
+        transitions = list(
+            `1 -> 2` = list(from = 1L, to = 2L, fit = fit_12, fixed_values = list()),
+            `1 -> 3` = list(from = 1L, to = 3L, fit = fit_13, fixed_values = list()),
+            `2 -> 3` = list(from = 2L, to = 3L, fit = fit_23, fixed_values = list())
+        ),
+        number_of_states = 3L,
+        label = "Interaction Cox"
+    )
+    model$fits <- list(`1 -> 2` = fit_12, `1 -> 3` = fit_13, `2 -> 3` = fit_23)
+    model$sample_sizes <- data.frame(
+        transition = c("1 -> 2", "1 -> 3", "2 -> 3"),
+        risk_intervals = c(nrow(cox_12_data), nrow(cox_13_data), nrow(cox_23_data)),
+        events = c(sum(cox_12_data$event), sum(cox_13_data$event), sum(cox_23_data$event))
+    )
+    model
+}
+
+
+simple_cox_model <- fit_simple_ebmt_cox(jump_data, feature_data)
+interaction_cox_model <- fit_interaction_ebmt_cox(jump_data, feature_data)
+
+simple_cox_model$sample_sizes
+interaction_cox_model$sample_sizes
+summary(simple_cox_model$fits$`1 -> 2`) # concurs perfectly with the table on page 31 of Putter, Fiocco and Geskus
+summary(simple_cox_model$fits$endpoint)
+lapply(interaction_cox_model$fits, summary)
+
+# In equation (25), delta is the coefficient of PR. It is the log hazard ratio
+# comparing 2 -> 3 with 1 -> 3 at the same time since transplant for the
+# reference patient (AML, age <=20, no gender mismatch, no TCD). It is not an
+# event/censoring indicator. Delta's covariate-dependent counterpart is the
+# vector of PR:covariate coefficients.
+delta_summary <- cox_term_summary(simple_cox_model$fits$endpoint, "PR")
+delta_summary
+}
 
 # fit a Poisson regression model?
 #--------------------------------------------------------------------------------
@@ -409,6 +415,92 @@ plot_transition_rate(
 # error curves for all the models
 #--------------------------------------------------------------------------------
 
-# fit a Cox model as in Putter Fiocco and Geskus (pure linear, no interaction)
-# fit another Cox model that allows for interactions between all variables
-# summarise errors (Brier, KL, spherical) and plot the time-dependent error curves
+# The simulation study has a known data-generating truth, whereas EBMT does not.
+# Therefore these are empirical IPCW errors. All three specifications use the
+# same validation folds and the same marginal reverse-KM censoring distribution,
+# avoiding both an in-sample advantage and mismatched validation samples.
+
+{
+
+# Include both transition and censoring times: predictions are constant at a
+# pure censoring time, but empirical IPCW weights can jump there. Truncate the
+# grid before prediction once marginal G falls below 0.05; this avoids unstable
+# late-tail weights and defines the integration horizon used by every model.
+minimum_error_censoring_survival <- 0.05
+error_evaluation_times <- sort(unique(c(fitted_forest$unique.event.times, vapply(jump_data, function(path) tail(path$times, 1L), numeric(1)))))
+error_censoring_model <- reverse_km_censoring(jump_data)
+error_censoring_survival <- censoring_survival_at(
+    error_censoring_model, error_evaluation_times
+)
+error_evaluation_times <- error_evaluation_times[
+    error_censoring_survival >= minimum_error_censoring_survival
+]
+initial_distribution <- c(1, 0, 0)
+number_of_error_folds <- 5L
+error_folds <- stratified_multistate_folds(
+    jump_data, number_of_error_folds, seed = 2026
+)
+
+# The selected forest hyperparameters are held fixed in the outer folds. A
+# fully nested performance study would repeat the tuning inside each training
+# fold; this comparison evaluates the already selected specification.
+jumpforest_crossfit_occupation <- crossfit_jumpforest(
+    jump_data,
+    feature_data,
+    initial = initial_distribution,
+    folds = error_folds,
+    seed = 2026,
+    splitrule = fitted_forest$splitrule,
+    min_node_size = fitted_forest$min.node.size,
+    ntrees = fitted_forest$num.trees
+)
+simple_cox_crossfit_occupation <- crossfit_multistate_cox(
+    jump_data, feature_data, fit_simple_ebmt_cox,
+    evaluation_times = error_evaluation_times,
+    number_of_folds = number_of_error_folds,
+    seed = 2026,
+    initial = initial_distribution,
+    prediction_stype = "aalen-johansen",
+    folds = error_folds
+)
+interaction_cox_crossfit_occupation <- crossfit_multistate_cox(
+    jump_data, feature_data, fit_interaction_ebmt_cox,
+    evaluation_times = error_evaluation_times,
+    number_of_folds = number_of_error_folds,
+    seed = 2026,
+    initial = initial_distribution,
+    prediction_stype = "aalen-johansen",
+    folds = error_folds
+)
+
+error_predictions <- list(
+    JumpForest = jumpforest_crossfit_occupation,
+    `Simple Cox` = simple_cox_crossfit_occupation,
+    `Interaction Cox` = interaction_cox_crossfit_occupation
+)
+}
+
+ebmt_error_comparison <- multistate_score_curves(
+    error_predictions,
+    paths = jump_data,
+    evaluation_times = error_evaluation_times,
+    minimum_censoring_survival = minimum_error_censoring_survival
+)
+ebmt_error_plots <- plot_multistate_error_curves(
+    ebmt_error_comparison,
+    xlab = "Time (days)",
+    save = TRUE,
+    plot_directory = "testing/Articles/EBMT/Plots"
+)
+
+write.table(
+    ebmt_error_comparison$curves,
+    "testing/Articles/EBMT/time_dependent_errors_ebmt3.txt",
+    sep = "\t", row.names = FALSE
+)
+write.table(
+    ebmt_error_comparison$integrated,
+    "testing/Articles/EBMT/integrated_errors_ebmt3.txt",
+    sep = "\t", row.names = FALSE
+)
+ebmt_error_comparison$integrated
