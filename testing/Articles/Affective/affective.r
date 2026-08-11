@@ -179,7 +179,6 @@ write.table(vimp_random_brier, "testing/Articles/Affective/Data/vimp_random_brie
 write.table(vimp_random_kl, "testing/Articles/Affective/Data/vimp_random_kl_affective.txt", sep = "\t", row.names = FALSE)
 write.table(vimp_random_spherical, "testing/Articles/Affective/Data/vimp_random_spherical_affective.txt", sep = "\t", row.names = FALSE)
 
-
 # load the results in here
 vimp_permute_brier <- read.table("testing/Articles/Affective/vimp_permute_brier_affective.txt", header = TRUE)
 vimp_permute_kl <- read.table("testing/Articles/Affective/vimp_permute_kl_affective.txt", header = TRUE)

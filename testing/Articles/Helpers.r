@@ -1513,6 +1513,173 @@ plot_transition_rate <- function(predictions, event_times, new_data, from, to,
     p
 }
 
+# Compare predicted cumulative transition rates within each covariate profile.
+plot_transition_rate_comparison <- function(
+        predictions, event_times, new_data, transitions,
+        transition_labels = NULL, profile_labels = NULL,
+        max_time = NULL, xlab = "Time", save = FALSE,
+        plot_directory = "Plots",
+        filename = "transition_rate_comparison.png",
+        ncol = NULL, width = 10, height = 6, dpi = 300) {
+    if (!is.data.frame(new_data) || nrow(new_data) == 0L) {
+        stop("new_data must be a non-empty data frame")
+    }
+    if (!is.numeric(event_times) || length(event_times) == 0L ||
+        any(!is.finite(event_times)) || is.unsorted(event_times, strictly = TRUE)) {
+        stop("event_times must be a non-empty, strictly increasing numeric vector")
+    }
+    if (!is.list(predictions) || length(predictions) != nrow(new_data)) {
+        stop("predictions must contain one prediction for each row of new_data")
+    }
+    if ((!is.matrix(transitions) && !is.data.frame(transitions)) ||
+        ncol(transitions) != 2L || nrow(transitions) == 0L) {
+        stop("transitions must be a non-empty two-column matrix or data frame")
+    }
+
+    transitions <- as.data.frame(transitions)
+    if (all(c("from", "to") %in% names(transitions))) {
+        transitions <- transitions[, c("from", "to"), drop = FALSE]
+    }
+    names(transitions) <- c("from", "to")
+    valid_state <- function(state) {
+        is.numeric(state) && all(is.finite(state)) &&
+            all(state >= 1) && all(state == as.integer(state))
+    }
+    if (!valid_state(transitions$from) || !valid_state(transitions$to) ||
+        any(transitions$from == transitions$to)) {
+        stop("transitions must contain distinct positive integer states")
+    }
+    transitions$from <- as.integer(transitions$from)
+    transitions$to <- as.integer(transitions$to)
+    transition_keys <- paste(transitions$from, transitions$to, sep = "->")
+    if (anyDuplicated(transition_keys)) {
+        stop("transitions must not contain duplicate state pairs")
+    }
+
+    if (is.null(transition_labels)) {
+        transition_labels <- paste0(
+            transitions$from, " \u2192 ", transitions$to
+        )
+    }
+    if (!is.character(transition_labels) ||
+        length(transition_labels) != nrow(transitions) ||
+        anyNA(transition_labels) || any(transition_labels == "") ||
+        anyDuplicated(transition_labels)) {
+        stop("transition_labels must give one unique non-empty label per transition")
+    }
+
+    if (is.null(profile_labels)) {
+        profile_labels <- vapply(seq_len(nrow(new_data)), function(i) {
+            values <- vapply(new_data, function(column) {
+                as.character(column[i])
+            }, character(1))
+            paste0(
+                "row ", i, ": ",
+                paste(paste(names(new_data), values, sep = "="), collapse = ", ")
+            )
+        }, character(1))
+    }
+    if (!is.character(profile_labels) ||
+        length(profile_labels) != nrow(new_data) ||
+        anyNA(profile_labels) || any(profile_labels == "") ||
+        anyDuplicated(profile_labels)) {
+        stop("profile_labels must give one unique non-empty label per row of new_data")
+    }
+    if (!is.null(max_time) &&
+        (!is.numeric(max_time) || length(max_time) != 1L ||
+         !is.finite(max_time) || max_time <= 0)) {
+        stop("max_time must be NULL or one positive finite number")
+    }
+    if (!is.logical(save) || length(save) != 1L || is.na(save)) {
+        stop("save must be TRUE or FALSE")
+    }
+    if (!is.null(ncol) &&
+        (!is.numeric(ncol) || length(ncol) != 1L || !is.finite(ncol) ||
+         ncol < 1 || ncol != as.integer(ncol))) {
+        stop("ncol must be NULL or one positive integer")
+    }
+    if (!is.character(filename) || length(filename) != 1L ||
+        is.na(filename) || filename == "") {
+        stop("filename must be one non-empty character string")
+    }
+
+    add_zero <- event_times[1L] > 0
+    plot_data <- do.call(rbind, lapply(seq_along(predictions), function(i) {
+        predicted_matrices <- predictions[[i]]
+        if (length(predicted_matrices) != length(event_times)) {
+            stop("each prediction must contain one matrix per event time")
+        }
+
+        do.call(rbind, lapply(seq_len(nrow(transitions)), function(j) {
+            from <- transitions$from[j]
+            to <- transitions$to[j]
+            transition_rate <- vapply(predicted_matrices, function(rate_matrix) {
+                if (!is.matrix(rate_matrix) ||
+                    from > nrow(rate_matrix) || to > ncol(rate_matrix)) {
+                    stop("a transition contains a state outside the predicted matrices")
+                }
+                rate_matrix[from, to]
+            }, numeric(1))
+
+            data.frame(
+                time = if (add_zero) c(0, event_times) else event_times,
+                transition_rate = if (add_zero) {
+                    c(0, transition_rate)
+                } else {
+                    transition_rate
+                },
+                profile = profile_labels[i],
+                transition = transition_labels[j]
+            )
+        }))
+    }))
+    plot_data$profile <- factor(plot_data$profile, levels = profile_labels)
+    plot_data$transition <- factor(
+        plot_data$transition, levels = transition_labels
+    )
+
+    p <- ggplot(
+        plot_data,
+        aes(
+            x = time,
+            y = transition_rate,
+            colour = transition,
+            group = transition
+        )
+    ) +
+        geom_step(linewidth = 0.9, direction = "hv") +
+        facet_wrap(~profile, ncol = ncol) +
+        labs(
+            title = "Predicted cumulative transition rates",
+            x = xlab,
+            y = "Cumulative transition rate",
+            colour = "Transition"
+        ) +
+        theme_classic() +
+        theme(
+            legend.position = "bottom",
+            plot.title = element_text(hjust = 0.5),
+            strip.text = element_text(hjust = 0)
+        )
+
+    if (!is.null(max_time)) {
+        p <- p + coord_cartesian(xlim = c(0, max_time))
+    }
+
+    if (save) {
+        dir.create(plot_directory, recursive = TRUE, showWarnings = FALSE)
+        ggsave(
+            filename = file.path(plot_directory, filename),
+            plot = p,
+            width = width,
+            height = height,
+            units = "in",
+            dpi = dpi
+        )
+    }
+    p
+}
+
 # Validate the common trajectory format used by the multi-state helpers.
 validate_jump_paths <- function(paths) {
     if (!is.list(paths) || length(paths) == 0L) {
