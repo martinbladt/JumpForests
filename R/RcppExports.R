@@ -105,35 +105,3 @@ getNodeSize <- function(JFTree, x) {
     .Call(`_JumpForests_getNodeSize`, JFTree, x)
 }
 
-testList <- function() {
-    .Call(`_JumpForests_testList`)
-}
-
-extract_column <- function(data, index) {
-    .Call(`_JumpForests_extract_column`, data, index)
-}
-
-rcpp_hello_world <- function() {
-    .Call(`_JumpForests_rcpp_hello_world`)
-}
-
-square_cpp <- function(x) {
-    .Call(`_JumpForests_square_cpp`, x)
-}
-
-timesTwoMatrix <- function(mat) {
-    .Call(`_JumpForests_timesTwoMatrix`, mat)
-}
-
-sampler <- function(n, k) {
-    invisible(.Call(`_JumpForests_sampler`, n, k))
-}
-
-silly_sampler <- function(k) {
-    invisible(.Call(`_JumpForests_silly_sampler`, k))
-}
-
-sampler_wrapper <- function(n, k, wr) {
-    invisible(.Call(`_JumpForests_sampler_wrapper`, n, k, wr))
-}
-

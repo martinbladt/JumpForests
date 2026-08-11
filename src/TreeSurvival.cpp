@@ -704,10 +704,6 @@ vector<double> computeOutcomes(const vector<double>& predictions, size_t num_uni
     return outcomes;
 }
 
-vector<double> computeCensoringKMFromEndpoints(const vector<double>& times, const vector<double>& ind, const vector<double>& censoring_times, const vector<size_t>& indices) {
-    return computeCensoringKMFromEndpoints(times.data(), ind.data(), censoring_times, indices);
-}
-
 vector<double> computeCensoringKMFromEndpoints(const double* times, const double* ind, const vector<double>& censoring_times, const vector<size_t>& indices) {
     vector<double> KM(censoring_times.size(), 1);
     if (censoring_times.empty()) {
@@ -745,21 +741,6 @@ vector<double> computeCensoringKMFromEndpoints(const double* times, const double
         }
     }
     return KM;
-}
-
-double censoringValueAtTime(const vector<double>& KM_cens, const vector<double>& censoring_times, size_t row, size_t row_length, double time, bool left_limit) {
-    if (censoring_times.empty()) {
-        return 1;
-    }
-
-    auto it = left_limit ? lower_bound(censoring_times.begin(), censoring_times.end(), time) :
-                           upper_bound(censoring_times.begin(), censoring_times.end(), time);
-    if (it == censoring_times.begin()) {
-        return 1;
-    }
-
-    size_t time_index = static_cast<size_t>(distance(censoring_times.begin(), it) - 1);
-    return KM_cens[row * row_length + time_index];
 }
 
 vector<double> selectCensoringAtTimes(const vector<double>& KM_cens, const vector<double>& censoring_times, const vector<double>& output_times, size_t num_obs) {

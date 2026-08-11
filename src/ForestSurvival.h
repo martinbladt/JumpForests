@@ -12,9 +12,6 @@ public:
   // grows a survival forest with multi-threading
   void grow();
   
-  // predicts the chf for observation x
-  vector<double> predict(const vector<double>& x);
-
   // get info
   const vector<double>& getEventTimes() const {
     return unique_event_times;
@@ -24,16 +21,6 @@ public:
   }
   const size_t getNumUniqueEventTimes() const {
     return num_unique_event_times;
-  }
-  const vector<size_t>& getResponseEventTimeIDs() const {
-    return response_event_time_ids;
-  }
-  const vector<double>& getCensoringTimes() const {
-    return censoring_times;
-  }
-
-  const vector<vector<double>>& getCHF() const {
-    return chf;
   }
   bool predictionsSaved() {
     return save_predictions;
@@ -57,8 +44,6 @@ private:
   const vector<size_t> true_event_time_ids;     // the indices of unique_event_times for uncensored times
   const vector<double> censoring_times;         // full response-time grid used for the censoring distribution
   size_t num_unique_event_times;                // number of unique event times
-  vector<vector<double>> chf;                   // the cumulative hazard at the unique_event_times for the forest
-
   // quantities reused when computing VIMP for several features
   vector<vector<size_t>> vimp_oob_indices;
   vector<vector<size_t>> vimp_leaf_ids;

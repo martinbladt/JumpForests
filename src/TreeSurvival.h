@@ -16,10 +16,6 @@ public:
   const vector<size_t>& getTrueEventTimeIDs() const {
     return *true_event_time_ids;
   }
-  const vector<size_t>& getResponseEventTimeIDs() const {
-    return *response_event_time_ids;
-  }
-
   const vector<vector<double>>& getCHF() const {
     return chf;
   }
@@ -49,11 +45,6 @@ public:
   void computeCensoringKMExternal(const vector<size_t>& indices, size_t node_index);
   void computeCensoringKMLazy();
   void prepareSurvivalProbabilities();
-  // VIMP prediction for survival trees
-  ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
-    return chf[predictionLeafIDVIMP(x, feature, rng)];
-  }
-
 private:
   // quantities of interest to survival trees
   shared_ptr<vector<double>> unique_event_times;
@@ -154,13 +145,10 @@ vector<double> computeBrierScoreCpp(const vector<double>& times, const vector<do
 vector<double> computeKLScoreCpp(const vector<double>& times, const vector<double>& weights, const vector<double>& unique_event_times, const vector<double>& KM_pred);
 double probabilityForLogScore(double probability);
 pair<double, double> computeIntegratedScore(const vector<double>& score, const vector<double>& unique_event_times, bool multi_state = false);
-vector<double> computeUniqueEventTimes(const vector<double>& times, const vector<size_t>& ind);
 vector<double> KaplanMeier(const vector<double>& na, size_t num_estimators = 1);
 NumericMatrix KaplanMeier(const NumericMatrix& na);
 double computeConcordanceIndex(const vector<double>& outcomes, const vector<double>& times, const vector<double>& ind);
-vector<double> computeCensoringKMFromEndpoints(const vector<double>& times, const vector<double>& ind, const vector<double>& censoring_times, const vector<size_t>& indices);
 vector<double> computeCensoringKMFromEndpoints(const double* times, const double* ind, const vector<double>& censoring_times, const vector<size_t>& indices);
-double censoringValueAtTime(const vector<double>& KM_cens, const vector<double>& censoring_times, size_t row, size_t row_length, double time, bool left_limit);
 vector<double> selectCensoringAtTimes(const vector<double>& KM_cens, const vector<double>& censoring_times, const vector<double>& output_times, size_t num_obs);
 
 #endif // TREE_SURVIVAL_H

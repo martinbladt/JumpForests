@@ -634,12 +634,6 @@ double computeBrierScoreError(const vector<double>& prob_predictions, const vect
   return result / ((double) response.size() * (double) num_classes);
 }
 
-// computes the normalised Brier score error as in the vignette https://www.randomforestsrc.org/articles/rfsrc-subsample.html
-double computeNormalizedBrierScoreError(const vector<double>& prob_predictions, const vector<double>& response, size_t num_classes) {
-  return computeBrierScoreError(prob_predictions, response, num_classes) *
-         (double) num_classes * (double) num_classes / (double) (num_classes - 1);
-}
-
 // computes the confusion matrix based as a flattened vector of length num_classes^2
 vector<size_t> computeConfusionMatrix(const vector<double>& class_predictions, const vector<double>& response, size_t num_classes) {
   if (class_predictions.size() != response.size()) {
@@ -657,15 +651,6 @@ vector<size_t> computeConfusionMatrix(const vector<double>& class_predictions, c
 
 // miscellaneous functions related to classification trees
 //--------------------------------------------------------------------------------------
-
-vector<double> classCountsToProportions(const vector<double>& class_counts, size_t num_classes, size_t num_obs, size_t split_id) {
-  vector<double> result(num_classes, 0);
-  size_t index = split_id * num_classes;
-  for (size_t c = 0; c < num_classes; ++c) {
-    result[c] = class_counts[index + c] / (double) num_obs;
-  }
-  return result;
-}
 
 // determines the most frequent class by majority rule given a vector of class counts
 double mostFrequentClass(const vector<double>& class_counts) {

@@ -11,13 +11,6 @@ public:
   // grows a regression forest with multi-threading
   void grow();
   
-  // computes the prediction for observation x
-  double predict(const vector<double>& x);
-
-  const vector<double> getMeans() {
-    return means;
-  }
-
   // for computing predictions after the forest is grown
   // first vector is in-bag predictions, the other oob predictions
   pair<vector<double>, vector<double>> computePredictions();
@@ -28,8 +21,6 @@ public:
   double computeVIMPRandom(size_t feature, int feature_seed);
 
 private:
-  vector<double> means;
-
   // quantities reused when computing VIMP for several features
   vector<vector<size_t>> vimp_oob_indices;
   vector<vector<bool>> vimp_tree_uses_feature;

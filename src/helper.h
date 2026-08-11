@@ -39,27 +39,16 @@ struct Gap {
 // helper functions for growing trees
 vector<double> uniqueValues(vector<double> input);
 vector<double> thinUniqueEventTimes(const vector<double>& unique_event_times, size_t target_size);
-vector<vector<double>> compute2Partitions(const vector<double>& feature_values);
 vector<size_t> sampleIndices(const vector<size_t>& global_indices, size_t k, bool with_replacement, mt19937& rng);
 
 // vector operations
 double vector_sum(const vector<double>& vec);
-size_t vector_sum(const vector<size_t>& vec);
-void sum_vectors(vector<double>& result, const vector<double>& add);
-void sum_vectors(vector<size_t>& result, const vector<size_t>& add);
-vector<size_t> sum_vectors(const vector<size_t>& vec, size_t num_vectors);
 
 // flattened matrix operations
 vector<int> columnSums(const vector<int>& matrix, size_t d);
-vector<size_t> transpose(const vector<size_t>& matrix, size_t d);
-vector<size_t> addMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d);
-vector<int> subtractMatrices(const vector<size_t>& matrix1, const vector<size_t>& matrix2, size_t d);
-void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matrix, size_t d);
-void cumulativeMatrixSums(vector<size_t>& acc_matrix, const vector<size_t>& matrix, size_t d, size_t num_vectors);
 void cumulativeMatrixSumsNoDelay(vector<size_t>& acc_matrix, const vector<size_t>& matrix, size_t d);
 
 // flattened matrix operations for flattened vectors
-vector<size_t> columnSums(const vector<size_t>& matrix, size_t begin, size_t end);
 vector<size_t> transpose(const vector<size_t>& matrix, size_t begin, size_t end);
 vector<int> subtractMatrices(const vector<size_t>& matrix1, size_t begin, size_t end, const vector<size_t>& matrix2);
 
@@ -73,10 +62,7 @@ void printVector(const vector<bool>& vec);
 vector<bool> computeOOBIndices(const vector<size_t>& indices, size_t n);
 vector<bool> computeOOBIndicesDouble(const vector<size_t>& grow, const vector<size_t>& holdout, size_t n);
 pair<vector<size_t>, vector<size_t>> partitionHonesty(const vector<size_t>& indices, mt19937& rng);
-vector<vector<size_t>> groupByLeaf(const vector<size_t>& leaf_ids, size_t num_nodes, size_t num_terminal_nodes);
-
 // helper functions for Rcpp
-NumericMatrix selectColumns(const NumericMatrix& matrix, const vector<size_t>& cols);
 vector<double> selectColumns(const vector<double>& matrix, const vector<size_t>& cols, size_t row_length);
 
 #endif // HELPER_H

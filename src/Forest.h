@@ -36,19 +36,8 @@ public:
   const double getAvgTreeDepth() const {
     return avg_tree_depth;
   }
-  const vector<unique_ptr<Tree>>& getTrees() const {
-    return trees;
-  }
-  const vector<vector<bool>> getOOBIndices() const {
-    return oob_indices;
-  }
   shared_ptr<Data> getData() const {
     return data;
-  }
-
-  // frees memory after oob_indices are no longer necessary (maybe not best practice to have it public, but not used anyway)
-  void cleanUp() {
-    vector<vector<bool>>().swap(oob_indices);
   }
 
 protected:
@@ -93,10 +82,7 @@ protected:
 
   // function to compute all quantities of interest after the forest is grown
   void computeForestQuantities();
-  vector<vector<double>> shuffledFeatureValues(const vector<vector<size_t>>& oob_indices_non_bool, size_t feature, int feature_seed);
 };
 
 void OOBNonBoolIndices(vector<vector<size_t>>& oob_indices_non_bool, const vector<vector<bool>>& oob_indices);
-vector<double> matrixRtoCpp(const NumericMatrix& feature_matrix);
-
 #endif // FOREST_H

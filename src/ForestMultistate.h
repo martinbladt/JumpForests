@@ -14,9 +14,6 @@ public:
   // grows a multi-state forest with multi-threading
   void grow();
 
-  // predicts the Nelson-Aalen estimator for observation x
-  vector<double> predict(const vector<double>& x);
-
   // get info
   const vector<double>& getEventTimes() const {
     return unique_event_times;

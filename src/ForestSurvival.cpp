@@ -175,24 +175,6 @@ void SurvivalForest::grow() {
     computeForestQuantities();
 }
 
-// functions for predicting with survival forests
-//--------------------------------------------------------------------------------------
-
-vector<double> SurvivalForest::predict(const vector<double>& x) {
-    vector<double> result(num_unique_event_times, 0);
-    for (const auto& base_tree : trees) {
-        SurvivalTree* tree = static_cast<SurvivalTree*>(base_tree.get());
-        const vector<double>& prediction = tree->getCHF()[tree->predictionLeafID(x)];
-        for (size_t t = 0; t < num_unique_event_times; ++t) {
-            result[t] += prediction[t];
-        }
-    }
-    for (size_t i = 0; i < num_unique_event_times; ++i) {
-        result[i] /= ntrees;
-    }
-    return result;
-}
-
 /*
 
 Computes all predictions, both in-bag and OOB. The first two flattened vectors are the in-bag and OOB

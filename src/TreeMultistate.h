@@ -62,18 +62,7 @@ public:
   ValueType predict(const vector<double>& x) override {
     return na[predictionLeafID(x)];
   }
-  vector<double> predictInitDist(const vector<double>& x) {
-    return init_dist[predictionLeafID(x)];
-  }
-
-  vector<double> computePredictions(const Data& new_data);   // not needed (so remove in Tree)
-  vector<vector<double>> computePredictions(bool compute_initial, bool compute_censoring, const Data& new_data = Data());
   vector<vector<double>> computeErrorPredictions(const Data& new_data = Data()); // computes only occupation and censoring predictions needed for scoring
-
-  // VIMP prediction for multi-state trees (to be investigated)
-  ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
-    return na[predictionLeafIDVIMP(x, feature, rng)];
-  }
 
   // when the censoring Kaplan-Meier estimators have to be populated after fitting
   void resizeKM() {
@@ -207,12 +196,6 @@ vector<bool> computeStateIndicatorsMultistate(const Data& data, const vector<siz
                                               size_t num_unique_event_times);
 
 // error computations for multi-states
-vector<double> computeBrierScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
-                                   const List& occupation_probs, const vector<double>& state_weights);
-vector<double> computeKLScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
-                            const List& occupation_probs, const vector<double>& state_weights);
-vector<double> computeSphericalScoreMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
-                                               const List& occupation_probs, const vector<double>& state_weights);
 vector<double> computeKLScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
                                    const vector<double>& occupation_probs, const vector<double>& state_weights);
 vector<double> computeBrierScoreCppMultistate(const vector<bool>& states_ind, const vector<double>& weights, const vector<double>& unique_event_times,
@@ -221,8 +204,6 @@ vector<double> computeSphericalScoreCppMultistate(const vector<bool>& states_ind
                                                   const vector<double>& occupation_probs, const vector<double>& state_weights);
 
 // miscellaneous functions related to multi-states
-vector<double> AalenJohansen(const vector<double>& na, uint8_t num_states);
 vector<double> occupationProbabilitiesCpp(const vector<double>& na, const vector<double>& init, size_t num_states, size_t num_estimators);
-vector<double> occupationProbabilities(const List& na, const List& init, size_t num_states);
 
 #endif // TREE_MULTISTATE_H

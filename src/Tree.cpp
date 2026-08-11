@@ -100,53 +100,6 @@ size_t Tree::predictionLeafIDPermuted(size_t observation, size_t feature, double
     return current_node;
 }
 
-size_t Tree::predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
-    //uniform_int_distribution<size_t> daughter_id(0, 1);
-    size_t current_node = 0;
-    const vector<bool>& categorical = data->getCategorical();
-    while (left_daughters[current_node] != 0) { // while not yet in a terminal node
-        size_t split_feature = feature_IDs[current_node];
-        size_t left_daughter = left_daughters[current_node];
-        // if the feature in the current node equals the chosen feature, make daughter assignment random
-        if (split_feature == feature) {
-            size_t left_daughter_size = node_sizes[left_daughter];
-            size_t right_daughter_size = node_sizes[left_daughter + 1];
-            discrete_distribution<size_t> daughter_id({
-                static_cast<double>(left_daughter_size),
-                static_cast<double>(right_daughter_size)
-            });
-            size_t daughter = daughter_id(rng);
-            //Rcout << "daughter:" << daughter << endl;
-            current_node = left_daughter + daughter;
-        }
-        // if not, do prediction as normal
-        else {
-            // if the feature is categorical, check whether the coordinate of x belongs to the left or right subset
-            if (categorical[split_feature]) {
-                const vector<double>& left_subset = thresholds[current_node];
-                if (find(left_subset.begin(), left_subset.end(), x[split_feature]) != left_subset.end()) {
-                    current_node = left_daughter;
-                }
-                else {
-                    // right daughter is always the left plus one
-                    current_node = left_daughter + 1;
-                }
-            }
-            // if the feature is continuous, check whether the coordinate of x is below the threshold
-            else {
-                if (x[split_feature] <= thresholds[current_node][0]) {
-                    current_node = left_daughter;
-                }
-                else {
-                    // right daughter is always the left plus one
-                    current_node = left_daughter + 1;
-                }
-            }
-        }
-    }
-    return current_node;
-}
-
 size_t Tree::predictionLeafIDVIMP(size_t observation, size_t feature, mt19937& rng) {
     size_t current_node = 0;
     const vector<bool>& categorical = data->getCategorical();

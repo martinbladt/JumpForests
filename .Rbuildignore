@@ -8,5 +8,5 @@
 ^R/.*\.Rd$
 ^R/JumpForests\.Rproj$
 ^src/old\.R$
-^src/RcppExports\.R$
 ^src/TreeSurvival\.r$
+^removed\.cpp$

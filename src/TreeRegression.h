@@ -42,11 +42,6 @@ public:
     return means[predictionLeafID(prediction_data, observation)];
   }
   vector<double> computePredictions(const Data& new_data);
-  // VIMP prediction for regression trees
-  ValueType predictVIMP(const vector<double>& x, size_t feature, mt19937& rng) {
-    return means[predictionLeafIDVIMP(x, feature, rng)];
-  }
-
 private:
   struct MeanComponents {
     long double sum = 0;

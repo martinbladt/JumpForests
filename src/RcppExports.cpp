@@ -441,93 +441,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// testList
-List testList();
-RcppExport SEXP _JumpForests_testList() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(testList());
-    return rcpp_result_gen;
-END_RCPP
-}
-// extract_column
-int extract_column(DataFrame data, size_t index);
-RcppExport SEXP _JumpForests_extract_column(SEXP dataSEXP, SEXP indexSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< DataFrame >::type data(dataSEXP);
-    Rcpp::traits::input_parameter< size_t >::type index(indexSEXP);
-    rcpp_result_gen = Rcpp::wrap(extract_column(data, index));
-    return rcpp_result_gen;
-END_RCPP
-}
-// rcpp_hello_world
-List rcpp_hello_world();
-RcppExport SEXP _JumpForests_rcpp_hello_world() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(rcpp_hello_world());
-    return rcpp_result_gen;
-END_RCPP
-}
-// square_cpp
-double square_cpp(double x);
-RcppExport SEXP _JumpForests_square_cpp(SEXP xSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< double >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(square_cpp(x));
-    return rcpp_result_gen;
-END_RCPP
-}
-// timesTwoMatrix
-NumericMatrix timesTwoMatrix(NumericMatrix mat);
-RcppExport SEXP _JumpForests_timesTwoMatrix(SEXP matSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericMatrix >::type mat(matSEXP);
-    rcpp_result_gen = Rcpp::wrap(timesTwoMatrix(mat));
-    return rcpp_result_gen;
-END_RCPP
-}
-// sampler
-void sampler(int n, int k);
-RcppExport SEXP _JumpForests_sampler(SEXP nSEXP, SEXP kSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< int >::type k(kSEXP);
-    sampler(n, k);
-    return R_NilValue;
-END_RCPP
-}
-// silly_sampler
-void silly_sampler(int k);
-RcppExport SEXP _JumpForests_silly_sampler(SEXP kSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type k(kSEXP);
-    silly_sampler(k);
-    return R_NilValue;
-END_RCPP
-}
-// sampler_wrapper
-void sampler_wrapper(int n, int k, bool wr);
-RcppExport SEXP _JumpForests_sampler_wrapper(SEXP nSEXP, SEXP kSEXP, SEXP wrSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< int >::type n(nSEXP);
-    Rcpp::traits::input_parameter< int >::type k(kSEXP);
-    Rcpp::traits::input_parameter< bool >::type wr(wrSEXP);
-    sampler_wrapper(n, k, wr);
-    return R_NilValue;
-END_RCPP
-}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_JFCppTree", (DL_FUNC) &_JumpForests_JFCppTree, 15},
@@ -556,14 +469,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_JumpForests_testUniqueEventTimesThinning", (DL_FUNC) &_JumpForests_testUniqueEventTimesThinning, 2},
     {"_JumpForests_test_omp", (DL_FUNC) &_JumpForests_test_omp, 0},
     {"_JumpForests_getNodeSize", (DL_FUNC) &_JumpForests_getNodeSize, 2},
-    {"_JumpForests_testList", (DL_FUNC) &_JumpForests_testList, 0},
-    {"_JumpForests_extract_column", (DL_FUNC) &_JumpForests_extract_column, 2},
-    {"_JumpForests_rcpp_hello_world", (DL_FUNC) &_JumpForests_rcpp_hello_world, 0},
-    {"_JumpForests_square_cpp", (DL_FUNC) &_JumpForests_square_cpp, 1},
-    {"_JumpForests_timesTwoMatrix", (DL_FUNC) &_JumpForests_timesTwoMatrix, 1},
-    {"_JumpForests_sampler", (DL_FUNC) &_JumpForests_sampler, 2},
-    {"_JumpForests_silly_sampler", (DL_FUNC) &_JumpForests_silly_sampler, 1},
-    {"_JumpForests_sampler_wrapper", (DL_FUNC) &_JumpForests_sampler_wrapper, 3},
     {NULL, NULL, 0}
 };
 

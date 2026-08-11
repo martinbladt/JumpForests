@@ -37,9 +37,6 @@ struct Data {
   const double* get_x_row_ptr(size_t row) const {
     return x.data() + row * num_features;
   }
-  vector<double> get_x() const {
-    return x;
-  }
   vector<double> get_x_row(size_t row) const {
     vector<double> res(num_features);
     for (size_t i = 0; i < num_features; ++i) {
@@ -47,14 +44,6 @@ struct Data {
     }
     return res;
   }
-  vector<double> get_x_col(size_t col) const {
-    vector<double> res(num_obs);
-    for (size_t i = 0; i < num_obs; ++i) {
-      res[i] = x[i * num_features + col];
-    }
-    return res;
-  }
-
   // extract y for classification and regression
   double get_y(size_t row) const {
     return y[row];
@@ -108,12 +97,6 @@ struct Data {
   vector<size_t> getUniqueValues () const {
     return unique_values;
   }
-  vector<size_t> getResponseIndices () const {
-    return response_indices;
-  }
-  vector<size_t> getFeatureIndices () const {
-    return feature_indices;
-  }
   vector<string> getFeatureNames () const {
     return feature_names;
   }
@@ -154,8 +137,6 @@ private:
   vector<size_t> unique_values;                 // number of unique values for each feature
   vector<string> feature_names;                 // variable name for each feature
   vector<string> response_names;                // variable name for each response
-  vector<size_t> response_indices;              // the indices of the responses
-  vector<size_t> feature_indices;               // the indices of the features
   size_t num_classes;                           // the number of classes (only for classification)
   uint8_t max_response_length;                  // maximum number of jumps observed in the data (only for multi-state data)
   uint8_t num_states;                           // number of states in the multi-state model (only for multi-state data)

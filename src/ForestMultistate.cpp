@@ -264,25 +264,6 @@ void MultistateForest::grow() {
     computeForestQuantities();
 }
 
-// functions for predicting with multi-state forests
-//--------------------------------------------------------------------------------------
-
-vector<double> MultistateForest::predict(const vector<double>& x) {
-    const size_t prediction_size = num_unique_event_times * dim;
-    vector<double> result(prediction_size, 0);
-    for (const auto& base_tree : trees) {
-        MultistateTree* tree = static_cast<MultistateTree*>(base_tree.get());
-        const vector<double>& prediction = tree->getNA()[tree->predictionLeafID(x)];
-        for (size_t k = 0; k < prediction_size; ++k) {
-            result[k] += prediction[k];
-        }
-    }
-    for (double& value : result) {
-        value /= ntrees;
-    }
-    return result;
-}
-
 /*
 
 Computes all predictions, both in-bag and OOB, result is a vector with two, four or five flattened vectors

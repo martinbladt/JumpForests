@@ -15,11 +15,9 @@ Data::Data(DataFrame data, const vector<size_t>& response_indices, vector<size_t
            const vector<bool>& categorical, const vector<size_t>& unique) {
     this->num_obs = data.nrows();
     this->num_features = feature_indices.size();
-    this->response_indices = response_indices;
     this->num_responses = response_indices.size();
     this->num_classes = 0;
     sort(feature_indices.begin(), feature_indices.end());
-    this->feature_indices = feature_indices;
     CharacterVector column_names = data.names();
 
     x.assign(num_features * num_obs, 0);
@@ -119,7 +117,6 @@ Data::Data(List jump_data, uint8_t max_response_length, uint8_t num_states, Data
     this->num_features = feature_indices.size();
     this->max_response_length = max_response_length;
     this->num_states = num_states;
-    this->feature_indices = feature_indices;
     CharacterVector column_names = feature_data.names();
     
     // fill the response vectors if response variables are supplied

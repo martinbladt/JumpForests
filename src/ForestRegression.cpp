@@ -89,18 +89,6 @@ void RegressionForest::grow() {
     computeForestQuantities();
 }
 
-// functions for predicting with regression forests
-//--------------------------------------------------------------------------------------
-
-double RegressionForest::predict(const vector<double>& x) {
-    long double result = 0;
-    for (const auto& tree : trees) {
-        RegressionTree* regression_tree = static_cast<RegressionTree*>(tree.get());
-        result += regression_tree->predictValue(x);
-    }
-    return static_cast<double>(result / ntrees);
-}
-
 pair<vector<double>, vector<double>> RegressionForest::computePredictions() {
     size_t num_obs = data->getNumberOfObs();
     vector<double> predictions(num_obs);

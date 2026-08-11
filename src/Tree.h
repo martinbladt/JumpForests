@@ -36,8 +36,6 @@ public:
   size_t predictionLeafID(const Data& prediction_data, size_t observation);
   // as above, but substitutes one feature value (used by permutation VIMP)
   size_t predictionLeafIDPermuted(size_t observation, size_t feature, double value);
-  // returns the ID of the leaf containing x when computing VIMP (random daughter assignments of feature x)
-  size_t predictionLeafIDVIMP(const vector<double>& x, size_t feature, mt19937& rng);
   // as above, but routes a training observation without materialising its feature row
   size_t predictionLeafIDVIMP(size_t observation, size_t feature, mt19937& rng);
 
@@ -79,20 +77,6 @@ public:
     return prediction_node_IDs;
   }
 
-  const vector<size_t>& getNodeSizes() const {
-    return node_sizes;
-  }
-
-  // functions to set hyperparameters
-  void setMtry (unsigned int mtry) {
-    this->mtry = mtry;
-  }
-  void setMinNodeSize(unsigned int min_node_size) {
-    this->min_node_size = min_node_size;
-  }
-  void setnNSplits(unsigned int nsplits) {
-    this->nsplits = nsplits;
-  }
   shared_ptr<Data> getData() const {
     return data;
   }
@@ -148,8 +132,5 @@ protected:
 
 // find all unique values of a vector of size_t
 vector<double> uniqueValues(vector<double> input);
-
-// function to determine all 2-partitions of the vector feature_values
-vector<vector<double>> compute2Partitions(const vector<double>& feature_values);
 
 #endif // TREE_H
