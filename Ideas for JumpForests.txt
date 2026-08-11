@@ -1,3 +1,0 @@
-Ideas for JumpForests package
-
-- Allow the user to only compute predictions and errors for a transition between two particular states.
