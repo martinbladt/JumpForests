@@ -13,6 +13,7 @@ Provides random forest versions of the Nelson-Aalen and Aalen-Johansen estimator
 
 Authors:
 \itemize{
+  \item Martin Bladt \email{martinbladt@math.ku.dk}
   \item Rasmus Lemvig \email{rfl@math.ku.dk}
 }
 

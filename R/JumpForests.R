@@ -354,7 +354,7 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 
 #' Fit a JumpForests forest
 #'
-#' Fits a random forest for regression, survival, or multi-state data.
+#' Fits a random forest for regression, classification, survival, or multi-state data.
 #'
 #' @param formula Model formula.
 #' @param data Training data.
@@ -367,7 +367,7 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 #'   Gamma and inverse-Gaussian responses must be positive. Tweedie support
 #'   follows its power: real for \eqn{\xi \le 0}, non-negative counts at
 #'   \eqn{\xi = 1}, non-negative for \eqn{1 < \xi < 2}, and positive for
-#'   \eqn{\xi \ge 2}.
+#'   \eqn{\xi \ge 2}. 
 #' @param splitrule_par Numeric scalar for parameterised regression rules:
 #'   negative-binomial size \eqn{k > 0} (default 1), Tweedie power
 #'   \eqn{\xi \le 0} or \eqn{\xi \ge 1}, or Huber threshold
@@ -837,8 +837,18 @@ jfforest.vimp <- function(forest_list, feature = NULL, seed = NULL, method = "pe
   }
 }
 
-# prints all information about the tree. if full = TRUE, also print the full
-# tree (all thresholds etc.)
+#' Print information about a fitted JumpForests tree
+#'
+#' Displays summary information about a fitted tree, including tree type,
+#' data info, and training/prediction errors. Can optionally print full tree details.
+#'
+#' @param tree_list A fitted tree object returned by \code{\link{jftree}}.
+#' @param full If `TRUE`, also prints the full tree structure with all split
+#'   thresholds and feature IDs. Default is `FALSE`.
+#'
+#' @return Invisible NULL. Prints information to console as a side effect.
+#' @export
+#'
 print_tree <- function(tree_list, full = FALSE) {
   # print type of tree
   if (tree_list$tree.type == "Regression") {
@@ -942,6 +952,16 @@ print_tree <- function(tree_list, full = FALSE) {
   }
 }
 
+#' Print information about a fitted JumpForests forest
+#'
+#' Displays summary information about a fitted random forest, including forest type,
+#' data info, and out-of-bag errors.
+#'
+#' @param forest_list A fitted forest object returned by \code{\link{jfforest}}.
+#'
+#' @return Invisible NULL. Prints information to console as a side effect.
+#' @export
+#'
 print_forest <- function(forest_list) {
   # print type of forest
   if (forest_list$tree.type == "Regression") {
@@ -1116,9 +1136,18 @@ aj <- function(na, a0 = NULL) {
   res
 }
 
-# function for computing occupation probabilities
-# init is a vector of initial probabilities, a vector
-# na is the Nelson-Aalen estimator, a list of matrices
+#' Compute occupation probabilities from initial distribution and Nelson-Aalen estimator
+#'
+#' Computes state occupation probabilities by combining the initial state distribution
+#' with the Aalen-Johansen estimator derived from the Nelson-Aalen estimator.
+#'
+#' @param init A vector of initial state probabilities.
+#' @param na A Nelson-Aalen estimator object, typically a list of cumulative intensity
+#'   matrices from a survival or multi-state model.
+#'
+#' @return A list of occupation probability matrices.
+#' @export
+#'
 occupation_prob <- function(init, na) {
   lapply(aj(na), function(z) init %*% z)
 }

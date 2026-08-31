@@ -4,7 +4,12 @@
 \alias{jftree.error}
 \title{Compute tree prediction error}
 \usage{
-jftree.error(tree_list, new_data = NULL, jump_data = NULL, state_weights = NULL)
+jftree.error(
+  tree_list,
+  new_data = NULL,
+  jump_data = NULL,
+  state_weights = NULL
+)
 }
 \arguments{
 \item{tree_list}{A fitted tree object from [jftree()].}

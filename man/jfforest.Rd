@@ -92,5 +92,5 @@ for every other rule and model type.}
 A fitted forest object as a list.
 }
 \description{
-Fits a random forest for regression, survival, or multi-state data.
+Fits a random forest for regression, classification, survival, or multi-state data.
 }

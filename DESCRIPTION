@@ -16,5 +16,5 @@ Imports:
     utils
 LinkingTo: Rcpp
 SystemRequirements: C++17, OpenMP
-RoxygenNote: 7.3.2
 Encoding: UTF-8
+Config/roxygen2/version: 8.1.0

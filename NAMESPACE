@@ -7,12 +7,19 @@ export(jfforest.vimp)
 export(jftree)
 export(jftree.error)
 export(jftree.predict)
+export(occupation_prob)
+export(print_forest)
+export(print_tree)
 importFrom(Rcpp,evalCpp)
-importFrom(stats,density)
-importFrom(stats,optimize)
-importFrom(stats,rexp)
-importFrom(stats,runif)
-importFrom(stats,terms)
-importFrom(utils,head)
-importFrom(utils,tail)
+importFrom(stats,
+  density,
+  optimize,
+  rexp,
+  runif,
+  terms
+)
+importFrom(utils,
+  head,
+  tail
+)
 useDynLib(JumpForests, .registration = TRUE)

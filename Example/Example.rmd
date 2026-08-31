@@ -1,0 +1,254 @@
+---
+title: "JumpForests: An R package for random forests for jump processes"
+output: html_document
+bibliography: references.bib
+author: "Martin Bladt and Rasmus Frigaard Lemvig"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Plan:
+- The simple time-homogeneous Markov model with one covariate
+- A simulated very simple life insurance dataset with Poisson regression as benchmark, tune for the best splitting rule
+- Analysis of a real dataset (bmt?)
+
+This vignette highlights some simple applications of the *JumpForests* package. The package implements trees and random forests for regression, classification, survival and general multi-state models.
+As the latter is a novel contribution, we focus on this application in this vignette. To install the package, simply run the following command in R:
+
+```{r install, eval=FALSE}
+remotes::install_github("martinbladt/JumpForests", upgrade = "never")
+```
+
+We illustrate the use of the package in three cases, a simple time-homogeneous Markov model with one covariate, a simulated very simple life insurance dataset with Poisson regression as benchmark, and an analysis of a real dataset.
+
+## A Markov model with independent censoring and covariates
+
+We consider the following simple time-homogeneous Markov model with one covariate which was also illustrated in the vignette of the *AalenJohansen* [@BladtFurrer] package [here](https://cran.r-project.org/web/packages/AalenJohansen/vignettes/AalenJohansen-vignette.html):
+
+```{=latex}
+\begin{align*}
+\frac{\mathrm{d}\Lambda(t|x)}{\mathrm{d}t}=\lambda(t|x)=\frac{1}{1+x\cdot t}
+\begin{pmatrix}
+-2 & 1& 1 \\
+2 & -3 & 1 \\
+0 & 0 & 0
+\end{pmatrix}\!.
+\end{align*}
+```
+
+Here $X \sim \text{Unif}(0,1)$ and censoring is independent of the process and has the $\text{Unif}(0, 5)$ distribution. We use the *AalenJohansen* package to simulate $n = 5000$ samples.
+
+```{r sim}
+library(AalenJohansen)
+
+set.seed(2026)
+
+jump_rate <- function(i, t, u){
+  if(i == 1){
+    2
+  } else if(i == 2){
+    3
+  } else{
+    0
+  }
+}
+
+mark_dist <- function(i, s, v){
+  if(i == 1){
+    c(0, 1/2, 1/2)
+  } else if(i == 2){
+    c(2/3, 0, 1/3)
+  } else{
+    0
+  }
+}
+
+lambda <- function(t, x){
+  A <- matrix(c(2/(1+x*t)*mark_dist(1, t, 0), 3/(1+x*t)*mark_dist(2, t, 0), rep(0, 3)),
+              nrow = 3, ncol = 3, byrow = TRUE)
+  diag(A) <- -rowSums(A)
+  A
+}
+
+n <- 5000
+
+X <- runif(n)
+c <- runif(n, 0, 5)
+
+sim <- list()
+for(i in 1:n){
+  rates <- function(j, y, z){jump_rate(j, y, z)/(1+X[i]*y)}
+  sim[[i]] <- sim_path(sample(1:2, 1), rates = rates, dists = mark_dist,
+                       tn = c[i], bs = c(2*c[i], 3*c[i], 0))
+  sim[[i]]$X <- X[i]
+}
+```
+
+The degree of censoring is 
+
+```{r cens}
+sum(c == unlist(lapply(sim, FUN = function(z){tail(z$times, 1)}))) / n
+```
+
+In order to fit the jump forest below, we need to separate the covariates from the jump data.
+
+```{r data}
+feature_data <- data.frame(X = X)
+```
+
+The jump data needs to be a `list` of `list`s (one for each observation), one called `times` and the other called `states`. Additional elements in each list are ignored.
+
+### Fitting the JumpForest
+
+When fitting a JumpForest, relevant tuning hyperparameters are:
+
+* `min_node_size`: The minimal number of observations allowed in a terminal node.
+* `splitrule`: Which splitting rule to apply. So far, six are implemented, namely `logrank` (default), `gehan`, `taroneware`, `approxlogrank`, `petoprentice` and `flemingharrington`. The last splitting rule allows for additional parameters through the options `fh_weights_a` and `fh_weights_b`.
+* `max_depth`: The maximum allowed depth of a tree.
+* `mtry`: The number of covariates sampled in each split. Is by default equal to the smallest integer larger than the square root of the number of covariates.
+* `nsplits`: The number of split points sampled for each covariate when determining the best split. Is by default equal to 10.
+* `ntrees`: The number of trees in the forest. Is by default equal to 500 for multi-state forests.
+* `swr`: Whether to sample each bootstrap dataset with replacement (if `TRUE`). By default set to `FALSE`.
+* `sample_rate`: A number in $[0, 1]$ determining the fraction of observations used in a bootstrap sample. By default set to 0.7 when `swr = FALSE` and 1.0 otherwise (classic Efron bootstrap).
+
+There are also hyperparameters related specifically to `honest` trees and forests, but for the sake of brevity, we do not cover these here. To keep things simple, we only perform tuning over the first five splitting rules and different minimal node sizes. In our experience, these are also the most impactful of the parameters to apply tuning with.
+To assess the prediction error, we use the internal error estimates provided by the forest, namely the OOB error. The forest reports three error types that are all based on predicted occupation probabilities. For simplicity, we only consider the integrated Brier score.
+
+```{r tune, eval=FALSE}
+library(JumpForests)
+
+min_node_sizes <- c(25, 50, 75, 100, 125, 150, 175, 200, 250, 300)
+split_rules <- c("logrank", "gehan", "taroneware", "approxlogrank", "petoprentice")
+num_min_node_sizes <- length(min_node_sizes)
+num_split_rules <- length(split_rules)
+
+ibs <- matrix(rep(0, num_min_node_sizes * num_split_rules), nrow = num_split_rules)
+
+for (i in 1:num_split_rules) {
+    for (j in 1:num_min_node_sizes) {
+        fitted_forest <- jfforest(MM ~ ., data = sim, feature_data = feature_data, splitrule = split_rules[i],
+                                  min_node_size = min_node_sizes[j], seed = 2026, num_event_times = 500)
+        ibs[i, j] <- fitted_forest$ibs.normalised
+
+        # free memory when a forest is no longer used
+        rm('fitted_forest')
+        gc()
+
+        cat("Finished fitting forest", (i - 1) * num_min_node_sizes + j, "out of", num_min_node_sizes * num_split_rules, "\n")
+    }
+}
+ibs
+which(ibs == min(ibs), arr.ind = TRUE)[1, ]
+```
+
+It seems that approximate logrank splitting with minimal node size 250 is best. This leads to quite shallow trees, which is not surprising. With only one covariate, the data-generating mechanism is not very complex, and the gain in robustness from using shallow
+trees may beat the decrease in bias from growing deeper trees. We now fit the final forest. 
+
+```{r fit}
+forest <- jfforest(MM ~ ., data = sim, feature_data = feature_data, splitrule = "approxlogrank",
+                   min_node_size = 250, seed = 2026, save_predictions = FALSE)
+```
+
+Note the option `save_predictions = FALSE`. This means that the forest in-bag and OOB forest predictions are not saved, and in particular, the internal error estimates are not computed.
+This saves a significant amount of time and memory, and it is still possible to compute predictions for new test values. To obtain information about the fitted forest object, we recommend
+the function `print_forest`: 
+
+```{r info}
+print_forest(forest)
+```
+
+If `save_predictions` was set to `TRUE` (the default option) in the fitting above, the `print_forest` function also provides an error summary based on OOB data.
+
+Finally, some remarks on tuning in general:
+
+* Fitting a jump forest can be memory intensive in general. A way around this issue is to tune on a subsample of the data, which seems to work well for determining the optimal splitting rule. But be vary about the minimal node size, see the next bullet point.
+* In our experience, setting `min_node_size` to be slightly larger than the square root of the number of observations seems to work extremely well in general. We recommend to tune for values relatively close to this number and to avoid very small minimal node sizes.
+* An efficient way to increase computation time and reduce memory usage significantly is to adjust the number of event times used by the forest via `num_event_times`. Especially for continuous data, the number of event times explode for high $n$. 
+  Reducing `num_event_times` to e.g. 1000 or even 500 barely degrades performance in our experience.
+
+Regarding the last point, the number of event times (including censoring times) in the $n = 5000$ sample used above is
+
+```{r thin}
+length(unique(unlist(lapply(sim, function(z) z$times))))
+```
+
+This is a very large number, and reducing the number of event times to e.g. 500 as above (or even lower) is highly recommended.
+
+### Comparing with the conditional Aalen-Johansen estimator and Poisson regression
+
+```{r compare}
+x1 <- 0.2
+x2 <- 0.6
+x3 <- 0.8
+
+new_data <- data.frame(X1 = c(x1, x2, x3), X2 = c(0, 0, 0))
+forest_fit <- jfforest.predict(fitted_forest, new_data, compute_initial = TRUE)
+
+fit1 <- aalen_johansen(sim, x = x1)
+fit2 <- aalen_johansen(sim, x = x2)
+fit3 <- aalen_johansen(sim, x = x3)
+
+# compute the predictions from the conditional Aalen-Johansen estimator
+v11 <- unlist(lapply(fit1$Lambda, FUN = function(L) L[2,1]))
+v10 <- fit1$t
+v21 <- unlist(lapply(fit2$Lambda, FUN = function(L) L[2,1]))
+v20 <- fit2$t
+v31 <- unlist(lapply(fit3$Lambda, FUN = function(L) L[2,1]))
+v30 <- fit3$t
+p1 <- unlist(lapply(fit1$p, FUN = function(L) L[2]))
+P1 <- unlist(lapply(prodint(0, 5, 0.01, function(t){lambda(t, x = x1)}),
+FUN = function(L) (c(1/2, 1/2, 0) %*% L)[2]))
+p2 <- unlist(lapply(fit2$p, FUN = function(L) L[2]))
+P2 <- unlist(lapply(prodint(0, 5, 0.01, function(t){lambda(t, x = x2)}),
+FUN = function(L) (c(1/2, 1/2, 0) %*% L)[2]))
+
+# compute the predictios from the random forest
+times <- fitted_forest$unique.event.times
+v11_forest <- unlist(lapply(forest_fit[[1]][[1]], FUN = function(L) L[2,1]))
+v21_forest <- unlist(lapply(forest_fit[[1]][[2]], FUN = function(L) L[2,1]))
+v31_forest <- unlist(lapply(forest_fit[[1]][[3]], FUN = function(L) L[2,1]))
+#p1_forest <- unlist(lapply(aj, FUN = function(L) L[2]))
+#P1 <- unlist(lapply(prodint(0, 5, 0.01, function(t){lambda(times, x = x1)}),
+#FUN = function(L) (c(1/2, 1/2, 0) %*% L)[2]))
+
+# plot options
+par(mfrow = c(1, 2))
+par(mar = c(2.5, 2.5, 1.5, 1.5))
+options(vsc.dev.args = list(width = 1000, height = 600, res = 100))
+
+# cumulative hazard for the transition from 2 to 1 (cAJ)
+plot(v10, v11, type = "l", lty = 2, xlab = "", ylab = "", main = "Hazard (cAJ)", col = "red", xlim = c(0, 5), ylim = c(0, 4))
+lines(v10, 2/x1*log(1+x1*v10), col = "red")
+lines(v20, v21, lty = 2, col = "blue")
+lines(v20, 2/x2*log(1+x2*v20), col = "blue")
+lines(v30, v31, lty = 2, col = "darkgreen")
+lines(v30, 2/x3*log(1+x3*v30), col = "darkgreen")
+
+# occupation probability for state 2 (cAJ)
+plot(v10, p1, type = "l", lty = 2, xlab = "", ylab = "", main = "Probability (cAJ)", col = "red")
+lines(seq(0, 5, 0.01), P1, col = "red")
+lines(v20, p2, lty = 2, col = "blue")
+lines(seq(0, 5, 0.01), P2, col = "blue")
+
+# cumulative hazard for the transition from 2 to 1 (RF)
+plot(times, v11_forest, type = "l", lty = 2, xlab = "", ylab = "", main = "Hazard (RF)", col = "red", xlim = c(0, 5), ylim = c(0, 4))
+lines(times, 2/x1*log(1+x1*times), col = "red")
+lines(times, v21_forest, lty = 2, col = "blue")
+lines(times, 2/x2*log(1+x2*times), col = "blue")
+lines(times, v31_forest, lty = 2, col = "darkgreen")
+lines(times, 2/x3*log(1+x3*times), col = "darkgreen")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
