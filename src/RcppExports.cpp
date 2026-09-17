@@ -11,12 +11,12 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // JFCppTree
-List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, size_t num_event_times, NumericVector splitrule_par);
+List JFCppTree(unsigned int tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule, bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, size_t num_event_times, NumericVector splitrule_par);
 RcppExport SEXP _JumpForests_JFCppTree(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP max_depthSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP honestSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP num_event_timesSEXP, SEXP splitrule_parSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< uint >::type tree_type(tree_typeSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type tree_type(tree_typeSEXP);
     Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type mtry(mtrySEXP);
     Rcpp::traits::input_parameter< unsigned int >::type min_node_size(min_node_sizeSEXP);
@@ -146,12 +146,12 @@ BEGIN_RCPP
 END_RCPP
 }
 // JFCppForest
-List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times, NumericVector splitrule_par);
+List JFCppForest(unsigned int tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule, unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers, bool save_predictions, size_t num_event_times, NumericVector splitrule_par);
 RcppExport SEXP _JumpForests_JFCppForest(SEXP tree_typeSEXP, SEXP dfSEXP, SEXP mtrySEXP, SEXP min_node_sizeSEXP, SEXP max_depthSEXP, SEXP nsplitsSEXP, SEXP splitruleSEXP, SEXP ntreesSEXP, SEXP honestSEXP, SEXP swrSEXP, SEXP sample_rateSEXP, SEXP double_bootstrapSEXP, SEXP response_indicesSEXP, SEXP feature_indicesSEXP, SEXP categoricalSEXP, SEXP uniqueSEXP, SEXP seedSEXP, SEXP nworkersSEXP, SEXP save_predictionsSEXP, SEXP num_event_timesSEXP, SEXP splitrule_parSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< uint >::type tree_type(tree_typeSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type tree_type(tree_typeSEXP);
     Rcpp::traits::input_parameter< DataFrame >::type df(dfSEXP);
     Rcpp::traits::input_parameter< unsigned int >::type mtry(mtrySEXP);
     Rcpp::traits::input_parameter< unsigned int >::type min_node_size(min_node_sizeSEXP);
