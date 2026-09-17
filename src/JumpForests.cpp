@@ -172,7 +172,7 @@ tree_type:
 //--------------------------------------------------------------------------------------
 
 // [[Rcpp::export]]
-List JFCppTree(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule,
+List JFCppTree(unsigned int tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule,
                bool honest, NumericVector response_indices, NumericVector feature_indices, LogicalVector categorical, NumericVector unique, 
                unsigned int seed, size_t num_event_times = 0, NumericVector splitrule_par = NumericVector()) {
   
@@ -1080,7 +1080,7 @@ List JFCppTreeErrorMultistate(const List& JFTree, uint8_t max_response_length, u
 //--------------------------------------------------------------------------------------
 
 // [[Rcpp::export]]
-List JFCppForest(uint tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule,
+List JFCppForest(unsigned int tree_type, DataFrame df, unsigned int mtry, unsigned int min_node_size, double max_depth, unsigned int nsplits, CharacterVector splitrule,
     unsigned int ntrees, bool honest, bool swr, double sample_rate, bool double_bootstrap, NumericVector response_indices, NumericVector feature_indices, 
     LogicalVector categorical, NumericVector unique, unsigned int seed, unsigned int nworkers,
     bool save_predictions, size_t num_event_times = 0,
