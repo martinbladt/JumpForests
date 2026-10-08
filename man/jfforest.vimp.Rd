@@ -13,22 +13,66 @@ jfforest.vimp(
 )
 }
 \arguments{
-\item{forest_list}{A fitted forest object from [jfforest()].}
+\item{forest_list}{A fitted forest object from \code{\link[=jfforest]{jfforest()}}.}
 
-\item{feature}{Optional feature name.}
+\item{feature}{Name of one fitted feature, or \code{NULL} (the default) to
+compute importance for every feature.}
 
-\item{seed}{Optional random seed.}
+\item{seed}{Random seed for the perturbations. \code{NULL} draws a seed using
+R's current random-number state; supply a seed for reproducible results.}
 
-\item{method}{Importance method, `"permute"` or `"random"`.}
+\item{method}{Importance method. \code{"permute"} (the default) shuffles the
+selected feature among each tree's OOB observations. \code{"random"} sends
+observations to a random daughter whenever that feature is used for a
+split, with probabilities proportional to the daughter node sizes.}
 
-\item{loss}{Loss function for importance: `"mse"` for regression,
-`"misc"` or `"brier"` for classification, and `"concordance"`, `"brier"`,
-or `"kl"` for survival; and `"brier"`, `"kl"`, or `"spherical"` for
-multi-state forests. `"default"` selects the forest-type default.}
+\item{loss}{Loss function for importance: \code{"mse"} for regression,
+\code{"misc"} or \code{"brier"} for classification, and \code{"concordance"}, \code{"brier"},
+or \code{"kl"} for survival; and \code{"brier"}, \code{"kl"}, or \code{"spherical"} for
+multi-state forests. \code{"default"} (the default) selects \code{"mse"}, \code{"misc"},
+\code{"concordance"}, or \code{"brier"} for regression, classification, survival,
+or multi-state forests, respectively.}
 }
 \value{
-Variable importance values.
+A VIMP-only list with class \code{jf_vimp}, for both single-feature and
+all-feature calls. Its \code{vimp} field is a named list of numeric importance
+values. Use \code{result$vimp} for all computed values or
+\code{result$vimp[["feature_name"]]} for one feature. Printing displays the
+first 20 values; use \code{print(result, n = Inf)} to display all values.
 }
 \description{
 Variable importance for a fitted forest
+}
+\details{
+Importance compares each tree's OOB loss before and after
+perturbing the selected feature, without refitting the tree. Positive
+values mean that perturbing the feature worsens predictions; values near
+zero indicate little change, and negative values mean that perturbation
+improves predictions on the OOB observations. Values are signed loss
+differences, not percentages, and depend on the selected loss and method.
+
+Tree contributions are averaged over trees with a defined OOB loss.
+For survival with \code{method = "random"} and \code{loss = "concordance"}, the
+average is weighted by each tree's OOB observation count. Concordance
+importance uses the decrease in C-index, equivalently the increase in
+\code{1 - C-index}.
+
+Regression uses mean squared error, and classification uses
+misclassification rate or the normalised Brier scale described in
+\code{\link[=jfforest.error]{jfforest.error()}}. Survival and multi-state probability scores use
+censoring weights and time-normalised integrated losses. Multi-state
+scores evaluate state occupation probabilities derived from leaf
+Nelson-Aalen estimators and initial distributions; their state weights
+are always \code{1 / num_states} for Brier and spherical scores and 1 for
+Kullback-Leibler loss, regardless of \code{state_weights} used during fitting.
+Censoring weights from the unperturbed leaf assignments are retained
+when evaluating perturbed predictions.
+
+The forest must have OOB observations; sampling without replacement at
+\code{sample_rate = 1} leaves none. Survival concordance also needs comparable
+survival pairs, and probability scores need observed event times.
+Required leaf estimates are computed when needed, so fitting with
+\code{save_predictions = FALSE} does not prevent VIMP calculation.
+For an all-feature call, separate seeds are generated for each feature;
+a single-feature call with the same seed need not give the identical value.
 }

@@ -170,4 +170,81 @@ stopifnot(
   zero_denominator_error$normalised.IS.error <= 1
 )
 
-message("Spherical multi-state error tests passed")
+local({
+  expect_probability_error <- function(expression, pattern) {
+    error <- tryCatch({ force(expression); NULL }, error = identity)
+    stopifnot(
+      inherits(error, "error"),
+      grepl(pattern, conditionMessage(error), fixed = TRUE),
+      is.null(conditionCall(error))
+    )
+  }
+
+  zero <- matrix(0, 2, 2)
+  first <- matrix(c(-0.2, 0, 0.2, 0), 2, 2)
+  last <- matrix(c(-0.5, 0, 0.5, 0), 2, 2)
+  na <- list(zero, first, last)
+  original <- na
+  expected <- matrix(c(0.56, 0, 0.44, 1), 2, 2)
+  stopifnot(
+    isTRUE(all.equal(transition_prob(na)[[3]], expected)),
+    isTRUE(all.equal(occupation_prob(c(0.7, 0.3), na)[[3]], matrix(c(0.392, 0.608), nrow = 1))),
+    identical(transition_prob(list(zero)), list(diag(2))),
+    identical(occupation_prob(c(1, 0), list(zero)), list(matrix(c(1, 0), nrow = 1))),
+    identical(na, original)
+  )
+
+  nonfinite <- first
+  nonfinite[1, 2] <- NA_real_
+  wrong_diagonal <- first
+  wrong_diagonal[1, 1] <- 0
+  negative_intensity <- matrix(c(0.2, 0, -0.2, 0), 2, 2)
+  oversized_increment <- matrix(c(-1.2, 0, 1.2, 0), 2, 2)
+  prediction_result <- jftree.predict(tree, compute_initial = TRUE)
+  invalid_inputs <- list(
+    list(input = NULL, pattern = "`na` is NULL"),
+    list(input = list(), pattern = "non-empty list"),
+    list(input = c(0, 0.2), pattern = "non-empty list"),
+    list(input = zero, pattern = "non-empty list"),
+    list(input = as.data.frame(zero), pattern = "non-empty list"),
+    list(input = list(na), pattern = "one individual's estimator"),
+    list(input = list(matrix("text", 2, 2)), pattern = "square numeric matrix"),
+    list(input = list(matrix(0, 2, 3)), pattern = "non-empty square matrix"),
+    list(input = list(matrix(numeric(), 0, 0)), pattern = "non-empty square matrix"),
+    list(input = list(zero, matrix(0, 3, 3)), pattern = "matching na[[1]]"),
+    list(input = list(zero, nonfinite), pattern = "must be finite"),
+    list(input = list(zero, wrong_diagonal), pattern = "invalid diagonal"),
+    list(input = list(zero, negative_intensity), pattern = "negative off-diagonal"),
+    list(input = list(first), pattern = "zero matrix at time zero"),
+    list(input = list(zero, last, first), pattern = "event-time order"),
+    list(input = list(zero, oversized_increment), pattern = "greater than one"),
+    list(input = tree, pattern = "fitted model"),
+    list(input = tree$predictions, pattern = "all individuals"),
+    list(input = prediction_result, pattern = "complete prediction result")
+  )
+  for (case in invalid_inputs) {
+    expect_probability_error(transition_prob(case$input), case$pattern)
+    expect_probability_error(occupation_prob(c(1, 0), case$input), case$pattern)
+  }
+
+  expect_probability_error(transition_prob(), "`na` is missing")
+  expect_probability_error(occupation_prob(na = na), "`init` is missing")
+  expect_probability_error(occupation_prob(init = c(1, 0)), "`na` is missing")
+  expect_probability_error(occupation_prob(NULL, na), "compute_initial = TRUE")
+  expect_probability_error(occupation_prob(list(c(1, 0)), na), "numeric vector")
+  expect_probability_error(occupation_prob(matrix(c(1, 0), nrow = 1), na), "numeric vector")
+  expect_probability_error(occupation_prob(c("1", "0"), na), "numeric vector")
+  expect_probability_error(occupation_prob(numeric(), na), "must contain 2 probabilities")
+  expect_probability_error(occupation_prob(c(1, 0, 0), na), "must contain 2 probabilities")
+  expect_probability_error(occupation_prob(c(NA_real_, 1), na), "must be finite")
+  expect_probability_error(occupation_prob(c(Inf, 0), na), "must be finite")
+  expect_probability_error(occupation_prob(c(-0.1, 1.1), na), "between zero and one")
+  expect_probability_error(occupation_prob(c(0.5, 0.4), na), "sum to one")
+
+  # Small floating point errors in a fitted cumulative diagonal are tolerated.
+  rounded <- na
+  rounded[[3]][1, 1] <- rounded[[3]][1, 1] + 1e-12
+  stopifnot(all(is.finite(unlist(transition_prob(rounded)))))
+})
+
+message("Spherical multi-state error and probability input validation tests passed")

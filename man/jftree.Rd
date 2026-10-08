@@ -23,56 +23,98 @@ jftree(
 )
 }
 \arguments{
-\item{formula}{Model formula.}
+\item{formula}{Model formula: \code{y ~ x1 + x2} for regression or classification,
+\code{Surv(time, status) ~ x1 + x2} for survival (\code{status = 1} for an event,
+\code{0} for censoring), or \code{MM ~ x1 + x2} for multi-state models. A numeric
+response selects regression; a factor, character, or logical response
+selects classification. Convert numeric class labels to a factor to fit
+a classification tree. Numeric features are treated as continuous;
+factor, character, and logical features are treated as categorical.}
 
-\item{data}{Training data.}
+\item{data}{Training data. A data.frame including both responses and features for regression,
+classification and survival. For multi-state models, a list of lists (one for each
+observation), each containing two vectors, \code{"times"} (observed jump times) and
+\code{"states"} (the state occupied at the corresponding time). The states must be encoded
+as integers. Repetition of the final state indicates censoring.}
 
-\item{feature_data}{Optional feature data for multi-state models.}
+\item{feature_data}{Feature data as a data.frame. Only required for multi-state models.}
 
-\item{splitrule}{Splitting rule. For regression, choose `"mse"` (default),
-`"variance"` (an alias for `"mse"`), `"mae"`, `"binomial"`,
-`"negativebinomial"`, `"poisson"`, `"gamma"`, `"inversegaussian"`,
-`"tweedie"`, or `"huber"`. Binomial responses must lie in `[0, 1]`;
+\item{splitrule}{Splitting rule. \code{NULL} uses the model-specific defaults
+below. For regression, choose \code{"mse"} (default),
+\code{"variance"} (an alias for \code{"mse"}), \code{"mae"}, \code{"binomial"},
+\code{"negativebinomial"}, \code{"poisson"}, \code{"gamma"}, \code{"inversegaussian"},
+\code{"tweedie"}, or \code{"huber"}. Binomial responses must lie in \verb{[0, 1]};
 negative-binomial and Poisson responses must be non-negative integers;
 Gamma and inverse-Gaussian responses must be positive. Tweedie support
 follows its power: real for \eqn{\xi \le 0}, non-negative counts at
 \eqn{\xi = 1}, non-negative for \eqn{1 < \xi < 2}, and positive for
-\eqn{\xi \ge 2}.}
+\eqn{\xi \ge 2}. For classification, choose \code{"gini"} (default), \code{"entropy"},
+\code{"misc"}, \code{"twoing"} or \code{"hellinger"}. For survival, choose \code{"logrank"}
+(default), \code{"approxlogrank"} or \code{"conserve"}. For multi-state models,
+choose \code{"logrank"} (default), \code{"gehan"}, \code{"taroneware"}, \code{"approxlogrank"},
+\code{"conserve"}, \code{"petoprentice"} or \code{"flemingharrington"}. Choosing \code{"flemingharrington"}
+allows for specifying the weights, see the options \code{"fh_weights_a"} and
+\code{"fh_weights_b"}.}
 
-\item{mtry}{Number of candidate features at each split.}
+\item{mtry}{Number of randomly selected candidate features at each split.
+\code{NULL} uses \code{ceiling(sqrt(p))}, where \code{p} is the number of features.}
 
-\item{min_node_size}{Minimal node size.}
+\item{min_node_size}{Minimum number of observations required in each
+daughter node for a split. \code{NULL} uses 5 for regression, 1 for
+classification, 15 for survival, and 20 for multi-state models.}
 
 \item{max_depth}{Maximum depth of the tree, where the root has depth zero.
-`NULL` (the default) imposes no depth limit.}
+\code{NULL} (the default) imposes no depth limit.}
 
-\item{nsplits}{Number of split points per feature.}
+\item{nsplits}{Number of randomly sampled candidate thresholds per
+continuous feature, or candidate partitions per categorical feature.
+Defaults to 10; fewer candidates are used if fewer distinct splits exist.}
 
-\item{honest}{Whether to use honest splitting.}
+\item{honest}{Whether to split the observations into approximately equal
+sets for choosing splits and estimating leaf predictions. Defaults to
+\code{FALSE}, which uses the same observations for both tasks.}
 
-\item{seed}{Optional random seed.}
+\item{seed}{Random seed. \code{NULL} draws a seed using R's current random-number
+state; supply a seed for reproducible fitting.}
 
-\item{num_event_times}{Maximum number of event times to use (only relevant for survival and multi-states)}
+\item{num_event_times}{Maximum number of times in the prediction grid for
+survival and multi-state models. The default, 0, retains the full grid.
+A positive value coarsens the grid when necessary; the resulting times
+are stored in \code{unique.event.times}.}
 
-\item{state_weights}{Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)}
+\item{state_weights}{Numeric vector of finite non-negative weights, one
+per state in the order \verb{1, ..., num_states}, for multi-state error
+calculations. Supplied weights are used directly for all scores and are
+not normalised. \code{NULL} uses \code{1 / num_states} per state for Brier and
+spherical scores and 1 per state for Kullback-Leibler loss. These weights
+affect error calculations, not splitting or prediction.}
 
 \item{fh_weights_a}{Optional finite non-negative Fleming--Harrington
-a-exponents, one for each state `1, ..., num_states`. `NULL` uses one for
+a-exponents, one for each state \verb{1, ..., num_states}. \code{NULL} uses one for
 every state. Only valid for multi-state trees with
-`splitrule = "flemingharrington"`.}
+\code{splitrule = "flemingharrington"}. A transition from state \code{s} is weighted
+by \eqn{p_s(t)^{a_s}(1-p_s(t))^{b_s}}, where \eqn{p_s(t)} is the
+estimated occupation probability of state \code{s} in the parent node.}
 
 \item{fh_weights_b}{Optional finite non-negative Fleming--Harrington
-b-exponents, with the same ordering and default as `fh_weights_a`.}
+b-exponents, with the same ordering and default as \code{fh_weights_a}.}
 
 \item{splitrule_par}{Numeric scalar for parameterised regression rules:
 negative-binomial size \eqn{k > 0} (default 1), Tweedie power
 \eqn{\xi \le 0} or \eqn{\xi \ge 1}, or Huber threshold
-\eqn{\delta > 0}. It is required for Tweedie and Huber and must be `NULL`
-for every other rule and model type.}
+\eqn{\delta > 0}. It is required for Tweedie and Huber and must be \code{NULL}
+for every other rule and model type. The default is \code{NULL}.}
 }
 \value{
-A fitted tree object as a list.
+A fitted tree object as a list with class \code{jf_tree}. Use \code{print()}
+for a summary and \code{predict()} for predictions. Multi-state prediction
+lists print compact summaries. Training predictions are stored in
+\code{predictions}. For survival and multi-state trees, \code{censoring} contains
+leaf Kaplan-Meier estimates of the censoring survival probability, with
+one row per observation on \code{unique.event.times}. The estimates on the
+full censoring-time grid are in \code{censoring.full}, with times in
+\code{censoring.times}.
 }
 \description{
-Fits a single regression, survival, or multi-state tree.
+Fits a single regression, classification, survival, or multi-state tree.
 }

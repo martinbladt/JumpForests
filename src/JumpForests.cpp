@@ -1339,7 +1339,7 @@ List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t 
 //--------------------------------------------------------------------------------------
 
 // for computing all predictions (in-bag and OOB) of the dataset
-void JFCppForestPredict(List& JFForest, bool compute_censoring) {
+void JFCppForestPredict(List& JFForest, bool compute_censoring, bool compute_initial) {
   string type = as<string>(JFForest["tree.type"]);
   if (type == "Regression") {
     RegressionForest* forest = ((XPtr<RegressionForest>) JFForest["Forest"]).get();
@@ -1432,20 +1432,20 @@ void JFCppForestPredict(List& JFForest, bool compute_censoring) {
     // compute predictions via multi-threading
     MultistateForest* forest = ((XPtr<MultistateForest>) JFForest["Forest"]).get();
 
-    // Censoring estimators only exist in the leaves when predictions were saved
-    // during fitting. Nelson--Aalen and initial-state estimates are always stored.
-    bool compute_multistate_censoring = forest->predictionsSaved();
-    const vector<vector<double>>& predictions_cpp = forest->computePredictions(true, compute_multistate_censoring);
+    if (compute_censoring && !forest->predictionsSaved()) {
+      forest->computePredictionsCensoring();
+    }
+    const vector<vector<double>>& predictions_cpp = forest->computePredictions(compute_initial, compute_censoring);
     size_t num_unique_event_times = forest->getNumUniqueEventTimes();
     size_t num_obs = JFForest["num.obs"];
     size_t num_states = forest->getData()->getNumberOfStates();
     size_t dim = num_states * num_states;
     List predictions(num_obs);        // each prediction is a list of matrices
     List predictions_oob(num_obs);
-    List predictions_init(num_obs);   // each predicted initial distribution is a vector
-    List predictions_init_oob(num_obs);
-    NumericMatrix censoring_oob(compute_multistate_censoring ? num_obs : 0,
-                                compute_multistate_censoring ? num_unique_event_times : 0);
+    List predictions_init(compute_initial ? num_obs : 0);   // each predicted initial distribution is a vector
+    List predictions_init_oob(compute_initial ? num_obs : 0);
+    NumericMatrix censoring_oob(compute_censoring ? num_obs : 0,
+                                compute_censoring ? num_unique_event_times : 0);
 
     for (size_t i = 0; i < num_obs; ++i) {
       List rpred(num_unique_event_times);                     // list of NumericMatrix for a single prediction
@@ -1466,36 +1466,42 @@ void JFCppForestPredict(List& JFForest, bool compute_censoring) {
       predictions[i] = rpred;
       predictions_oob[i] = rpred_oob;
 
-      NumericVector rpred_init(num_states);
-      NumericVector rpred_init_oob(num_states);
+      if (compute_initial) {
+        NumericVector rpred_init(num_states);
+        NumericVector rpred_init_oob(num_states);
 
-      // save predicted initial distributions
-      for (size_t j = 0; j < num_states; ++j) {
-        rpred_init[j] = predictions_cpp[2][i * num_states + j];
-        rpred_init_oob[j] = predictions_cpp[3][i * num_states + j];
+        // save predicted initial distributions
+        for (size_t j = 0; j < num_states; ++j) {
+          rpred_init[j] = predictions_cpp[2][i * num_states + j];
+          rpred_init_oob[j] = predictions_cpp[3][i * num_states + j];
+        }
+        predictions_init[i] = rpred_init;
+        predictions_init_oob[i] = rpred_init_oob;
       }
-      predictions_init[i] = rpred_init;
-      predictions_init_oob[i] = rpred_init_oob;
-      if (compute_multistate_censoring) {
+      if (compute_censoring) {
+        size_t censoring_index = compute_initial ? 4 : 2;
         for (size_t t = 0; t < num_unique_event_times; ++t) {
-          censoring_oob(i, t) = predictions_cpp[4][i * num_unique_event_times + t];
+          censoring_oob(i, t) = predictions_cpp[censoring_index][i * num_unique_event_times + t];
         }
       }
     }
     // save predictions
     JFForest["predictions"] = predictions;
     JFForest["oob.predictions"] = predictions_oob;
-    JFForest["init"] = predictions_init;
-    JFForest["oob.init"] = predictions_init_oob;
-    if (compute_multistate_censoring) {
+    if (compute_initial) {
+      JFForest["init"] = predictions_init;
+      JFForest["oob.init"] = predictions_init_oob;
+    }
+    if (compute_censoring) {
       JFForest["censoring.oob"] = censoring_oob;
     }
   }
 }
 
 // [[Rcpp::export]]
-void JFCppForestPredictTraining(List& JFForest) {
-  JFCppForestPredict(JFForest);
+List JFCppForestPredictTraining(List& JFForest, bool compute_initial = true, bool compute_censoring = true) {
+  JFCppForestPredict(JFForest, compute_censoring, compute_initial);
+  return JFForest;
 }
 
 // [[Rcpp::export]]
@@ -1598,14 +1604,13 @@ List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVect
 }
 
 /*
-  if compute_initial = false (default), simply return a list of the predictions on the new data df
-  if compute_initial = true, return a list of two lists, one containing predictions on the new data
-  and the other containing predicted initial distributions
+  Return subject predictions directly unless an initial or censoring estimate
+  is requested. Optional estimates are included as named fields in the result.
 */
 
 // [[Rcpp::export]]
 List JFCppForestPredictMultistate(const List& JFForest, DataFrame df, NumericVector feature_indices,
-                          LogicalVector categorical, NumericVector unique, bool compute_initial) {
+                          LogicalVector categorical, NumericVector unique, bool compute_initial, bool compute_censoring) {
   // convert the input to C++ vectors
   vector<size_t> response_indices_cpp;  // need an empty vector for the response indices
   vector<size_t> feature_indices_cpp = as<vector<size_t>>(feature_indices);
@@ -1622,8 +1627,14 @@ List JFCppForestPredictMultistate(const List& JFForest, DataFrame df, NumericVec
   size_t dim = num_states * num_states;
   List predictions(num_obs);      // each prediction is a list of matrices
   List predictions_init(compute_initial ? num_obs : 0); // only allocate initial distributions when requested
+  NumericMatrix censoring(compute_censoring ? num_obs : 0,
+                          compute_censoring ? num_unique_event_times : 0);
+
+  if (compute_censoring && !forest->predictionsSaved()) {
+    forest->computePredictionsCensoring();
+  }
   
-  const vector<vector<double>>& predictions_cpp = forest->computePredictions(new_data, compute_initial, false);
+  const vector<vector<double>>& predictions_cpp = forest->computePredictions(new_data, compute_initial, compute_censoring);
   for (size_t i = 0; i < num_obs; ++i) {
     List rpred(num_unique_event_times);
     for (size_t t = 0; t < num_unique_event_times; ++t) {
@@ -1646,13 +1657,22 @@ List JFCppForestPredictMultistate(const List& JFForest, DataFrame df, NumericVec
       }
       predictions_init[i] = rpred_init;
     }
+    if (compute_censoring) {
+      const size_t censoring_index = compute_initial ? 2 : 1;
+      for (size_t t = 0; t < num_unique_event_times; ++t) {
+        censoring(i, t) = predictions_cpp[censoring_index][i * num_unique_event_times + t];
+      }
+    }
   }
 
-  if (compute_initial) {
-    List result = List::create(
-      Named("predictions") = predictions,
-      Named("initial") = predictions_init
-    );
+  if (compute_initial || compute_censoring) {
+    List result = List::create(Named("predictions") = predictions);
+    if (compute_initial) {
+      result["initial"] = predictions_init;
+    }
+    if (compute_censoring) {
+      result["censoring"] = censoring;
+    }
     return result;
   }
   return predictions;
@@ -2161,9 +2181,9 @@ double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name
   throw runtime_error("Type of forest not recognised");
 }
 
-// computes VIMP for every variable and saves the list of VIMP-values in JFForest (set seed for reproducibility)
+// computes and returns VIMP values for every variable (set seed for reproducibility)
 // [[Rcpp::export]]
-List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method, CharacterVector loss) {
+List JFCppForestVIMP(const List& JFForest, int seed, CharacterVector method, CharacterVector loss) {
   mt19937 random_number_generator(seed);
   Forest* forest = ((XPtr<Forest>) JFForest["Forest"]).get();
   size_t num_features = forest->getData()->getNumberOfFeatures();
@@ -2178,8 +2198,7 @@ List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method, Character
     VIMP[feature_names[i]] = JFCppForestVIMPFeature(JFForest, feature_names[i], feature_seed, method, loss);
   }
   
-  JFForest["vimp"] = VIMP;
-  return JFForest;
+  return VIMP;
 }
 
 // returns a list of the full tree table to be printed if the user wishes
@@ -2368,4 +2387,88 @@ int getNodeSize(const List& JFTree, const NumericVector& x) {
   Tree* tree = ((XPtr<Tree>) JFTree["Tree"]).get();
   vector<double> covariate = as<vector<double>>(x);
   return tree->nodeSize(covariate);
+}
+
+
+// Temporary until the variance estimators are directly implemented in each terminal node
+// Return averaged *individual-leaf* NA variance curves. Requires without-
+// replacement, non-honest trees, continuous untied events and an unthinned grid.
+// Forest scaling is deliberately left to the R caller.
+// [[Rcpp::export]]
+List JFCppForestLeafVarianceMultistate(
+    const List& JFForest, DataFrame df, NumericVector feature_indices,
+    LogicalVector categorical, NumericVector unique, IntegerVector event_ids,
+    IntegerMatrix transitions) {
+  if (as<bool>(JFForest["sampling.type"]) || as<bool>(JFForest["honest"]))
+    stop("Leaf NA variance currently requires non-honest sampling without replacement");
+  XPtr<MultistateForest> forest(JFForest["Forest"]);
+  if (!forest.get()) stop("Forest pointer is unavailable; refit the forest");
+  Data new_data(df, vector<size_t>(), as<vector<size_t>>(feature_indices),
+                as<vector<bool>>(categorical), as<vector<size_t>>(unique));
+  const auto& trees = forest->getTrees();
+  const size_t B = trees.size(), P = new_data.getNumberOfObs();
+  const size_t K = event_ids.size(), J = transitions.nrow();
+  const size_t S = forest->getData()->getNumberOfStates(), dim = S*S;
+  const size_t T = forest->getNumUniqueEventTimes();
+  if (!B || !P || !K || !J || transitions.ncol()!=2)
+    stop("Nonempty trees, profiles, event indices and transitions are required");
+  for (size_t k=0; k<K; ++k) {
+    if (event_ids[k]==NA_INTEGER || event_ids[k]<1 || size_t(event_ids[k])>T ||
+        (k && event_ids[k]<event_ids[k-1])) stop("Invalid event indices");
+  }
+  vector<size_t> entries(J);
+  for (size_t j=0; j<J; ++j) {
+    int from=transitions(j,0), to=transitions(j,1);
+    if (from<1 || to<1 || size_t(from)>S || size_t(to)>S || from==to)
+      stop("Transitions must be off-diagonal state pairs");
+    entries[j]=size_t(from-1)*S+size_t(to-1);
+  }
+  NumericVector A(K*J*P), mean_Q(K*J*P);
+  IntegerVector shape=IntegerVector::create(K,J,P);
+  A.attr("dim")=shape; mean_Q.attr("dim")=shape;
+  NumericMatrix leaf_ids(B,P), leaf_sizes(B,P);
+  for (size_t b=0; b<B; ++b) {
+    checkUserInterrupt();
+    auto* tree=static_cast<MultistateTree*>(trees[b].get());
+    // Cache by reached leaf within a tree: many profiles share mixed leaves.
+    std::map<size_t, vector<size_t>> reached;
+    for (size_t p=0; p<P; ++p) {
+      const size_t leaf=tree->predictionLeafID(new_data,p);
+      reached[leaf].push_back(p);
+      leaf_ids(b,p)=leaf+1;
+      leaf_sizes(b,p)=tree->nodeSize(new_data.get_x_row(p));
+    }
+    for (const auto& item: reached) {
+      const auto& na=tree->getNA()[item.first];
+      if (na.size()!=T*dim) stop("Unexpected leaf NA grid");
+      vector<double> leaf_Q(K*J,0.0);
+      for (size_t j=0; j<J; ++j) {
+        double previous=0.0, q=0.0;
+        size_t u=0;
+        for (size_t k=0; k<K; ++k) {
+          const size_t last=event_ids[k]-1;
+          for (; u<=last; ++u) {
+            const double current=na[u*dim+entries[j]];
+            const double jump=current-previous;
+            if (!std::isfinite(current) || jump < -1e-10)
+              stop("Nonfinite or decreasing leaf cumulative rate");
+            if (jump>0) q+=jump*jump;
+            previous=current;
+          }
+          leaf_Q[k+K*j]=q;
+        }
+      }
+      for (size_t p: item.second) {
+        for (size_t j=0; j<J; ++j) {
+          for (size_t k=0; k<K; ++k) {
+            const size_t out=k+K*(j+J*p);
+            A[out]+=na[size_t(event_ids[k]-1)*dim+entries[j]]/B;
+            mean_Q[out]+=leaf_Q[k+K*j]/B;
+          }
+        }
+      }
+    }
+  }
+  return List::create(Named("A")=A, Named("mean_leaf_Q")=mean_Q,
+                      Named("leaf_ids")=leaf_ids, Named("leaf_sizes")=leaf_sizes);
 }

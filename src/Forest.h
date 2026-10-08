@@ -39,6 +39,9 @@ public:
   shared_ptr<Data> getData() const {
     return data;
   }
+  const vector<unique_ptr<Tree>>& getTrees() const {
+    return trees;
+  }
 
 protected:
   // pointer to the data

@@ -37,8 +37,8 @@ JFCppForestMultistate <- function(jump_data, max_response_length, num_states, df
     .Call(`_JumpForests_JFCppForestMultistate`, jump_data, max_response_length, num_states, df_features, mtry, min_node_size, max_depth, nsplits, splitrule, ntrees, honest, swr, sample_rate, double_bootstrap, feature_indices, categorical, unique, seed, nworkers, save_predictions, state_weights, num_event_times, fh_weights_a, fh_weights_b)
 }
 
-JFCppForestPredictTraining <- function(JFForest) {
-    invisible(.Call(`_JumpForests_JFCppForestPredictTraining`, JFForest))
+JFCppForestPredictTraining <- function(JFForest, compute_initial = TRUE, compute_censoring = TRUE) {
+    .Call(`_JumpForests_JFCppForestPredictTraining`, JFForest, compute_initial, compute_censoring)
 }
 
 JFCppForestPredict <- function(JFForest, df, feature_indices, categorical, unique) {
@@ -49,8 +49,8 @@ JFCppForestPredictCensoring <- function(JFForest, df, feature_indices, categoric
     .Call(`_JumpForests_JFCppForestPredictCensoring`, JFForest, df, feature_indices, categorical, unique)
 }
 
-JFCppForestPredictMultistate <- function(JFForest, df, feature_indices, categorical, unique, compute_initial) {
-    .Call(`_JumpForests_JFCppForestPredictMultistate`, JFForest, df, feature_indices, categorical, unique, compute_initial)
+JFCppForestPredictMultistate <- function(JFForest, df, feature_indices, categorical, unique, compute_initial, compute_censoring) {
+    .Call(`_JumpForests_JFCppForestPredictMultistate`, JFForest, df, feature_indices, categorical, unique, compute_initial, compute_censoring)
 }
 
 JFCppForestErrorSurvivalExternal <- function(JFForest) {
@@ -103,5 +103,9 @@ test_omp <- function() {
 
 getNodeSize <- function(JFTree, x) {
     .Call(`_JumpForests_getNodeSize`, JFTree, x)
+}
+
+JFCppForestLeafVarianceMultistate <- function(JFForest, df, feature_indices, categorical, unique, event_ids, transitions) {
+    .Call(`_JumpForests_JFCppForestLeafVarianceMultistate`, JFForest, df, feature_indices, categorical, unique, event_ids, transitions)
 }
 

@@ -331,8 +331,22 @@ single_bootstrap_honest_forest <- jfforest(
   save_predictions = FALSE, seed = 302, nworkers = 1,
   fh_weights_a = c(0, 1, 2), fh_weights_b = c(2, 1, 0)
 )
+lazy_predictions_without_initial <- jfforest.predict(lazy_honest_forest)
+lazy_censoring <- jfforest.predict(lazy_honest_forest, compute_censoring = TRUE)
 lazy_predictions <- jfforest.predict(
   lazy_honest_forest, compute_initial = TRUE, compute_censoring = TRUE
+)
+saved_censoring <- jfforest.predict(forest_one_worker, compute_censoring = TRUE)
+new_data_censoring <- jfforest.predict(
+  single_bootstrap_honest_forest, new_data = features[1:3, , drop = FALSE],
+  compute_censoring = TRUE
+)
+new_data_both <- jfforest.predict(
+  single_bootstrap_honest_forest, new_data = features[1:3, , drop = FALSE],
+  compute_initial = TRUE, compute_censoring = TRUE
+)
+raw_predictions_without_initial <- JumpForests:::JFCppForestPredictTraining(
+  lazy_honest_forest, FALSE
 )
 stopifnot(
   identical(forest_one_worker$fh.weights.a, c(0, 0.5, 2)),
@@ -343,7 +357,28 @@ stopifnot(
   length(capture.output(JumpForests:::print_forest(single_bootstrap_honest_forest))) > 0,
   isTRUE(all.equal(forest_one_worker$predictions, forest_two_workers$predictions, tolerance = 0)),
   all(is.finite(unlist(lazy_predictions$predictions))),
-  all(is.finite(unlist(lazy_predictions$predictions.init))),
+  length(lazy_predictions$init) == length(paths),
+  all(is.finite(unlist(lazy_predictions$init))),
+  identical(dim(lazy_censoring$censoring.oob), c(length(paths), length(lazy_honest_forest$unique.event.times))),
+  is.null(lazy_censoring$init),
+  all(is.finite(lazy_censoring$censoring.oob)),
+  identical(lazy_censoring$censoring.oob, lazy_predictions$censoring.oob),
+  identical(saved_censoring$censoring.oob, forest_one_worker$censoring.oob),
+  identical(dim(new_data_censoring$censoring), c(3L, length(lazy_honest_forest$unique.event.times))),
+  is.null(new_data_censoring$initial),
+  all(is.finite(new_data_censoring$censoring)),
+  identical(new_data_censoring$censoring, new_data_both$censoring),
+  length(new_data_both$initial) == 3L,
+  inherits(lazy_predictions_without_initial, "jf_multistate_predictions"),
+  !"init" %in% names(lazy_predictions_without_initial),
+  is.null(lazy_predictions_without_initial$init),
+  is.null(raw_predictions_without_initial$init),
+  is.null(raw_predictions_without_initial$oob.init),
+  length(lazy_predictions_without_initial) == length(paths),
+  identical(lazy_predictions_without_initial[[1]], lazy_predictions$predictions[[1]]),
+  inherits(jfforest.predict(forest_one_worker), "jf_multistate_predictions"),
+  is.null(jfforest.predict(forest_one_worker)$init),
+  length(jfforest.predict(forest_one_worker, compute_initial = TRUE)$init) == length(paths),
   all(is.finite(lazy_predictions$censoring))
 )
 
@@ -431,5 +466,163 @@ assert_error(
   jfforest(y ~ x, ordinary_data, ntrees = 2, fh_weights_b = 1),
   "fh_weights_a and fh_weights_b are only valid for multi-state models"
 )
+
+# Check exact public fields for every flag combination and prediction path.
+local({
+  n <- 36L
+  paths <- lapply(seq_len(n), function(i) {
+    switch(
+      as.character(i %% 4L),
+      "0" = list(times = c(0, 0.5 + i / 100, 1.5 + i / 100), states = c(1L, 2L, 3L)),
+      "1" = list(times = c(0, 1 + i / 100), states = c(2L, 3L)),
+      "2" = list(times = c(0, 0.7 + i / 100, 1.2 + i / 100), states = c(1L, 2L, 2L)),
+      "3" = list(times = c(0, 1.1 + i / 100), states = c(1L, 1L))
+    )
+  })
+  features <- data.frame(X1 = seq_len(n), X2 = sin(seq_len(n)))
+
+  for (save_predictions in c(TRUE, FALSE)) {
+    for (use_new_data in c(FALSE, TRUE)) {
+      # Each path starts with a fresh forest so the censoring-only request also
+      # exercises deferred censoring estimation when predictions were not saved.
+      fit <- jfforest(
+        MM ~ X1 + X2, data = paths, feature_data = features,
+        ntrees = 8, min_node_size = 3, nsplits = 12, honest = FALSE,
+        save_predictions = save_predictions, seed = 415, nworkers = 1
+      )
+      new_data <- if (use_new_data) features[1:5, , drop = FALSE] else NULL
+      expected_subjects <- if (use_new_data) nrow(new_data) else n
+      expected_times <- length(fit$unique.event.times)
+
+      censoring_only <- jfforest.predict(
+        fit, new_data = new_data, compute_initial = FALSE, compute_censoring = TRUE
+      )
+      both <- jfforest.predict(
+        fit, new_data = new_data, compute_initial = TRUE, compute_censoring = TRUE
+      )
+      initial_only <- jfforest.predict(
+        fit, new_data = new_data, compute_initial = TRUE, compute_censoring = FALSE
+      )
+      neither <- jfforest.predict(
+        fit, new_data = new_data, compute_initial = FALSE, compute_censoring = FALSE
+      )
+
+      for (result in list(censoring_only, both, initial_only)) {
+        predictions <- result[["predictions", exact = TRUE]]
+        stopifnot(
+          inherits(result, "jf_multistate_prediction_result"),
+          inherits(predictions, "jf_multistate_predictions"),
+          length(predictions) == expected_subjects,
+          length(predictions[[1]]) == expected_times,
+          all(is.finite(predictions[[1]][[1]]))
+        )
+      }
+      stopifnot(
+        inherits(neither, "jf_multistate_predictions"),
+        length(neither) == expected_subjects,
+        identical(neither, both$predictions),
+        identical(censoring_only$predictions, both$predictions),
+        identical(initial_only$predictions, both$predictions),
+        !"init" %in% names(censoring_only),
+        is.null(censoring_only[["init", exact = TRUE]]),
+        !"censoring" %in% names(initial_only),
+        is.null(initial_only[["censoring", exact = TRUE]])
+      )
+
+      for (result in list(censoring_only, both)) {
+        censoring <- result[["censoring", exact = TRUE]]
+        stopifnot(
+          is.matrix(censoring),
+          identical(dim(censoring), c(expected_subjects, expected_times)),
+          all(is.finite(censoring)),
+          all(censoring >= 0 & censoring <= 1)
+        )
+        if (!use_new_data) {
+          stopifnot(identical(censoring, result[["censoring.oob", exact = TRUE]]))
+        }
+      }
+      stopifnot(identical(censoring_only$censoring, both$censoring))
+
+      for (result in list(initial_only, both)) {
+        initial <- result[["init", exact = TRUE]]
+        stopifnot(
+          length(initial) == expected_subjects,
+          all(lengths(initial) == 3L),
+          all(is.finite(unlist(initial))),
+          all(abs(vapply(initial, sum, numeric(1)) - 1) < 1e-12)
+        )
+        if (use_new_data) {
+          stopifnot(identical(initial, result[["initial", exact = TRUE]]))
+        }
+      }
+      stopifnot(identical(initial_only$init, both$init))
+
+      if (save_predictions && !use_new_data) {
+        stopifnot(identical(censoring_only$censoring, fit$censoring.oob))
+      }
+    }
+  }
+
+  # Individual trees share the forest prediction interface and print classes.
+  flags <- expand.grid(initial = c(FALSE, TRUE), censoring = c(FALSE, TRUE))
+  for (honest in c(FALSE, TRUE)) {
+    tree <- jftree(
+      MM ~ X1 + X2, data = paths, feature_data = features,
+      min_node_size = 3, nsplits = 12, honest = honest, seed = 416
+    )
+    stopifnot(
+      inherits(tree, "jf_multistate_tree"),
+      inherits(tree$predictions, "jf_multistate_predictions"),
+      length(capture.output(print(tree))) < 40L,
+      length(capture.output(print(tree$predictions))) < 8L
+    )
+    for (use_new_data in c(FALSE, TRUE)) {
+      new_data <- if (use_new_data) features[1:5, , drop = FALSE] else NULL
+      expected_subjects <- if (use_new_data) nrow(new_data) else n
+      for (i in seq_len(nrow(flags))) {
+        result <- jftree.predict(
+          tree, new_data = new_data,
+          compute_initial = flags$initial[i], compute_censoring = flags$censoring[i]
+        )
+        optional <- flags$initial[i] || flags$censoring[i]
+        predictions <- if (optional) result$predictions else result
+        stopifnot(
+          inherits(predictions, "jf_multistate_predictions"),
+          length(predictions) == expected_subjects,
+          identical(predictions[[1]], tree$predictions[[1]]),
+          length(capture.output(print(result))) < 8L,
+          all(is.finite(unlist(transition_prob(predictions[[1]]))))
+        )
+        if (optional) {
+          stopifnot(
+            inherits(result, "jf_multistate_prediction_result"),
+            identical(attr(result, "model_type"), "tree"),
+            grepl("tree prediction result", capture.output(print(result))[1], fixed = TRUE)
+          )
+        }
+        if (flags$initial[i]) {
+          stopifnot(
+            length(result[["init", exact = TRUE]]) == expected_subjects,
+            identical(result$init[[1]], tree$init[[1]]),
+            all(is.finite(unlist(occupation_prob(result$init[[1]], predictions[[1]]))))
+          )
+        } else {
+          stopifnot(is.null(result[["init", exact = TRUE]]))
+        }
+        if (flags$censoring[i]) {
+          stopifnot(
+            identical(dim(result[["censoring", exact = TRUE]]), c(expected_subjects, length(tree$unique.event.times))),
+            identical(result$censoring[1, ], tree$censoring[1, ]),
+            !"cens" %in% names(result)
+          )
+        } else {
+          stopifnot(is.null(result[["censoring", exact = TRUE]]))
+        }
+      }
+    }
+  }
+
+  cat("All multi-state forest and tree prediction field tests passed.\n")
+})
 
 cat("All Fleming--Harrington tests passed.\n")

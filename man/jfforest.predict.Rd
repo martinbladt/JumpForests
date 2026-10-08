@@ -12,17 +12,68 @@ jfforest.predict(
 )
 }
 \arguments{
-\item{forest_list}{A fitted forest object from [jfforest()].}
+\item{forest_list}{A fitted forest object from \code{\link[=jfforest]{jfforest()}}.}
 
-\item{new_data}{Optional new data.}
+\item{new_data}{Optional data.frame containing all fitted feature names,
+with the same variable types as the training data. Response columns are
+not needed; extra columns are ignored. Non-missing categorical values
+must occur in the training levels. Missing feature values are sent to the
+right daughter at each split on that feature. \code{NULL} returns ordinary
+training predictions using all trees. Stored OOB predictions are in
+\code{forest_list$oob.predictions}.}
 
-\item{compute_censoring}{Should the censoring distribution also be estimated (only valid for survival and multi-state trees)}
+\item{compute_censoring}{Should the censoring survival distribution also be
+estimated? For multi-state forests, returns out-of-bag estimates for
+training data and ordinary estimates for \code{new_data}. For survival forests,
+this applies when \code{new_data} is supplied. Defaults to \code{FALSE}; only
+valid for survival and multi-state forests. Estimates are averages of
+leaf Kaplan-Meier censoring survival probabilities.}
 
-\item{compute_initial}{Should the initial distribution also be estimated? (only valid for multi-state trees)}
+\item{compute_initial}{Should predicted initial distributions also be returned?
+For multi-state forests with deferred predictions, this also controls
+whether they are computed during the prediction call. Defaults to
+\code{FALSE}; only valid for multi-state forests.}
 }
 \value{
-Predictions.
+Regression: A numeric vector with one predicted response per training
+observation. With \code{new_data}, a numeric matrix with one column and one
+row per observation.
+
+Classification: A numeric vector of predicted class codes for training
+observations. With \code{new_data}, a numeric matrix whose first column,
+\code{prediction}, contains the class codes and whose remaining columns contain
+class probabilities, named by \code{forest_list$class.levels}. Class codes index
+these class levels. Training class probabilities are stored separately in
+\code{forest_list$predictions.prob}.
+
+Survival: A matrix of estimated cumulative hazards (Nelson-Aalen
+estimators), with one row per observation and one column per time in
+\code{forest_list$unique.event.times}. With \code{new_data} and
+\code{compute_censoring = TRUE}, a list containing this matrix in \code{predictions}
+and censoring Kaplan-Meier estimates on the same grid in \code{censoring}.
+Without \code{new_data}, the returned object is the cumulative hazard matrix;
+stored out-of-bag censoring estimates, when available, can be accessed
+through \code{forest_list$censoring.oob}.
+
+Multi-state: Predictions are a list of subjects when both optional
+estimates are disabled; access one subject with \code{result[[subject]]}.
+Otherwise, \code{result$predictions} contains the subject predictions. With
+\code{compute_initial = TRUE}, the result also has \code{init}. With
+\code{compute_censoring = TRUE}, it has \code{censoring}, a subject-by-event-time
+matrix. Training censoring estimates use out-of-bag trees; new-data
+estimates use all trees. The names \code{initial} for new-data initial
+distributions and \code{censoring.oob} for training censoring estimates are
+retained as aliases.
 }
 \description{
 Predict from a fitted forest
+}
+\details{
+With \code{new_data = NULL}, returned predictions (and multi-state
+initial distributions when requested) use all trees. OOB predictions
+are stored separately in \code{forest_list$oob.predictions}; training
+censoring estimates use OOB trees. With \code{new_data}, all returned
+estimates use all trees. Training censoring estimates require OOB trees
+for the observation. With deferred predictions, this call
+computes the requested estimates; use the returned object to access them.
 }

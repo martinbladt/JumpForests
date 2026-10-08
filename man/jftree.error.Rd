@@ -12,17 +12,65 @@ jftree.error(
 )
 }
 \arguments{
-\item{tree_list}{A fitted tree object from [jftree()].}
+\item{tree_list}{A fitted tree object from \code{\link[=jftree]{jftree()}}.}
 
-\item{new_data}{Optional evaluation data.}
+\item{new_data}{Optional evaluation data.frame. For regression,
+classification, and survival, include all fitted feature and response
+columns. For multi-state models, include the features here and supply
+responses in \code{jump_data}. Variable types and categorical levels must
+match the training data; responses must be fully observed apart from
+the model's censoring representation. \code{NULL} returns stored training
+errors.}
 
-\item{jump_data}{Jump data (only needed for multistate trees)}
+\item{jump_data}{Multi-state response paths in the same format as
+\code{jftree()}'s \code{data}, with one path per row of \code{new_data} in the same order.
+Required only for evaluating multi-state models on new data; defaults
+to \code{NULL}.}
 
-\item{state_weights}{Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)}
+\item{state_weights}{Multi-state error weights as described in \code{\link[=jftree]{jftree()}}.
+With new data, \code{NULL} uses the loss-specific defaults, regardless of
+weights used during fitting. Without new data, stored errors are returned
+and this argument is ignored.}
 }
 \value{
-Error metrics as a list.
+A named list of error metrics. Smaller losses are better; larger
+\code{R2} is better.
+\itemize{
+\item Regression: \code{mse.error} is mean squared error. \code{R2} is
+\eqn{1 - \mathrm{MSE}/\mathrm{Var}(y)}{1 - MSE / Var(y)}, using the empirical variance
+with divisor \code{n} on the evaluated responses; it can be negative.
+\item Classification: \code{BS.error} is the squared class-probability error
+averaged over observations and classes. \code{normalised.BS.error} divides
+this by the score for uniform class probabilities, so 1 is the uniform
+baseline. \code{misclassification.error.total} is the overall proportion
+of wrong labels; \code{misclassification.error} gives this proportion within
+each observed class (or \code{NA} if that class is absent).
+\code{confusion.matrix} contains counts, with observed classes in rows and
+predicted classes in columns.
+\item Survival: \code{C.error} is \code{1 - C-index}, so smaller values mean better
+concordance. \code{IBS.error} is the integrated Brier score for survival
+probabilities; \code{IKL.error} is the integrated Kullback-Leibler
+(logarithmic) loss. Their time-normalised counterparts are
+\code{normalised.IBS.error} and \code{normalised.IKL.error}.
+\item Multi-state: \code{IBS.error}, \code{IKL.error}, and \code{IS.error} are the integrated
+Brier, Kullback-Leibler, and spherical losses for state occupation
+probabilities, with state weights as specified above. The corresponding
+fields are \code{normalised.IBS.error}, \code{normalised.IKL.error}, and
+\code{normalised.IS.error}.
+}
+
+Integrated scores use trapezoidal integration on the fitted event-time
+grid. Their \verb{normalised.*} versions divide by the grid's final time,
+giving an average loss over time; normalisation
+does not guarantee a value between zero and one. This differs from the
+uniform-probability normalisation used for classification Brier scores.
 }
 \description{
 Compute tree prediction error
+}
+\details{
+Without \code{new_data}, errors are the stored training errors. With
+\code{new_data}, predictions and errors are computed on those observations.
+Survival and multi-state probability scores account for censoring using
+inverse censoring probability weights estimated by the fitted tree.
 }

@@ -14,5 +14,6 @@ Invisible NULL. Prints information to console as a side effect.
 }
 \description{
 Displays summary information about a fitted random forest, including forest type,
-data info, and out-of-bag errors.
+data info, and out-of-bag errors (only available if predictions are computed and
+saved in the forest, i.e. if save_predictions = `TRUE`)
 }

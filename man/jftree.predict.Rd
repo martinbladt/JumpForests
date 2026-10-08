@@ -12,16 +12,56 @@ jftree.predict(
 )
 }
 \arguments{
-\item{tree_list}{A fitted tree object from [jftree()].}
+\item{tree_list}{A fitted tree object from \code{\link[=jftree]{jftree()}}.}
 
-\item{new_data}{Optional new data.}
+\item{new_data}{Optional data.frame containing all fitted feature names,
+with the same variable types as the training data. Response columns are
+not needed; extra columns are ignored. Non-missing categorical values
+must occur in the training levels. Missing feature values are sent to the
+right daughter at each split on that feature. \code{NULL} returns
+training predictions.}
 
-\item{compute_censoring}{Should the censoring distribution be estimated? (only valid for survival and multi-state trees)}
+\item{compute_censoring}{Whether to return censoring survival probabilities
+estimated by leaf Kaplan-Meier estimators. Defaults to \code{FALSE}; only
+valid for survival and multi-state trees. For survival trees this flag
+applies when \code{new_data} is supplied; for multi-state trees it also applies
+to training predictions.}
 
-\item{compute_initial}{Should the initial distribution also be estimated? (only valid for multi-state trees)}
+\item{compute_initial}{Should predicted initial distributions also be returned?
+Defaults to \code{FALSE}; only valid for multi-state trees.}
 }
 \value{
-Predictions.
+Regression: A numeric vector with one predicted response per training
+observation. With \code{new_data}, a numeric matrix with one column and one
+row per observation.
+
+Classification: A numeric vector of predicted class codes for training
+observations. With \code{new_data}, a numeric matrix whose first column,
+\code{prediction}, contains the class codes and whose remaining columns contain
+class probabilities, named by \code{tree_list$class.levels}. Class codes index
+these class levels. Training class probabilities are stored separately in
+\code{tree_list$predictions.prob}.
+
+Survival: A matrix of estimated cumulative hazards (Nelson-Aalen
+estimators), with one row per observation and one column per time in
+\code{tree_list$unique.event.times}. With \code{new_data} and
+\code{compute_censoring = TRUE}, a list containing this matrix in \code{predictions}
+and censoring Kaplan-Meier estimates on the same grid in \code{censoring}.
+The list also contains \code{censoring.full}, a matrix of censoring estimates
+on the censoring-time grid given by \code{censoring.times}. Without \code{new_data},
+the returned object is the cumulative hazard matrix; stored training
+censoring estimates can be accessed through \code{tree_list$censoring} and
+\code{tree_list$censoring.full}.
+
+Multi-state: Predictions are a list of individuals when both optional
+estimates are disabled; access one individual with \code{result[[i]]}.
+Otherwise, \code{result$predictions} contains the Nelson-Aalen estimators.
+The fields \code{init} and \code{censoring} contain the optional estimates when
+requested. Censoring estimates are Kaplan-Meier censoring survival
+probabilities, with one row per individual and one column per time in
+\code{tree_list$unique.event.times}. When requested, \code{censoring.full} and
+\code{censoring.times} also provide the full censoring-time grid.
+Multi-state results print compact summaries.
 }
 \description{
 Predict from a fitted tree

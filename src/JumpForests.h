@@ -49,15 +49,15 @@ List JFCppForestMultistate(List jump_data, uint8_t max_response_length, uint8_t 
   size_t num_event_times = 0, NumericVector fh_weights_a = {}, NumericVector fh_weights_b = {});
 
 // predicting with forests
-void JFCppForestPredict(List& JFForest, bool compute_censoring = true);
-void JFCppForestPredictTraining(List& JFForest);
+void JFCppForestPredict(List& JFForest, bool compute_censoring = true, bool compute_initial = true);
+List JFCppForestPredictTraining(List& JFForest, bool compute_initial, bool compute_censoring);
 //NumericVector JFCppForestPredictSingle(const List& JFForest, const NumericVector& x);
 NumericMatrix JFCppForestPredict(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique);
 List JFCppForestPredictCensoring(const List& JFForest, DataFrame df, NumericVector feature_indices,
                                  LogicalVector categorical, NumericVector unique);
 List JFCppForestPredictMultistate(const List& JFForest, DataFrame df, NumericVector feature_indices, LogicalVector categorical,
-                          NumericVector unique, bool compute_initial);
+                          NumericVector unique, bool compute_initial, bool compute_censoring);
 
 // error computation with forests
 void JFCppForestErrorRegression(List& JFForest, const vector<double>& response);
@@ -78,7 +78,7 @@ List JFCppForestError(const List& JFForest, DataFrame df, NumericVector feature_
 
 // VIMP for forests
 double JFCppForestVIMPFeature(const List& JFForest, CharacterVector feature_name, int feature_seed, CharacterVector method, CharacterVector loss);
-List JFCppForestVIMP(List& JFForest, int seed, CharacterVector method, CharacterVector loss);
+List JFCppForestVIMP(const List& JFForest, int seed, CharacterVector method, CharacterVector loss);
 
 // misc. functions
 List getTreeTable(SEXP tree_sexp);

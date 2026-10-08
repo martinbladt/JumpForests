@@ -29,67 +29,128 @@ jfforest(
 )
 }
 \arguments{
-\item{formula}{Model formula.}
+\item{formula}{Model formula: \code{y ~ x1 + x2} for regression or classification,
+\code{Surv(time, status) ~ x1 + x2} for survival (\code{status = 1} for an event,
+\code{0} for censoring), or \code{MM ~ x1 + x2} for multi-state models. A numeric
+response selects regression; a factor, character, or logical response
+selects classification. Convert numeric class labels to a factor to fit
+a classification forest. Numeric features are treated as continuous;
+factor, character, and logical features are treated as categorical.}
 
-\item{data}{Training data.}
+\item{data}{Training data. A data.frame including both responses and features for regression,
+classification and survival. For multi-state models, a list of lists (one for each
+observation), each containing two vectors, \code{"times"} (observed jump times) and
+\code{"states"} (the state occupied at the corresponding time). The states must be encoded
+as integers. Repetition of the final state indicates censoring.}
 
-\item{feature_data}{Optional feature data for multi-state models.}
+\item{feature_data}{Feature data as a data.frame. Only required for multi-state models.}
 
-\item{splitrule}{Splitting rule. For regression, choose `"mse"` (default),
-`"variance"` (an alias for `"mse"`), `"mae"`, `"binomial"`,
-`"negativebinomial"`, `"poisson"`, `"gamma"`, `"inversegaussian"`,
-`"tweedie"`, or `"huber"`. Binomial responses must lie in `[0, 1]`;
+\item{splitrule}{Splitting rule. \code{NULL} uses the model-specific defaults
+below. For regression, choose \code{"mse"} (default),
+\code{"variance"} (an alias for \code{"mse"}), \code{"mae"}, \code{"binomial"},
+\code{"negativebinomial"}, \code{"poisson"}, \code{"gamma"}, \code{"inversegaussian"},
+\code{"tweedie"}, or \code{"huber"}. Binomial responses must lie in \verb{[0, 1]};
 negative-binomial and Poisson responses must be non-negative integers;
 Gamma and inverse-Gaussian responses must be positive. Tweedie support
 follows its power: real for \eqn{\xi \le 0}, non-negative counts at
 \eqn{\xi = 1}, non-negative for \eqn{1 < \xi < 2}, and positive for
-\eqn{\xi \ge 2}.}
+\eqn{\xi \ge 2}. For classification, choose \code{"gini"} (default), \code{"entropy"},
+\code{"misc"}, \code{"twoing"} or \code{"hellinger"}. For survival, choose \code{"logrank"}
+(default), \code{"approxlogrank"} or \code{"conserve"}. For multi-state models,
+choose \code{"logrank"} (default), \code{"gehan"}, \code{"taroneware"}, \code{"approxlogrank"},
+\code{"conserve"}, \code{"petoprentice"} or \code{"flemingharrington"}. Choosing \code{"flemingharrington"}
+allows for specifying the weights, see the options \code{"fh_weights_a"} and
+\code{"fh_weights_b"}.}
 
-\item{mtry}{Number of candidate features at each split.}
+\item{mtry}{Number of randomly selected candidate features at each split.
+\code{NULL} uses \code{ceiling(sqrt(p))}, where \code{p} is the number of features.}
 
-\item{min_node_size}{Minimal node size.}
+\item{min_node_size}{Minimum number of observations required in each
+daughter node for a split. \code{NULL} uses 5 for regression, 1 for
+classification, 15 for survival, and 20 for multi-state models.}
 
 \item{max_depth}{Maximum depth allowed for each tree, where the root has
-depth zero. `NULL` (the default) imposes no depth limit.}
+depth zero. \code{NULL} (the default) imposes no depth limit.}
 
-\item{nsplits}{Number of split points per feature.}
+\item{nsplits}{Number of randomly sampled candidate thresholds per
+continuous feature, or candidate partitions per categorical feature.
+Defaults to 10; fewer candidates are used if fewer distinct splits exist.}
 
-\item{ntrees}{Number of trees.}
+\item{ntrees}{Number of trees. \code{NULL} uses 1000 for regression and
+classification, and 500 for survival and multi-state models.}
 
-\item{honest}{Whether to use honest splitting.}
+\item{honest}{Whether to use separate sets for choosing splits and
+estimating leaf predictions, each approximately half of the tree's
+sample. Defaults to \code{FALSE}, which uses the same observations for both
+tasks. See \code{double_bootstrap} for how these sets are sampled.}
 
-\item{swr}{Whether to sample with replacement.}
+\item{swr}{Whether to sample with replacement. Defaults to \code{FALSE}.}
 
-\item{sample_rate}{Sampling rate.}
+\item{sample_rate}{Fraction of observations sampled for each tree, in
+\verb{(0, 1]}. \code{NULL} uses 0.7 without replacement (\code{swr = FALSE}) and 1 with
+replacement (\code{swr = TRUE}). With \code{honest = TRUE} and
+\code{double_bootstrap = TRUE}, the rate applies to each half separately.}
 
-\item{double_bootstrap}{Whether to use double bootstrap.}
+\item{double_bootstrap}{Only relevant when \code{honest = TRUE}. If \code{TRUE},
+first partition the training observations into disjoint halves, then
+sample separately within each half for splitting and leaf estimation.
+If \code{FALSE} (the default), sample first and then partition the sample
+into halves. With replacement, the latter can put copies of the same
+observation in both halves.}
 
-\item{seed}{Optional random seed.}
+\item{seed}{Random seed. \code{NULL} draws a seed using R's current random-number
+state; supply a seed for reproducible fitting.}
 
-\item{nworkers}{Number of worker threads.}
+\item{nworkers}{Number of worker threads. The default, 0, uses all
+hardware threads reported by the system.}
 
-\item{save_predictions}{Logical, whether to compute and store in-sample/OOB predictions at fit time for multi-state forests.}
+\item{save_predictions}{Whether to compute and store ordinary training
+predictions, OOB predictions, and errors during fitting for survival and
+multi-state forests. Defaults to \code{TRUE}; \code{FALSE} defers these calculations
+until needed. Regression and classification currently always store
+predictions and errors, regardless of this flag.}
 
-\item{num_event_times}{Maximum number of event times to use (only relevant for survival and multi-states)}
+\item{num_event_times}{Maximum number of times in the prediction grid for
+survival and multi-state models. The default, 0, retains the full grid.
+A positive value coarsens the grid when necessary; the resulting times
+are stored in \code{unique.event.times}.}
 
-\item{state_weights}{Optional vector of weights for each state to be used in error computations (only relevant for multi-state forests)}
+\item{state_weights}{Numeric vector of finite non-negative weights, one
+per state in the order \verb{1, ..., num_states}, for multi-state error
+calculations. Supplied weights are used directly for all scores and are
+not normalised. \code{NULL} uses \code{1 / num_states} per state for Brier and
+spherical scores and 1 per state for Kullback-Leibler loss. These weights
+affect error calculations, not splitting or prediction.}
 
 \item{fh_weights_a}{Optional finite non-negative Fleming--Harrington
-a-exponents, one for each state `1, ..., num_states`. `NULL` uses one for
+a-exponents, one for each state \verb{1, ..., num_states}. \code{NULL} uses one for
 every state. Only valid for multi-state forests with
-`splitrule = "flemingharrington"`.}
+\code{splitrule = "flemingharrington"}. A transition from state \code{s} is weighted
+by \eqn{p_s(t)^{a_s}(1-p_s(t))^{b_s}}, where \eqn{p_s(t)} is the
+estimated occupation probability of state \code{s} in the parent node.}
 
 \item{fh_weights_b}{Optional finite non-negative Fleming--Harrington
-b-exponents, with the same ordering and default as `fh_weights_a`.}
+b-exponents, with the same ordering and default as \code{fh_weights_a}.}
 
 \item{splitrule_par}{Numeric scalar for parameterised regression rules:
 negative-binomial size \eqn{k > 0} (default 1), Tweedie power
 \eqn{\xi \le 0} or \eqn{\xi \ge 1}, or Huber threshold
-\eqn{\delta > 0}. It is required for Tweedie and Huber and must be `NULL`
-for every other rule and model type.}
+\eqn{\delta > 0}. It is required for Tweedie and Huber and must be \code{NULL}
+for every other rule and model type. The default is \code{NULL}.}
 }
 \value{
-A fitted forest object as a list.
+A fitted forest object as a list with class \code{jf_forest}. Use
+\code{print()} for a summary and \code{predict()} for predictions. When saved,
+\code{predictions} contains ordinary training predictions using all trees,
+and \code{oob.predictions} contains OOB predictions. Classification also
+stores the corresponding probability matrices in \code{predictions.prob}
+and \code{oob.predictions.prob}. For survival and multi-state forests,
+\code{censoring.oob} contains OOB estimates of the censoring survival
+probability obtained by averaging leaf Kaplan-Meier estimators, with
+one row per observation and one column per time in \code{unique.event.times}.
+OOB estimates require OOB trees for the observation. With
+\code{save_predictions = FALSE}, survival and multi-state
+prediction and error fields are initially \code{NULL}.
 }
 \description{
 Fits a random forest for regression, classification, survival, or multi-state data.

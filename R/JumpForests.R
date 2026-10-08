@@ -2,12 +2,23 @@
 
 #' Fit a JumpForests tree
 #'
-#' Fits a single regression, survival, or multi-state tree.
+#' Fits a single regression, classification, survival, or multi-state tree.
 #'
-#' @param formula Model formula.
-#' @param data Training data.
-#' @param feature_data Optional feature data for multi-state models.
-#' @param splitrule Splitting rule. For regression, choose `"mse"` (default),
+#' @param formula Model formula: `y ~ x1 + x2` for regression or classification,
+#'   `Surv(time, status) ~ x1 + x2` for survival (`status = 1` for an event,
+#'   `0` for censoring), or `MM ~ x1 + x2` for multi-state models. A numeric
+#'   response selects regression; a factor, character, or logical response
+#'   selects classification. Convert numeric class labels to a factor to fit
+#'   a classification tree. Numeric features are treated as continuous;
+#'   factor, character, and logical features are treated as categorical.
+#' @param data Training data. A data.frame including both responses and features for regression,
+#'   classification and survival. For multi-state models, a list of lists (one for each
+#'   observation), each containing two vectors, `"times"` (observed jump times) and
+#'   `"states"` (the state occupied at the corresponding time). The states must be encoded
+#'   as integers. Repetition of the final state indicates censoring.
+#' @param feature_data Feature data as a data.frame. Only required for multi-state models.
+#' @param splitrule Splitting rule. `NULL` uses the model-specific defaults
+#'   below. For regression, choose `"mse"` (default),
 #'   `"variance"` (an alias for `"mse"`), `"mae"`, `"binomial"`,
 #'   `"negativebinomial"`, `"poisson"`, `"gamma"`, `"inversegaussian"`,
 #'   `"tweedie"`, or `"huber"`. Binomial responses must lie in `[0, 1]`;
@@ -15,29 +26,61 @@
 #'   Gamma and inverse-Gaussian responses must be positive. Tweedie support
 #'   follows its power: real for \eqn{\xi \le 0}, non-negative counts at
 #'   \eqn{\xi = 1}, non-negative for \eqn{1 < \xi < 2}, and positive for
-#'   \eqn{\xi \ge 2}.
+#'   \eqn{\xi \ge 2}. For classification, choose `"gini"` (default), `"entropy"`,
+#'   `"misc"`, `"twoing"` or `"hellinger"`. For survival, choose `"logrank"`
+#'   (default), `"approxlogrank"` or `"conserve"`. For multi-state models,
+#'   choose `"logrank"` (default), `"gehan"`, `"taroneware"`, `"approxlogrank"`,
+#'   `"conserve"`, `"petoprentice"` or `"flemingharrington"`. Choosing `"flemingharrington"`
+#'   allows for specifying the weights, see the options `"fh_weights_a"` and
+#'   `"fh_weights_b"`.
 #' @param splitrule_par Numeric scalar for parameterised regression rules:
 #'   negative-binomial size \eqn{k > 0} (default 1), Tweedie power
 #'   \eqn{\xi \le 0} or \eqn{\xi \ge 1}, or Huber threshold
 #'   \eqn{\delta > 0}. It is required for Tweedie and Huber and must be `NULL`
-#'   for every other rule and model type.
-#' @param mtry Number of candidate features at each split.
-#' @param min_node_size Minimal node size.
+#'   for every other rule and model type. The default is `NULL`.
+#' @param mtry Number of randomly selected candidate features at each split.
+#'   `NULL` uses `ceiling(sqrt(p))`, where `p` is the number of features.
+#' @param min_node_size Minimum number of observations required in each
+#'   daughter node for a split. `NULL` uses 5 for regression, 1 for
+#'   classification, 15 for survival, and 20 for multi-state models.
 #' @param max_depth Maximum depth of the tree, where the root has depth zero.
 #'   `NULL` (the default) imposes no depth limit.
-#' @param nsplits Number of split points per feature.
-#' @param honest Whether to use honest splitting.
-#' @param seed Optional random seed.
-#' @param num_event_times Maximum number of event times to use (only relevant for survival and multi-states)
-#' @param state_weights Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)
+#' @param nsplits Number of randomly sampled candidate thresholds per
+#'   continuous feature, or candidate partitions per categorical feature.
+#'   Defaults to 10; fewer candidates are used if fewer distinct splits exist.
+#' @param honest Whether to split the observations into approximately equal
+#'   sets for choosing splits and estimating leaf predictions. Defaults to
+#'   `FALSE`, which uses the same observations for both tasks.
+#' @param seed Random seed. `NULL` draws a seed using R's current random-number
+#'   state; supply a seed for reproducible fitting.
+#' @param num_event_times Maximum number of times in the prediction grid for
+#'   survival and multi-state models. The default, 0, retains the full grid.
+#'   A positive value coarsens the grid when necessary; the resulting times
+#'   are stored in `unique.event.times`.
+#' @param state_weights Numeric vector of finite non-negative weights, one
+#'   per state in the order `1, ..., num_states`, for multi-state error
+#'   calculations. Supplied weights are used directly for all scores and are
+#'   not normalised. `NULL` uses `1 / num_states` per state for Brier and
+#'   spherical scores and 1 per state for Kullback-Leibler loss. These weights
+#'   affect error calculations, not splitting or prediction.
 #' @param fh_weights_a Optional finite non-negative Fleming--Harrington
 #'   a-exponents, one for each state `1, ..., num_states`. `NULL` uses one for
 #'   every state. Only valid for multi-state trees with
-#'   `splitrule = "flemingharrington"`.
+#'   `splitrule = "flemingharrington"`. A transition from state `s` is weighted
+#'   by \eqn{p_s(t)^{a_s}(1-p_s(t))^{b_s}}, where \eqn{p_s(t)} is the
+#'   estimated occupation probability of state `s` in the parent node.
 #' @param fh_weights_b Optional finite non-negative Fleming--Harrington
 #'   b-exponents, with the same ordering and default as `fh_weights_a`.
 #'
-#' @return A fitted tree object as a list.
+#' @return A fitted tree object as a list with class `jf_tree`. Use `print()`
+#'   for a summary and `predict()` for predictions. Multi-state prediction
+#'   lists print compact summaries. Training predictions are stored in
+#'   `predictions`. For survival and multi-state trees, `censoring` contains
+#'   leaf Kaplan-Meier estimates of the censoring survival probability, with
+#'   one row per observation on `unique.event.times`. The estimates on the
+#'   full censoring-time grid are in `censoring.full`, with times in
+#'   `censoring.times`.
+#' @md
 #' @export
 #'
 # the main function for fitting trees (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
@@ -102,6 +145,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
         observations = result$class.levels,
         predicted = result$class.levels
       )
+      class(result) <- c("jf_tree", "list")
       return(result)
     } else {
       # for regression, the default minimal node size is 5
@@ -117,6 +161,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
                           response_index, feature_indices, processed_data$categorical,
                           processed_data$unique_values, seed, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
+      class(result) <- c("jf_tree", "list")
       return(result)
     }
     
@@ -160,6 +205,7 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
                         response_indices, feature_indices, processed_data$categorical,
                         processed_data$unique_values, seed, num_event_times, splitrule_par)
     result$categorical.levels <- processed_data$categorical_levels
+    class(result) <- c("jf_tree", "list")
     return(result)
   }
   # if the left hand side is "MM", multi-state
@@ -207,6 +253,10 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
                           processed_data$categorical, processed_data$unique_values, seed,
                           state_weights, num_event_times, fh_weights_a, fh_weights_b)
     result$categorical.levels <- processed_data$categorical_levels
+    result$num.states <- num_states
+    result$predictions <- as_jf_multistate_predictions(
+      result$predictions, result$unique.event.times, num_states, model_type = "tree")
+    class(result) <- c("jf_multistate_tree", "jf_tree", "list")
     return(result)
 
   } else {
@@ -217,19 +267,80 @@ jftree <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry = 
 #' Predict from a fitted tree
 #'
 #' @param tree_list A fitted tree object from [jftree()].
-#' @param new_data Optional new data.
-#' @param compute_censoring Should the censoring distribution be estimated? (only valid for survival and multi-state trees)
-#' @param compute_initial Should the initial distribution also be estimated? (only valid for multi-state trees)
+#' @param new_data Optional data.frame containing all fitted feature names,
+#'   with the same variable types as the training data. Response columns are
+#'   not needed; extra columns are ignored. Non-missing categorical values
+#'   must occur in the training levels. Missing feature values are sent to the
+#'   right daughter at each split on that feature. `NULL` returns
+#'   training predictions.
+#' @param compute_censoring Whether to return censoring survival probabilities
+#'   estimated by leaf Kaplan-Meier estimators. Defaults to `FALSE`; only
+#'   valid for survival and multi-state trees. For survival trees this flag
+#'   applies when `new_data` is supplied; for multi-state trees it also applies
+#'   to training predictions.
+#' @param compute_initial Should predicted initial distributions also be returned?
+#'   Defaults to `FALSE`; only valid for multi-state trees.
 #'
-#' @return Predictions.
+#' @return Regression: A numeric vector with one predicted response per training
+#'   observation. With `new_data`, a numeric matrix with one column and one
+#'   row per observation.
+#'
+#'   Classification: A numeric vector of predicted class codes for training
+#'   observations. With `new_data`, a numeric matrix whose first column,
+#'   `prediction`, contains the class codes and whose remaining columns contain
+#'   class probabilities, named by `tree_list$class.levels`. Class codes index
+#'   these class levels. Training class probabilities are stored separately in
+#'   `tree_list$predictions.prob`.
+#'
+#'   Survival: A matrix of estimated cumulative hazards (Nelson-Aalen
+#'   estimators), with one row per observation and one column per time in
+#'   `tree_list$unique.event.times`. With `new_data` and
+#'   `compute_censoring = TRUE`, a list containing this matrix in `predictions`
+#'   and censoring Kaplan-Meier estimates on the same grid in `censoring`.
+#'   The list also contains `censoring.full`, a matrix of censoring estimates
+#'   on the censoring-time grid given by `censoring.times`. Without `new_data`,
+#'   the returned object is the cumulative hazard matrix; stored training
+#'   censoring estimates can be accessed through `tree_list$censoring` and
+#'   `tree_list$censoring.full`.
+#'
+#'   Multi-state: Predictions are a list of individuals when both optional
+#'   estimates are disabled; access one individual with `result[[i]]`.
+#'   Otherwise, `result$predictions` contains the Nelson-Aalen estimators.
+#'   The fields `init` and `censoring` contain the optional estimates when
+#'   requested. Censoring estimates are Kaplan-Meier censoring survival
+#'   probabilities, with one row per individual and one column per time in
+#'   `tree_list$unique.event.times`. When requested, `censoring.full` and
+#'   `censoring.times` also provide the full censoring-time grid.
+#'   Multi-state results print compact summaries.
+#' @md
 #' @export
 #'
 # the main function for predicting with trees
 jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE, compute_initial = FALSE) {
+  if (tree_list$tree.type == "Multi-state") {
+    num_states <- tree_list$num.states
+    if (is.null(num_states)) {
+      num_states <- length(tree_list$init[[1]])
+    }
+  }
   # if data is not supplied, return predictions based on training data
   if (is.null(new_data)) {
     if (tree_list$tree.type == "Multi-state") {
-      return(list("predictions" = tree_list$predictions, "init" = tree_list$init))
+      predictions <- as_jf_multistate_predictions(
+        tree_list$predictions, tree_list$unique.event.times, num_states, model_type = "tree")
+      if (!compute_initial && !compute_censoring) {
+        return(predictions)
+      }
+      result <- list(predictions = predictions)
+      if (compute_initial) {
+        result$init <- tree_list$init
+      }
+      if (compute_censoring) {
+        result$censoring <- tree_list$censoring
+        result$censoring.full <- tree_list$censoring.full
+        result$censoring.times <- tree_list$censoring.times
+      }
+      return(as_jf_multistate_prediction_result(result, model_type = "tree"))
     } else {
       return(tree_list$predictions)
     }
@@ -260,8 +371,14 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
         return(predictions)
       }
     } else {
-      return(JFCppTreePredictMultistate(tree_list, processed_data$data, feature_indices, processed_data$categorical,
-             processed_data$unique_values, compute_initial, compute_censoring))
+      result <- JFCppTreePredictMultistate(tree_list, processed_data$data, feature_indices, processed_data$categorical,
+             processed_data$unique_values, compute_initial, compute_censoring)
+      if (compute_initial || compute_censoring) {
+        result$predictions <- as_jf_multistate_predictions(
+          result$predictions, tree_list$unique.event.times, num_states, model_type = "tree")
+        return(as_jf_multistate_prediction_result(result, model_type = "tree"))
+      }
+      return(as_jf_multistate_predictions(result, tree_list$unique.event.times, num_states, model_type = "tree"))
     }
   } else {
     cat("Error: If new_data is supplied, it must be a data.frame with the same names as the original dataset \n")
@@ -271,11 +388,58 @@ jftree.predict <- function(tree_list, new_data = NULL, compute_censoring = FALSE
 #' Compute tree prediction error
 #'
 #' @param tree_list A fitted tree object from [jftree()].
-#' @param new_data Optional evaluation data.
-#' @param jump_data Jump data (only needed for multistate trees)
-#' @param state_weights Optional vector of weights for each state to be used in error computations (only relevant for multi-state trees)
+#' @param new_data Optional evaluation data.frame. For regression,
+#'   classification, and survival, include all fitted feature and response
+#'   columns. For multi-state models, include the features here and supply
+#'   responses in `jump_data`. Variable types and categorical levels must
+#'   match the training data; responses must be fully observed apart from
+#'   the model's censoring representation. `NULL` returns stored training
+#'   errors.
+#' @param jump_data Multi-state response paths in the same format as
+#'   `jftree()`'s `data`, with one path per row of `new_data` in the same order.
+#'   Required only for evaluating multi-state models on new data; defaults
+#'   to `NULL`.
+#' @param state_weights Multi-state error weights as described in [jftree()].
+#'   With new data, `NULL` uses the loss-specific defaults, regardless of
+#'   weights used during fitting. Without new data, stored errors are returned
+#'   and this argument is ignored.
 #'
-#' @return Error metrics as a list.
+#' @details Without `new_data`, errors are the stored training errors. With
+#'   `new_data`, predictions and errors are computed on those observations.
+#'   Survival and multi-state probability scores account for censoring using
+#'   inverse censoring probability weights estimated by the fitted tree.
+#'
+#' @return A named list of error metrics. Smaller losses are better; larger
+#'   `R2` is better.
+#'
+#'   * Regression: `mse.error` is mean squared error. `R2` is
+#'     \eqn{1 - \mathrm{MSE}/\mathrm{Var}(y)}{1 - MSE / Var(y)}, using the empirical variance
+#'     with divisor `n` on the evaluated responses; it can be negative.
+#'   * Classification: `BS.error` is the squared class-probability error
+#'     averaged over observations and classes. `normalised.BS.error` divides
+#'     this by the score for uniform class probabilities, so 1 is the uniform
+#'     baseline. `misclassification.error.total` is the overall proportion
+#'     of wrong labels; `misclassification.error` gives this proportion within
+#'     each observed class (or `NA` if that class is absent).
+#'     `confusion.matrix` contains counts, with observed classes in rows and
+#'     predicted classes in columns.
+#'   * Survival: `C.error` is `1 - C-index`, so smaller values mean better
+#'     concordance. `IBS.error` is the integrated Brier score for survival
+#'     probabilities; `IKL.error` is the integrated Kullback-Leibler
+#'     (logarithmic) loss. Their time-normalised counterparts are
+#'     `normalised.IBS.error` and `normalised.IKL.error`.
+#'   * Multi-state: `IBS.error`, `IKL.error`, and `IS.error` are the integrated
+#'     Brier, Kullback-Leibler, and spherical losses for state occupation
+#'     probabilities, with state weights as specified above. The corresponding
+#'     fields are `normalised.IBS.error`, `normalised.IKL.error`, and
+#'     `normalised.IS.error`.
+#'
+#'   Integrated scores use trapezoidal integration on the fitted event-time
+#'   grid. Their `normalised.*` versions divide by the grid's final time,
+#'   giving an average loss over time; normalisation
+#'   does not guarantee a value between zero and one. This differs from the
+#'   uniform-probability normalisation used for classification Brier scores.
+#' @md
 #' @export
 #'
 jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_weights = NULL) {
@@ -356,10 +520,21 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 #'
 #' Fits a random forest for regression, classification, survival, or multi-state data.
 #'
-#' @param formula Model formula.
-#' @param data Training data.
-#' @param feature_data Optional feature data for multi-state models.
-#' @param splitrule Splitting rule. For regression, choose `"mse"` (default),
+#' @param formula Model formula: `y ~ x1 + x2` for regression or classification,
+#'   `Surv(time, status) ~ x1 + x2` for survival (`status = 1` for an event,
+#'   `0` for censoring), or `MM ~ x1 + x2` for multi-state models. A numeric
+#'   response selects regression; a factor, character, or logical response
+#'   selects classification. Convert numeric class labels to a factor to fit
+#'   a classification forest. Numeric features are treated as continuous;
+#'   factor, character, and logical features are treated as categorical.
+#' @param data Training data. A data.frame including both responses and features for regression,
+#'   classification and survival. For multi-state models, a list of lists (one for each
+#'   observation), each containing two vectors, `"times"` (observed jump times) and
+#'   `"states"` (the state occupied at the corresponding time). The states must be encoded
+#'   as integers. Repetition of the final state indicates censoring.
+#' @param feature_data Feature data as a data.frame. Only required for multi-state models.
+#' @param splitrule Splitting rule. `NULL` uses the model-specific defaults
+#'   below. For regression, choose `"mse"` (default),
 #'   `"variance"` (an alias for `"mse"`), `"mae"`, `"binomial"`,
 #'   `"negativebinomial"`, `"poisson"`, `"gamma"`, `"inversegaussian"`,
 #'   `"tweedie"`, or `"huber"`. Binomial responses must lie in `[0, 1]`;
@@ -367,35 +542,86 @@ jftree.error <- function(tree_list, new_data = NULL, jump_data = NULL, state_wei
 #'   Gamma and inverse-Gaussian responses must be positive. Tweedie support
 #'   follows its power: real for \eqn{\xi \le 0}, non-negative counts at
 #'   \eqn{\xi = 1}, non-negative for \eqn{1 < \xi < 2}, and positive for
-#'   \eqn{\xi \ge 2}. 
+#'   \eqn{\xi \ge 2}. For classification, choose `"gini"` (default), `"entropy"`,
+#'   `"misc"`, `"twoing"` or `"hellinger"`. For survival, choose `"logrank"`
+#'   (default), `"approxlogrank"` or `"conserve"`. For multi-state models,
+#'   choose `"logrank"` (default), `"gehan"`, `"taroneware"`, `"approxlogrank"`,
+#'   `"conserve"`, `"petoprentice"` or `"flemingharrington"`. Choosing `"flemingharrington"`
+#'   allows for specifying the weights, see the options `"fh_weights_a"` and
+#'   `"fh_weights_b"`.
 #' @param splitrule_par Numeric scalar for parameterised regression rules:
 #'   negative-binomial size \eqn{k > 0} (default 1), Tweedie power
 #'   \eqn{\xi \le 0} or \eqn{\xi \ge 1}, or Huber threshold
 #'   \eqn{\delta > 0}. It is required for Tweedie and Huber and must be `NULL`
-#'   for every other rule and model type.
-#' @param mtry Number of candidate features at each split.
-#' @param min_node_size Minimal node size.
+#'   for every other rule and model type. The default is `NULL`.
+#' @param mtry Number of randomly selected candidate features at each split.
+#'   `NULL` uses `ceiling(sqrt(p))`, where `p` is the number of features.
+#' @param min_node_size Minimum number of observations required in each
+#'   daughter node for a split. `NULL` uses 5 for regression, 1 for
+#'   classification, 15 for survival, and 20 for multi-state models.
 #' @param max_depth Maximum depth allowed for each tree, where the root has
 #'   depth zero. `NULL` (the default) imposes no depth limit.
-#' @param nsplits Number of split points per feature.
-#' @param ntrees Number of trees.
-#' @param honest Whether to use honest splitting.
-#' @param swr Whether to sample with replacement.
-#' @param sample_rate Sampling rate.
-#' @param double_bootstrap Whether to use double bootstrap.
-#' @param seed Optional random seed.
-#' @param nworkers Number of worker threads.
-#' @param save_predictions Logical, whether to compute and store in-sample/OOB predictions at fit time for multi-state forests.
-#' @param num_event_times Maximum number of event times to use (only relevant for survival and multi-states)
-#' @param state_weights Optional vector of weights for each state to be used in error computations (only relevant for multi-state forests)
+#' @param nsplits Number of randomly sampled candidate thresholds per
+#'   continuous feature, or candidate partitions per categorical feature.
+#'   Defaults to 10; fewer candidates are used if fewer distinct splits exist.
+#' @param ntrees Number of trees. `NULL` uses 1000 for regression and
+#'   classification, and 500 for survival and multi-state models.
+#' @param honest Whether to use separate sets for choosing splits and
+#'   estimating leaf predictions, each approximately half of the tree's
+#'   sample. Defaults to `FALSE`, which uses the same observations for both
+#'   tasks. See `double_bootstrap` for how these sets are sampled.
+#' @param swr Whether to sample with replacement. Defaults to `FALSE`.
+#' @param sample_rate Fraction of observations sampled for each tree, in
+#'   `(0, 1]`. `NULL` uses 0.7 without replacement (`swr = FALSE`) and 1 with
+#'   replacement (`swr = TRUE`). With `honest = TRUE` and
+#'   `double_bootstrap = TRUE`, the rate applies to each half separately.
+#' @param double_bootstrap Only relevant when `honest = TRUE`. If `TRUE`,
+#'   first partition the training observations into disjoint halves, then
+#'   sample separately within each half for splitting and leaf estimation.
+#'   If `FALSE` (the default), sample first and then partition the sample
+#'   into halves. With replacement, the latter can put copies of the same
+#'   observation in both halves.
+#' @param seed Random seed. `NULL` draws a seed using R's current random-number
+#'   state; supply a seed for reproducible fitting.
+#' @param nworkers Number of worker threads. The default, 0, uses all
+#'   hardware threads reported by the system.
+#' @param save_predictions Whether to compute and store ordinary training
+#'   predictions, OOB predictions, and errors during fitting for survival and
+#'   multi-state forests. Defaults to `TRUE`; `FALSE` defers these calculations
+#'   until needed. Regression and classification currently always store
+#'   predictions and errors, regardless of this flag.
+#' @param num_event_times Maximum number of times in the prediction grid for
+#'   survival and multi-state models. The default, 0, retains the full grid.
+#'   A positive value coarsens the grid when necessary; the resulting times
+#'   are stored in `unique.event.times`.
+#' @param state_weights Numeric vector of finite non-negative weights, one
+#'   per state in the order `1, ..., num_states`, for multi-state error
+#'   calculations. Supplied weights are used directly for all scores and are
+#'   not normalised. `NULL` uses `1 / num_states` per state for Brier and
+#'   spherical scores and 1 per state for Kullback-Leibler loss. These weights
+#'   affect error calculations, not splitting or prediction.
 #' @param fh_weights_a Optional finite non-negative Fleming--Harrington
 #'   a-exponents, one for each state `1, ..., num_states`. `NULL` uses one for
 #'   every state. Only valid for multi-state forests with
-#'   `splitrule = "flemingharrington"`.
+#'   `splitrule = "flemingharrington"`. A transition from state `s` is weighted
+#'   by \eqn{p_s(t)^{a_s}(1-p_s(t))^{b_s}}, where \eqn{p_s(t)} is the
+#'   estimated occupation probability of state `s` in the parent node.
 #' @param fh_weights_b Optional finite non-negative Fleming--Harrington
 #'   b-exponents, with the same ordering and default as `fh_weights_a`.
 #'
-#' @return A fitted forest object as a list.
+#' @return A fitted forest object as a list with class `jf_forest`. Use
+#'   `print()` for a summary and `predict()` for predictions. When saved,
+#'   `predictions` contains ordinary training predictions using all trees,
+#'   and `oob.predictions` contains OOB predictions. Classification also
+#'   stores the corresponding probability matrices in `predictions.prob`
+#'   and `oob.predictions.prob`. For survival and multi-state forests,
+#'   `censoring.oob` contains OOB estimates of the censoring survival
+#'   probability obtained by averaging leaf Kaplan-Meier estimators, with
+#'   one row per observation and one column per time in `unique.event.times`.
+#'   OOB estimates require OOB trees for the observation. With
+#'   `save_predictions = FALSE`, survival and multi-state
+#'   prediction and error fields are initially `NULL`.
+#' @md
 #' @export
 #'
 # the main function for fitting forests (feature_data is only relevant for multi-state trees in which case data is a list and not a data.frame)
@@ -488,6 +714,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
         observations = result$class.levels,
         predicted = result$class.levels
       )
+      class(result) <- c("jf_forest", "list")
       return(result)
     } else {
       # for regression, the default minimal node size is 5
@@ -506,6 +733,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
                             sample_rate, double_bootstrap, response_index, feature_indices, processed_data$categorical,
                             processed_data$unique_values, seed, nworkers, save_predictions, 0, splitrule_par)
       result$categorical.levels <- processed_data$categorical_levels
+      class(result) <- c("jf_forest", "list")
       return(result)
     }
 
@@ -553,6 +781,7 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
                           processed_data$unique_values, seed, nworkers, save_predictions, num_event_times,
                           splitrule_par)
     result$categorical.levels <- processed_data$categorical_levels
+    class(result) <- c("jf_forest", "list")
     return(result)
   }
   # if the left hand side is "MM(...)", multi-state
@@ -603,6 +832,9 @@ jfforest <- function(formula, data, feature_data = NULL, splitrule = NULL, mtry 
                             processed_data$categorical, processed_data$unique_values, seed, nworkers, save_predictions, 
                             state_weights, num_event_times, fh_weights_a, fh_weights_b)
     result$categorical.levels <- processed_data$categorical_levels
+    result$predictions <- as_jf_multistate_predictions(result$predictions, result$unique.event.times, result$num.states)
+    result$oob.predictions <- as_jf_multistate_predictions(result$oob.predictions, result$unique.event.times, result$num.states)
+    class(result) <- c("jf_multistate_forest", "jf_forest", "list")
     return(result)
 
   } else {
@@ -646,11 +878,62 @@ normalize_max_depth <- function(max_depth) {
 #' Predict from a fitted forest
 #'
 #' @param forest_list A fitted forest object from [jfforest()].
-#' @param new_data Optional new data.
-#' @param compute_censoring Should the censoring distribution also be estimated (only valid for survival and multi-state trees)
-#' @param compute_initial Should the initial distribution also be estimated? (only valid for multi-state trees)
+#' @param new_data Optional data.frame containing all fitted feature names,
+#'   with the same variable types as the training data. Response columns are
+#'   not needed; extra columns are ignored. Non-missing categorical values
+#'   must occur in the training levels. Missing feature values are sent to the
+#'   right daughter at each split on that feature. `NULL` returns ordinary
+#'   training predictions using all trees. Stored OOB predictions are in
+#'   `forest_list$oob.predictions`.
+#' @param compute_censoring Should the censoring survival distribution also be
+#'   estimated? For multi-state forests, returns out-of-bag estimates for
+#'   training data and ordinary estimates for `new_data`. For survival forests,
+#'   this applies when `new_data` is supplied. Defaults to `FALSE`; only
+#'   valid for survival and multi-state forests. Estimates are averages of
+#'   leaf Kaplan-Meier censoring survival probabilities.
+#' @param compute_initial Should predicted initial distributions also be returned?
+#'   For multi-state forests with deferred predictions, this also controls
+#'   whether they are computed during the prediction call. Defaults to
+#'   `FALSE`; only valid for multi-state forests.
 #'
-#' @return Predictions.
+#' @details With `new_data = NULL`, returned predictions (and multi-state
+#'   initial distributions when requested) use all trees. OOB predictions
+#'   are stored separately in `forest_list$oob.predictions`; training
+#'   censoring estimates use OOB trees. With `new_data`, all returned
+#'   estimates use all trees. Training censoring estimates require OOB trees
+#'   for the observation. With deferred predictions, this call
+#'   computes the requested estimates; use the returned object to access them.
+#'
+#' @return Regression: A numeric vector with one predicted response per training
+#'   observation. With `new_data`, a numeric matrix with one column and one
+#'   row per observation.
+#'
+#'   Classification: A numeric vector of predicted class codes for training
+#'   observations. With `new_data`, a numeric matrix whose first column,
+#'   `prediction`, contains the class codes and whose remaining columns contain
+#'   class probabilities, named by `forest_list$class.levels`. Class codes index
+#'   these class levels. Training class probabilities are stored separately in
+#'   `forest_list$predictions.prob`.
+#'
+#'   Survival: A matrix of estimated cumulative hazards (Nelson-Aalen
+#'   estimators), with one row per observation and one column per time in
+#'   `forest_list$unique.event.times`. With `new_data` and
+#'   `compute_censoring = TRUE`, a list containing this matrix in `predictions`
+#'   and censoring Kaplan-Meier estimates on the same grid in `censoring`.
+#'   Without `new_data`, the returned object is the cumulative hazard matrix;
+#'   stored out-of-bag censoring estimates, when available, can be accessed
+#'   through `forest_list$censoring.oob`.
+#'
+#'   Multi-state: Predictions are a list of subjects when both optional
+#'   estimates are disabled; access one subject with `result[[subject]]`.
+#'   Otherwise, `result$predictions` contains the subject predictions. With
+#'   `compute_initial = TRUE`, the result also has `init`. With
+#'   `compute_censoring = TRUE`, it has `censoring`, a subject-by-event-time
+#'   matrix. Training censoring estimates use out-of-bag trees; new-data
+#'   estimates use all trees. The names `initial` for new-data initial
+#'   distributions and `censoring.oob` for training censoring estimates are
+#'   retained as aliases.
+#' @md
 #' @export
 #'
 # the main function for predicting with forests
@@ -660,17 +943,39 @@ jfforest.predict <- function(forest_list, new_data = NULL, compute_censoring = F
     if (forest_list$tree.type != "Multi-state") {
       return(forest_list$predictions)
     } else {
-      return(list("predictions" = forest_list$predictions, "init" = forest_list$init))
+      predictions <- as_jf_multistate_predictions(forest_list$predictions, forest_list$unique.event.times, forest_list$num.states)
+      if (!compute_initial && !compute_censoring) {
+        return(predictions)
+      }
+      result <- list("predictions" = predictions)
+      if (compute_initial) {
+        result$init <- forest_list$init
+      }
+      if (compute_censoring) {
+        result$censoring.oob <- forest_list$censoring.oob
+      }
+      return(as_jf_multistate_prediction_result(result))
     }
   }
   # if new data is not supplied and predictions are not computed, compute the predictions based on the training data (in-bag and oob)
   if (is.null(new_data) & is.null(forest_list$predictions)) {
-    cat("Computing predictions...")
-    JFCppForestPredictTraining(forest_list) # computes predictions from scratch
+    cat("Computing predictions...\n")
+    forest_list <- JFCppForestPredictTraining(forest_list, compute_initial, compute_censoring) # computes predictions from scratch
     if (forest_list$tree.type != "Multi-state") {
       return(forest_list$predictions)
     } else {
-      return(list("predictions" = forest_list$predictions, "init" = forest_list$init))
+      predictions <- as_jf_multistate_predictions(forest_list$predictions, forest_list$unique.event.times, forest_list$num.states)
+      if (!compute_initial && !compute_censoring) {
+        return(predictions)
+      }
+      result <- list("predictions" = predictions)
+      if (compute_initial) {
+        result$init <- forest_list$init
+      }
+      if (compute_censoring) {
+        result$censoring.oob <- forest_list$censoring.oob
+      }
+      return(as_jf_multistate_prediction_result(result))
     }
   }
 
@@ -697,8 +1002,13 @@ jfforest.predict <- function(forest_list, new_data = NULL, compute_censoring = F
         return(predictions)
       }
     } else {
-      return(JFCppForestPredictMultistate(forest_list, processed_data$data, feature_indices,
-                            processed_data$categorical, processed_data$unique_values, compute_initial))
+      result <- JFCppForestPredictMultistate(forest_list, processed_data$data, feature_indices,
+                            processed_data$categorical, processed_data$unique_values, compute_initial, compute_censoring)
+      if (compute_initial || compute_censoring) {
+        result$predictions <- as_jf_multistate_predictions(result$predictions, forest_list$unique.event.times, forest_list$num.states)
+        return(as_jf_multistate_prediction_result(result))
+      }
+      return(as_jf_multistate_predictions(result, forest_list$unique.event.times, forest_list$num.states))
     }
   } else {
     cat("Error: If new_data is supplied, it must be a data.frame with the same names as the original dataset \n")
@@ -708,11 +1018,62 @@ jfforest.predict <- function(forest_list, new_data = NULL, compute_censoring = F
 #' Compute forest prediction error
 #'
 #' @param forest_list A fitted forest object from [jfforest()].
-#' @param new_data Optional evaluation data.
-#' @param jump_data Jump data (only needed for multi-state forests).
-#' @param state_weights Optional weights for each state in multi-state error calculations.
+#' @param new_data Optional evaluation data.frame. For regression,
+#'   classification, and survival, include all fitted feature and response
+#'   columns. For multi-state models, include the features here and supply
+#'   responses in `jump_data`. Variable types and categorical levels must
+#'   match the training data; responses must be fully observed apart from
+#'   the model's censoring representation. `NULL` requests OOB errors.
+#' @param jump_data Multi-state response paths in the same format as
+#'   `jfforest()`'s `data`, with one path per row of `new_data` in the same order.
+#'   Required only for evaluating multi-state models on new data; defaults
+#'   to `NULL`.
+#' @param state_weights Multi-state error weights as described in [jfforest()].
+#'   Without new data, `NULL` returns stored OOB errors when available,
+#'   retaining the weights used during fitting. Supplying weights recomputes
+#'   the OOB errors with those weights. With new data, or when OOB errors must
+#'   first be computed, `NULL` uses the loss-specific defaults.
 #'
-#' @return Error metrics as a list.
+#' @details Without `new_data`, this function returns OOB errors, computing
+#'   deferred survival or multi-state errors when needed. With `new_data`,
+#'   predictions use all trees and errors are evaluated on those observations.
+#'   Survival and multi-state probability scores account for censoring using
+#'   inverse censoring probability weights. Training errors use OOB censoring
+#'   estimates; new-data errors use censoring estimates from all trees.
+#'
+#' @return A named list of error metrics. Smaller losses are better; larger
+#'   `R2` is better.
+#'
+#'   * Regression: `mse.error` for OOB evaluation, or `error.mse` with new
+#'     data, is mean squared error. `R2` is
+#'     \eqn{1 - \mathrm{MSE}/\mathrm{Var}(y)}{1 - MSE / Var(y)}, using the empirical variance
+#'     with divisor `n` on the evaluated responses; it can be negative.
+#'   * Classification: `BS.error` is the squared class-probability error
+#'     averaged over observations and classes. `normalised.BS.error` divides
+#'     this by the score for uniform class probabilities, so 1 is the uniform
+#'     baseline. `misclassification.error.total` is the overall proportion
+#'     of wrong labels; `misclassification.error` gives this proportion within
+#'     each observed class (or `NA` if that class is absent).
+#'     `confusion.matrix` contains counts, with observed classes in rows and
+#'     predicted classes in columns.
+#'   * Survival: `C.error` is `1 - C-index`, so smaller values mean better
+#'     concordance. `IBS.error` is the integrated Brier score for survival
+#'     probabilities; `KL.error` for OOB evaluation, or `IKL.error` with new
+#'     data, is the integrated Kullback-Leibler (logarithmic) loss. The
+#'     time-normalised fields are `normalised.IBS.error` and
+#'     `normalised.KL.error` (OOB) or `normalised.IKL.error` (new data).
+#'   * Multi-state: `IBS.error`, `IKL.error`, and `IS.error` are the integrated
+#'     Brier, Kullback-Leibler, and spherical losses for state occupation
+#'     probabilities, with state weights as specified above. The corresponding
+#'     fields are `normalised.IBS.error`, `normalised.IKL.error`, and
+#'     `normalised.IS.error`.
+#'
+#'   Integrated scores use trapezoidal integration on the fitted event-time
+#'   grid. Their `normalised.*` versions divide by the grid's final time,
+#'   giving an average loss over time; normalisation
+#'   does not guarantee a value between zero and one. This differs from the
+#'   uniform-probability normalisation used for classification Brier scores.
+#' @md
 #' @export
 #'
 jfforest.error <- function(forest_list, new_data = NULL, jump_data = NULL, state_weights = NULL) {
@@ -813,15 +1174,59 @@ jfforest.error <- function(forest_list, new_data = NULL, jump_data = NULL, state
 #' Variable importance for a fitted forest
 #'
 #' @param forest_list A fitted forest object from [jfforest()].
-#' @param feature Optional feature name.
-#' @param seed Optional random seed.
-#' @param method Importance method, `"permute"` or `"random"`.
+#' @param feature Name of one fitted feature, or `NULL` (the default) to
+#'   compute importance for every feature.
+#' @param seed Random seed for the perturbations. `NULL` draws a seed using
+#'   R's current random-number state; supply a seed for reproducible results.
+#' @param method Importance method. `"permute"` (the default) shuffles the
+#'   selected feature among each tree's OOB observations. `"random"` sends
+#'   observations to a random daughter whenever that feature is used for a
+#'   split, with probabilities proportional to the daughter node sizes.
 #' @param loss Loss function for importance: `"mse"` for regression,
 #'   `"misc"` or `"brier"` for classification, and `"concordance"`, `"brier"`,
 #'   or `"kl"` for survival; and `"brier"`, `"kl"`, or `"spherical"` for
-#'   multi-state forests. `"default"` selects the forest-type default.
+#'   multi-state forests. `"default"` (the default) selects `"mse"`, `"misc"`,
+#'   `"concordance"`, or `"brier"` for regression, classification, survival,
+#'   or multi-state forests, respectively.
 #'
-#' @return Variable importance values.
+#' @details Importance compares each tree's OOB loss before and after
+#'   perturbing the selected feature, without refitting the tree. Positive
+#'   values mean that perturbing the feature worsens predictions; values near
+#'   zero indicate little change, and negative values mean that perturbation
+#'   improves predictions on the OOB observations. Values are signed loss
+#'   differences, not percentages, and depend on the selected loss and method.
+#'
+#'   Tree contributions are averaged over trees with a defined OOB loss.
+#'   For survival with `method = "random"` and `loss = "concordance"`, the
+#'   average is weighted by each tree's OOB observation count. Concordance
+#'   importance uses the decrease in C-index, equivalently the increase in
+#'   `1 - C-index`.
+#'
+#'   Regression uses mean squared error, and classification uses
+#'   misclassification rate or the normalised Brier scale described in
+#'   [jfforest.error()]. Survival and multi-state probability scores use
+#'   censoring weights and time-normalised integrated losses. Multi-state
+#'   scores evaluate state occupation probabilities derived from leaf
+#'   Nelson-Aalen estimators and initial distributions; their state weights
+#'   are always `1 / num_states` for Brier and spherical scores and 1 for
+#'   Kullback-Leibler loss, regardless of `state_weights` used during fitting.
+#'   Censoring weights from the unperturbed leaf assignments are retained
+#'   when evaluating perturbed predictions.
+#'
+#'   The forest must have OOB observations; sampling without replacement at
+#'   `sample_rate = 1` leaves none. Survival concordance also needs comparable
+#'   survival pairs, and probability scores need observed event times.
+#'   Required leaf estimates are computed when needed, so fitting with
+#'   `save_predictions = FALSE` does not prevent VIMP calculation.
+#'   For an all-feature call, separate seeds are generated for each feature;
+#'   a single-feature call with the same seed need not give the identical value.
+#'
+#' @return A VIMP-only list with class `jf_vimp`, for both single-feature and
+#'   all-feature calls. Its `vimp` field is a named list of numeric importance
+#'   values. Use `result$vimp` for all computed values or
+#'   `result$vimp[["feature_name"]]` for one feature. Printing displays the
+#'   first 20 values; use `print(result, n = Inf)` to display all values.
+#' @md
 #' @export
 #'
 jfforest.vimp <- function(forest_list, feature = NULL, seed = NULL, method = "permute", loss = "default") {
@@ -830,11 +1235,13 @@ jfforest.vimp <- function(forest_list, feature = NULL, seed = NULL, method = "pe
   }
   # if no feature is supplied, compute VIMP for all features in the forest
   if (is.null(feature)) {
-    JFCppForestVIMP(forest_list, seed, method, loss)
-    #forest_list$vimp <- unlist(forest_list$vimp)
+    values <- JFCppForestVIMP(forest_list, seed, method, loss)
   } else {
-    JFCppForestVIMPFeature(forest_list, feature, seed, method, loss)
+    value <- JFCppForestVIMPFeature(forest_list, feature, seed, method, loss)
+    values <- list(value)
+    names(values) <- feature
   }
+  as_jf_vimp(values)
 }
 
 #' Print information about a fitted JumpForests tree
@@ -955,7 +1362,8 @@ print_tree <- function(tree_list, full = FALSE) {
 #' Print information about a fitted JumpForests forest
 #'
 #' Displays summary information about a fitted random forest, including forest type,
-#' data info, and out-of-bag errors.
+#' data info, and out-of-bag errors (only available if predictions are computed and
+#' saved in the forest, i.e. if save_predictions = `TRUE`)
 #'
 #' @param forest_list A fitted forest object returned by \code{\link{jfforest}}.
 #'
@@ -1129,7 +1537,7 @@ aj <- function(na, a0 = NULL) {
     a0 = diag(dim(na[[1]])[1])
   }
   res[[1]] <- a0
-  for (i in 2:length(na)) {
+  for (i in seq_along(na)[-1L]) {
     Delta <- na[[i]] - na[[i - 1]]
     res[[i]] <- res[[i - 1]] + as.vector(res[[i - 1]] %*% Delta) - res[[i - 1]] * rowSums((Delta))
   }
@@ -1141,15 +1549,168 @@ aj <- function(na, a0 = NULL) {
 #' Computes state occupation probabilities by combining the initial state distribution
 #' with the Aalen-Johansen estimator derived from the Nelson-Aalen estimator.
 #'
-#' @param init A vector of initial state probabilities.
-#' @param na A Nelson-Aalen estimator object, typically a list of cumulative intensity
-#'   matrices from a survival or multi-state model.
+#' @param init A finite numeric vector of initial state probabilities, one per
+#'   state. Probabilities must be between zero and one and sum to one.
+#' @param na The Nelson-Aalen estimator for one individual: a non-empty list of
+#'   equally sized square numeric cumulative intensity matrices in time order.
+#'   The first matrix must be zero. Diagonal entries must equal the negative
+#'   sum of the off-diagonal entries in their row.
+#'
+#' @details Pass `predictions[[i]]` when both optional prediction flags are
+#'   disabled, or `result$predictions[[i]]` otherwise. With
+#'   `compute_initial = TRUE`, use `result$init[[i]]` for `init`.
+#'   Invalid inputs or intensity increments that cannot produce valid
+#'   probabilities raise an informative error.
 #'
 #' @return A list of occupation probability matrices.
 #' @export
 #'
 occupation_prob <- function(init, na) {
-  lapply(aj(na), function(z) init %*% z)
+  if (missing(init)) {
+    jf_probability_error("occupation_prob", "`init` is missing. Supply an initial distribution, such as c(1, 0, 0), or result$init[[i]].")
+  }
+  if (missing(na)) {
+    jf_probability_error("occupation_prob", "`na` is missing. Supply the Nelson-Aalen estimator for one individual.")
+  }
+  num_states <- validate_jf_nelson_aalen(na, "occupation_prob")
+  validate_jf_initial_distribution(init, num_states, "occupation_prob")
+  lapply(checked_jf_aalen_johansen(na, "occupation_prob"), function(z) init %*% z)
+}
+
+#' Compute transition probabilities via the Aalen-Johansen estimator from a
+#' Nelson-Aalen estimator by directly applying the product integral. Only valid
+#' for Markov models.
+#'
+#' @param na The Nelson-Aalen estimator for one individual: a non-empty list of
+#'   equally sized square numeric cumulative intensity matrices in time order.
+#'   The first matrix must be zero. Diagonal entries must equal the negative
+#'   sum of the off-diagonal entries in their row.
+#'
+#' @details Pass `predictions[[i]]` when both optional prediction flags are
+#'   disabled, or `result$predictions[[i]]` otherwise. Invalid inputs or
+#'   intensity increments that cannot produce valid probabilities raise an
+#'   informative error.
+#'
+#' @return A list of Aalen-Johansen estimator matrices.
+#' @export
+transition_prob <- function(na) {
+  if (missing(na)) {
+    jf_probability_error("transition_prob", "`na` is missing. Supply the Nelson-Aalen estimator for one individual.")
+  }
+  validate_jf_nelson_aalen(na, "transition_prob")
+  checked_jf_aalen_johansen(na, "transition_prob")
+}
+
+jf_probability_error <- function(caller, message) {
+  stop(paste0(caller, "(): ", message), call. = FALSE)
+}
+
+validate_jf_nelson_aalen <- function(na, caller) {
+  individual_hint <- "Supply one individual's estimator: predictions[[i]] or result$predictions[[i]]."
+  if (is.null(na)) {
+    jf_probability_error(caller, paste("`na` is NULL.", individual_hint))
+  }
+  if (inherits(na, "jf_multistate_prediction_result")) {
+    jf_probability_error(caller, "`na` is a complete prediction result. Use result$predictions[[i]] for one individual.")
+  }
+  if (inherits(na, "jf_multistate_forest") || inherits(na, "jf_multistate_tree")) {
+    jf_probability_error(caller, "`na` is a fitted model. Use fitted_model$predictions[[i]] for one individual.")
+  }
+  if (inherits(na, "jf_multistate_predictions")) {
+    jf_probability_error(caller, "`na` contains predictions for all individuals. Use predictions[[i]] for one individual.")
+  }
+  if (!is.list(na) || is.data.frame(na) || length(na) == 0L) {
+    jf_probability_error(caller, paste("`na` must be a non-empty list of square numeric matrices, one per event time.", individual_hint))
+  }
+
+  tolerance <- sqrt(.Machine$double.eps)
+  num_states <- NULL
+  previous <- NULL
+  for (i in seq_along(na)) {
+    current <- na[[i]]
+    label <- paste0("`na[[", i, "]]`")
+    if (!is.matrix(current) || !is.numeric(current) || is.complex(current)) {
+      jf_probability_error(caller, paste(label, "must be a square numeric matrix.", individual_hint))
+    }
+    if (nrow(current) == 0L || nrow(current) != ncol(current)) {
+      jf_probability_error(caller, paste(label, "must be a non-empty square matrix."))
+    }
+    if (is.null(num_states)) {
+      num_states <- nrow(current)
+      off_diagonal <- row(current) != col(current)
+    } else if (nrow(current) != num_states) {
+      jf_probability_error(caller, paste0(label, " must have ", num_states, " rows and columns, matching na[[1]]."))
+    }
+    if (any(!is.finite(current))) {
+      jf_probability_error(caller, paste(label, "contains NA, NaN or infinite values. All intensities must be finite."))
+    }
+    if (any(current[off_diagonal] < -tolerance)) {
+      jf_probability_error(caller, paste(label, "has negative off-diagonal intensities. Cumulative transition intensities must be non-negative."))
+    }
+    row_totals <- rowSums(current)
+    if (any(!is.finite(row_totals)) ||
+        any(abs(row_totals) > tolerance * pmax(1, rowSums(abs(current))))) {
+      jf_probability_error(caller, paste(label, "has an invalid diagonal. Each diagonal entry must equal the negative sum of the other entries in its row."))
+    }
+    if (i == 1L) {
+      if (any(abs(current) > tolerance)) {
+        jf_probability_error(caller, "`na[[1]]` must be a zero matrix at time zero. Prepend a zero matrix to an estimator that starts at its first event.")
+      }
+    } else {
+      increment <- current - previous
+      if (any(!is.finite(increment))) {
+        jf_probability_error(caller, paste("The intensity increment at", label, "is not finite. Check the cumulative intensity values."))
+      }
+      if (any(increment[off_diagonal] < -tolerance)) {
+        jf_probability_error(caller, paste(label, "has decreasing cumulative intensities. Check that the matrices are in event-time order."))
+      }
+      diag(increment) <- 0
+      if (any(rowSums(increment) > 1 + tolerance)) {
+        jf_probability_error(caller, paste(label, "has a total outgoing intensity increment greater than one. These increments cannot produce valid transition probabilities."))
+      }
+    }
+    previous <- current
+  }
+  num_states
+}
+
+validate_jf_initial_distribution <- function(init, num_states, caller) {
+  if (is.null(init)) {
+    jf_probability_error(caller, "`init` is NULL. Supply an initial distribution or predict with compute_initial = TRUE and use result$init[[i]].")
+  }
+  if (!is.numeric(init) || is.complex(init) || !is.null(dim(init))) {
+    jf_probability_error(caller, "`init` must be a numeric vector with one probability per state, such as c(1, 0, 0).")
+  }
+  if (length(init) != num_states) {
+    jf_probability_error(caller, paste0("`init` must contain ", num_states,
+      " probabilities, matching the number of states in `na`; received ", length(init), "."))
+  }
+  if (any(!is.finite(init))) {
+    jf_probability_error(caller, "`init` contains NA, NaN or infinite values. All probabilities must be finite.")
+  }
+  if (any(init < 0 | init > 1)) {
+    jf_probability_error(caller, "Every probability in `init` must be between zero and one.")
+  }
+  if (abs(sum(init) - 1) > sqrt(.Machine$double.eps)) {
+    jf_probability_error(caller, "The probabilities in `init` must sum to one.")
+  }
+  invisible(NULL)
+}
+
+checked_jf_aalen_johansen <- function(na, caller) {
+  probabilities <- tryCatch(aj(na), error = function(error) {
+    jf_probability_error(caller, paste("Could not compute the Aalen-Johansen estimator:", conditionMessage(error)))
+  })
+  tolerance <- sqrt(.Machine$double.eps)
+  for (i in seq_along(probabilities)) {
+    current <- probabilities[[i]]
+    if (any(!is.finite(current)) || any(current < -tolerance | current > 1 + tolerance) ||
+        any(abs(rowSums(current) - 1) > tolerance)) {
+      jf_probability_error(caller, paste0("`na` does not produce valid transition probabilities at time index ", i,
+        ". Check the cumulative intensity matrices and their increments."))
+    }
+  }
+  probabilities
 }
 
 # function for testing the methods in Data.cpp
@@ -1183,4 +1744,218 @@ fit_survival_tree <- function(data, mtry, min_node_size, nsplits,
 
 test_unique_event_times <- function(unique_event_times, num_event_times) {
   testUniqueEventTimesThinning(unique_event_times, num_event_times)
+}
+
+# Add a print class to the existing list of subject-by-time Nelson--Aalen matrices.
+# The nested lists and matrices retain their original indexing and values.
+as_jf_multistate_predictions <- function(predictions, event_times, num_states, model_type = "forest") {
+  if (is.null(predictions)) {
+    return(NULL)
+  }
+  structure(predictions, class = c("jf_multistate_predictions", "list"),
+            event_times = event_times, num_states = num_states, model_type = model_type)
+}
+
+as_jf_multistate_prediction_result <- function(result, model_type = "forest") {
+  # Use the same explicit field names for training and new data. Retain the
+  # existing names as aliases, sharing the underlying lists and matrices.
+  initial <- result[["initial", exact = TRUE]]
+  if (is.null(initial)) {
+    initial <- result[["predictions.init", exact = TRUE]]
+  }
+  if (!is.null(initial)) {
+    result$init <- initial
+  }
+  censoring_oob <- result[["censoring.oob", exact = TRUE]]
+  if (!is.null(censoring_oob)) {
+    result$censoring <- censoring_oob
+  }
+  class(result) <- c("jf_multistate_prediction_result", "list")
+  attr(result, "model_type") <- model_type
+  result
+}
+
+print_jf_multistate_prediction_summary <- function(x) {
+  cat("  Number of observations:", length(x), "\n")
+  cat("  Event times:", length(attr(x, "event_times")), "\n")
+  cat("  States:", as.integer(attr(x, "num_states")), "\n")
+}
+
+jf_multistate_prediction_output <- function(compute_initial, compute_censoring, model_type = "forest") {
+  prediction_function <- if (identical(model_type, "tree")) "jftree.predict" else "jfforest.predict"
+  if (compute_initial && compute_censoring) {
+    return(paste(
+      "Output: A list containing a list of Nelson-Aalen estimators, a list of initial distributions and a matrix of the censoring Kaplan-Meier estimators.",
+      "To access the Nelson-Aalen estimator for individual i, use $predictions[[i]], for the initial distribution, use $init[[i]] and for the censoring, $censoring[i,]."
+    ))
+  }
+  if (compute_initial) {
+    return(paste(
+      "Output: A list containing a list of Nelson-Aalen estimators and the estimated initial distribution.",
+      "To obtain the former for individual i, use $predictions[[i]], for the latter, $init[[i]].",
+      paste0("To also obtain censoring estimates, add compute_censoring = TRUE in ", prediction_function, ".")
+    ))
+  }
+  if (compute_censoring) {
+    return(paste(
+      "Output: A list containing a list of Nelson-Aalen estimators and the censoring Kaplan-Meier estimators, the latter a matrix with a row for each individual.",
+      "To obtain the Nelson-Aalen estimator for individual i, use $predictions[[i]], for the censoring, $censoring[i,].",
+      paste0("To also obtain the initial distribution, add compute_initial = TRUE in ", prediction_function, ".")
+    ))
+  }
+  paste(
+    "Output: A list of Nelson-Aalen estimators for every individual.",
+    "To access the Nelson--Aalen estimator for individual i, use [[i]].",
+    paste0("Add compute_initial = TRUE in ", prediction_function,
+      " to also obtain initial distribution estimates and compute_censoring = TRUE in ",
+      prediction_function, " to obtain censoring estimates.")
+  )
+}
+
+#' @export
+print.jf_multistate_predictions <- function(x, ...) {
+  cat("Multi-state Nelson--Aalen predictions\n")
+  print_jf_multistate_prediction_summary(x)
+  cat("  ", jf_multistate_prediction_output(FALSE, FALSE, attr(x, "model_type")), "\n", sep = "")
+  invisible(x)
+}
+
+#' @export
+print.jf_multistate_prediction_result <- function(x, ...) {
+  model_type <- attr(x, "model_type")
+  if (is.null(model_type)) {
+    model_type <- "forest"
+  }
+  cat("Multi-state", model_type, "prediction result\n")
+  print_jf_multistate_prediction_summary(x$predictions)
+  compute_initial <- !is.null(x[["init", exact = TRUE]]) ||
+    !is.null(x[["initial", exact = TRUE]])
+  compute_censoring <- !is.null(x[["censoring", exact = TRUE]]) ||
+    !is.null(x[["censoring.oob", exact = TRUE]])
+  cat("  ", jf_multistate_prediction_output(compute_initial, compute_censoring, model_type), "\n", sep = "")
+  invisible(x)
+}
+
+#' Print a fitted JumpForests forest
+#'
+#' @param x A fitted forest returned by [jfforest()].
+#' @param ... Additional arguments, currently unused.
+#' @return The fitted forest, invisibly. Prints the summary from [print_forest()].
+#' @export
+print.jf_forest <- function(x, ...) {
+  print_forest(x)
+  invisible(x)
+}
+
+#' @rdname print.jf_forest
+#' @export
+print.jf_multistate_forest <- print.jf_forest
+
+#' Print a fitted JumpForests tree
+#'
+#' @param x A fitted tree returned by [jftree()].
+#' @param full If `TRUE`, also print the full tree structure.
+#' @param ... Additional arguments, currently unused.
+#' @return The fitted tree, invisibly. Prints the summary from [print_tree()].
+#' @export
+print.jf_tree <- function(x, full = FALSE, ...) {
+  print_tree(x, full = full)
+  invisible(x)
+}
+
+#' @rdname print.jf_tree
+#' @export
+print.jf_multistate_tree <- print.jf_tree
+
+#' Predict from a fitted JumpForests forest
+#'
+#' @param object A fitted forest returned by [jfforest()].
+#' @param newdata Optional data frame for prediction. If omitted or `NULL`,
+#'   return ordinary training-data predictions using all trees. Feature names,
+#'   types, and categorical levels must meet the `new_data` requirements in
+#'   [jfforest.predict()]; responses are not required.
+#' @param ... Arguments passed to [jfforest.predict()], including
+#'   `compute_initial` and `compute_censoring`. The existing `new_data`
+#'   spelling is also accepted when `newdata` is omitted.
+#' @inherit jfforest.predict return
+#' @md
+#' @export
+#' @importFrom stats predict
+predict.jf_forest <- function(object, newdata = NULL, ...) {
+  if (missing(newdata)) {
+    return(jfforest.predict(object, ...))
+  }
+  jfforest.predict(object, new_data = newdata, ...)
+}
+
+#' @rdname predict.jf_forest
+#' @export
+predict.jf_multistate_forest <- predict.jf_forest
+
+#' Predict from a fitted JumpForests tree
+#'
+#' @param object A fitted tree returned by [jftree()].
+#' @param newdata Optional data frame for prediction. If omitted or `NULL`,
+#'   return training-data predictions. Feature names, types, and categorical
+#'   levels must meet the `new_data` requirements in [jftree.predict()];
+#'   responses are not required.
+#' @param ... Arguments passed to [jftree.predict()], including
+#'   `compute_initial` and `compute_censoring`. The existing `new_data`
+#'   spelling is also accepted when `newdata` is omitted.
+#' @inherit jftree.predict return
+#' @md
+#' @export
+predict.jf_tree <- function(object, newdata = NULL, ...) {
+  if (missing(newdata)) {
+    return(jftree.predict(object, ...))
+  }
+  jftree.predict(object, new_data = newdata, ...)
+}
+
+#' @rdname predict.jf_tree
+#' @export
+predict.jf_multistate_tree <- predict.jf_tree
+
+as_jf_vimp <- function(values) {
+  structure(list(vimp = values), class = c("jf_vimp", "list"))
+}
+
+#' Print forest variable importance
+#'
+#' @param x A VIMP result returned by [jfforest.vimp()].
+#' @param n Maximum number of feature values to display. Defaults to 20.
+#'   Use `Inf` to display all computed values.
+#' @param ... Additional arguments passed to [print.data.frame()].
+#' @return The VIMP result, invisibly. Prints a table of importance values
+#'   and instructions for accessing them.
+#' @export
+print.jf_vimp <- function(x, n = 20L, ...) {
+  if (!is.numeric(n) || is.complex(n) || length(n) != 1L || is.na(n) ||
+      n < 0 || (!is.infinite(n) && n != floor(n))) {
+    stop("`n` must be a non-negative whole number or Inf.", call. = FALSE)
+  }
+  values <- x$vimp
+  num_features <- length(values)
+  num_displayed <- min(n, num_features)
+  displayed <- seq_len(num_displayed)
+  cat("Forest variable importance\n")
+  cat("  Number of features:", num_features, "\n")
+  if (num_displayed > 0L) {
+    table <- data.frame(
+      Feature = names(values)[displayed],
+      VIMP = vapply(values[displayed], as.numeric, numeric(1)),
+      row.names = NULL
+    )
+    print(table, row.names = FALSE, ...)
+  }
+  if (num_displayed < num_features) {
+    cat("  Showing", num_displayed, "of", num_features,
+        "values. Use print(result, n = Inf) to display all computed values.\n")
+  }
+  cat(paste0(
+    "  Output: A list containing the computed variable importance values. ",
+    "To access all values, use $vimp; for feature x, use $vimp[[\"x\"]] ",
+    "or $vimp$x. Use unlist(result$vimp) to obtain a named numeric vector.\n"
+  ))
+  invisible(x)
 }

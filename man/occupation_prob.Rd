@@ -7,10 +7,13 @@
 occupation_prob(init, na)
 }
 \arguments{
-\item{init}{A vector of initial state probabilities.}
+\item{init}{A finite numeric vector of initial state probabilities, one per
+state. Probabilities must be between zero and one and sum to one.}
 
-\item{na}{A Nelson-Aalen estimator object, typically a list of cumulative intensity
-matrices from a survival or multi-state model.}
+\item{na}{The Nelson-Aalen estimator for one individual: a non-empty list of
+equally sized square numeric cumulative intensity matrices in time order.
+The first matrix must be zero. Diagonal entries must equal the negative
+sum of the off-diagonal entries in their row.}
 }
 \value{
 A list of occupation probability matrices.
@@ -18,4 +21,11 @@ A list of occupation probability matrices.
 \description{
 Computes state occupation probabilities by combining the initial state distribution
 with the Aalen-Johansen estimator derived from the Nelson-Aalen estimator.
+}
+\details{
+Pass `predictions[[i]]` when both optional prediction flags are
+  disabled, or `result$predictions[[i]]` otherwise. With
+  `compute_initial = TRUE`, use `result$init[[i]]` for `init`.
+  Invalid inputs or intensity increments that cannot produce valid
+  probabilities raise an informative error.
 }
