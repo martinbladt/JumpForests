@@ -273,3 +273,64 @@ local({
 
   message("VIMP-only return values and printing tests passed")
 })
+
+# A survival model is a two-state model with an absorbing death state.
+# Match their one-split trees and OOB samples, then compare both probability
+# losses. Mixed leaves give nonzero baseline losses, so this checks that the
+# baseline AND both perturbation methods honour the selected loss.
+local({
+  group <- rep(c(0, 1), each = 100L)
+  outcome <- rep(seq_len(10L), 20L)
+  time <- ifelse(group == 0, ifelse(outcome <= 7L, 1, 2),
+                 ifelse(outcome <= 2L, 1, 2))
+  status <- as.numeric(outcome != 10L)
+  time[status == 0] <- 3
+  survival_data <- data.frame(time = time, status = status,
+                              signal = group, constant = 0)
+  jump_data <- lapply(seq_along(time), function(i) {
+    list(times = c(0, time[i]),
+         states = c(1L, if (status[i] == 1) 2L else 1L))
+  })
+  features <- survival_data[c("signal", "constant")]
+  fit_survival <- function(nworkers, save_predictions) {
+    jfforest(Surv(time, status) ~ signal + constant, data = survival_data,
+             ntrees = 20, mtry = 2, min_node_size = 10, max_depth = 1,
+             seed = 42, nworkers = nworkers, save_predictions = save_predictions)
+  }
+  survival_lazy <- fit_survival(1, FALSE)
+  survival_saved <- fit_survival(2, TRUE)
+  multistate <- jfforest(MM ~ signal + constant, data = jump_data,
+                         feature_data = features, ntrees = 20, mtry = 2,
+                         min_node_size = 10, max_depth = 1, seed = 42,
+                         nworkers = 1, save_predictions = FALSE)
+
+  for (method in c("permute", "random")) {
+    losses <- list()
+    # Evaluate Brier first to exercise switching between loss caches.
+    for (loss in c("brier", "kl")) {
+      value <- feature_vimp(survival_lazy, feature = "signal", seed = 123,
+                            method = method, loss = loss)
+      reference <- feature_vimp(multistate, feature = "signal", seed = 123,
+                                method = method, loss = loss)
+      saved <- feature_vimp(survival_saved, feature = "signal", seed = 123,
+                            method = method, loss = loss)
+      repeated <- feature_vimp(survival_lazy, feature = "signal", seed = 123,
+                               method = method, loss = loss)
+      stopifnot(
+        is.finite(value), value > 0,
+        isTRUE(all.equal(value, reference, tolerance = 1e-10)),
+        isTRUE(all.equal(value, saved, tolerance = 1e-12)),
+        identical(value, repeated)
+      )
+      losses[[loss]] <- value
+    }
+    stopifnot(!isTRUE(all.equal(losses$kl, losses$brier, tolerance = 1e-6)))
+    all_kl <- jfforest.vimp(survival_lazy, seed = 321, method = method, loss = "kl")
+    stopifnot(is.finite(all_kl$vimp$signal), all_kl$vimp$signal > 0,
+              identical(all_kl$vimp$constant, 0))
+    brier_again <- feature_vimp(survival_lazy, feature = "signal", seed = 123,
+                                method = method, loss = "brier")
+    stopifnot(identical(brier_again, losses$brier))
+  }
+  message("Survival KL and Brier VIMP agree with equivalent two-state losses")
+})

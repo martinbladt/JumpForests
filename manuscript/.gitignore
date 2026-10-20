@@ -1,0 +1,24 @@
+# Local inputs, R session state and generated results.
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+*.log
+/data/**
+/results/**
+
+# Bundled inputs used by the four biomedical analyses.
+!/data/biomedical_applications/
+!/data/biomedical_applications/cphholter.csv
+!/data/biomedical_applications/bmt.csv
+!/data/biomedical_applications/ebmt3.csv
+!/data/biomedical_applications/prova.csv
+
+# Allow directory traversal to explicitly retained paper/tuning outputs.
+!/results/**/
+!/results/**/Tables/*.tex
+!/results/**/Tables/*.tsv
+!/results/**/tuning_*.txt
+!/results/coverage/*_by_group.tsv
+!/results/coverage/simultaneous_by_profile.tsv
+!/results/coverage/n*/pilot/*.tsv

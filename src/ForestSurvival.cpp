@@ -490,7 +490,7 @@ const vector<double>& SurvivalForest::prepareVIMPBaseline(string error_type) {
 
         tree->prepareSurvivalProbabilities();
         (*baseline)[i] = computeVIMPProbabilityLoss(*tree, tree_leaf_ids, tree_leaf_ids, tree_oob_indices,
-          times, ind, vimp_event_times, true_event_time_ids, vimp_censoring_time_ids, "brier");
+          times, ind, vimp_event_times, true_event_time_ids, vimp_censoring_time_ids, error_type);
     }
 
     return *baseline;
@@ -569,7 +569,7 @@ double SurvivalForest::computeVIMPPermute(size_t feature, int feature_seed, stri
         }
 
         double shuffled_loss = computeVIMPProbabilityLoss(*tree, shuffled_leaf_ids, tree_leaf_ids,
-          tree_oob_indices, times, ind, vimp_event_times, true_event_time_ids, vimp_censoring_time_ids, "brier");
+          tree_oob_indices, times, ind, vimp_event_times, true_event_time_ids, vimp_censoring_time_ids, error_type);
         tree_vimp[i] = shuffled_loss - baseline[i];
         tree_valid[i] = 1;
     }
@@ -658,7 +658,7 @@ double SurvivalForest::computeVIMPRandom(size_t feature, int feature_seed, strin
         }
 
         double random_loss = computeVIMPProbabilityLoss(*tree, random_leaf_ids, tree_leaf_ids,
-          tree_oob_indices, times, ind, vimp_event_times, true_event_time_ids, vimp_censoring_time_ids, "brier");
+          tree_oob_indices, times, ind, vimp_event_times, true_event_time_ids, vimp_censoring_time_ids, error_type);
         tree_vimp[i] = random_loss - baseline[i];
         tree_weight[i] = 1;
     }
